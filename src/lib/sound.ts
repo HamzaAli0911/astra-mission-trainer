@@ -121,3 +121,95 @@ export function tick() {
   g.connect(master);
   src.start(t);
 }
+
+/* ---------- Background sound ---------- */
+
+type Ambience = {
+  hum: GainNode;
+  wind: GainNode;
+  windTone: BiquadFilterNode;
+  motor: GainNode;
+  motorOsc: OscillatorNode;
+};
+let amb: Ambience | null = null;
+
+/** A looping buffer of noise: white, or "brown" (smoothed, deeper) for machinery. */
+function noise(a: AudioContext, seconds: number, brown: boolean) {
+  const buf = a.createBuffer(1, Math.ceil(a.sampleRate * seconds), a.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) {
+    const w = Math.random() * 2 - 1;
+    last = brown ? (last + 0.02 * w) / 1.02 : w;
+    d[i] = brown ? last * 3.5 : w;
+  }
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  return src;
+}
+
+function startAmbience(a: AudioContext, out: GainNode): Ambience {
+  // Life support: fans and pumps, a low rumble with a faint electrical hum.
+  const hum = a.createGain();
+  hum.gain.value = 0;
+  hum.connect(out);
+  const fans = noise(a, 4, true);
+  const low = a.createBiquadFilter();
+  low.type = "lowpass";
+  low.frequency.value = 220;
+  fans.connect(low).connect(hum);
+  fans.start();
+  const mains = a.createOscillator();
+  mains.frequency.value = 58;
+  const mainsLevel = a.createGain();
+  mainsLevel.gain.value = 0.25;
+  mains.connect(mainsLevel).connect(hum);
+  mains.start();
+  // Wind (Mars only: the Moon has no air to carry sound or move dust).
+  const wind = a.createGain();
+  wind.gain.value = 0;
+  wind.connect(out);
+  const air = noise(a, 6, false);
+  const windTone = a.createBiquadFilter();
+  windTone.type = "bandpass";
+  windTone.frequency.value = 380;
+  windTone.Q.value = 0.7;
+  air.connect(windTone).connect(wind);
+  air.start();
+  // Rover drive motors: a soft whine that rises with speed.
+  const motor = a.createGain();
+  motor.gain.value = 0;
+  motor.connect(out);
+  const motorOsc = a.createOscillator();
+  motorOsc.type = "sawtooth";
+  motorOsc.frequency.value = 70;
+  const motorTone = a.createBiquadFilter();
+  motorTone.type = "lowpass";
+  motorTone.frequency.value = 520;
+  motorOsc.connect(motorTone).connect(motor);
+  motorOsc.start();
+  return { hum, wind, windTone, motor, motorOsc };
+}
+
+/**
+ * Keep the background sound in step with the scene (call a few times a second): life support always,
+ * wind on Mars that rises in a dust storm, and the rover's motors while it drives (0 to 1).
+ */
+export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number; drive: number; time: number }) {
+  const want = s.on && !document.hidden && useUI.getState().settings.sound;
+  if (!want) {
+    if (amb && ctx) for (const g of [amb.hum, amb.wind, amb.motor]) g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+    return;
+  }
+  const a = audio();
+  if (!a || !master) return;
+  if (!amb) amb = startAmbience(a, master);
+  const t = a.currentTime;
+  amb.hum.gain.setTargetAtTime(0.03, t, 0.5);
+  const gust = 0.5 + 0.5 * Math.sin(s.time * 0.7) * Math.sin(s.time * 0.23 + 1);
+  amb.wind.gain.setTargetAtTime(s.planet === "mars" ? 0.012 + s.dust * 0.08 + gust * 0.01 : 0, t, 0.4);
+  amb.windTone.frequency.setTargetAtTime(300 + s.dust * 450 + gust * 160, t, 0.4);
+  amb.motor.gain.setTargetAtTime(s.drive * 0.035, t, 0.2);
+  amb.motorOsc.frequency.setTargetAtTime(65 + s.drive * 120, t, 0.2);
+}

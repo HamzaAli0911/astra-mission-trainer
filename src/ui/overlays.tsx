@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   ArrowRight,
+  BatteryWarning,
+  Clock3,
   BookOpen,
   DoorClosed,
   Droplets,
@@ -24,17 +26,18 @@ import {
   SkipForward,
   Sparkles,
   Star,
+  SunDim,
   TriangleAlert,
   XCircle,
 } from "lucide-react";
 import { advise, lessonsFromFailure } from "../sim/advisor";
-import { CARDS } from "../sim/cards";
+import { CARDS, cantAfford } from "../sim/cards";
 import { goalProgress, starMet, starsFor } from "../sim/goals";
 import { CAMPAIGN, mission } from "../sim/missions";
 import { clockOf, dayOf, PLANETS } from "../sim/planets";
 import { useGame } from "../state/game";
 import { MARS_START, unlocked, useUI } from "../state/ui";
-import { TUTORIALS } from "../state/tutorial";
+import { tutorialFor } from "../state/tutorial";
 import { play } from "../lib/sound";
 import { hush, speak } from "../lib/speech";
 import { LineChart, Modal, Stars } from "./common";
@@ -49,7 +52,9 @@ export function Briefing() {
   const id = useGame((s) => s.game.missionId);
   const best = useUI((s) => s.progress.stars[id] ?? 0);
   const m = mission(id);
-  const hasTutorial = !!TUTORIALS[id];
+  const stars = useUI((s) => s.progress.stars);
+  const hasTutorial = !!tutorialFor(id, stars);
+  const newcomer = m.planet === "mars" && !stars["first-light"] && !!tutorialFor(id, stars);
   useEffect(() => {
     if (show) speak(m.briefing.join(" "));
   }, [show, m]);
@@ -122,6 +127,13 @@ export function Briefing() {
             )}
           </div>
         </div>
+        <p className="brief-time">
+          <Clock3 size={16} />
+          {m.planet === "moon"
+            ? "Training time runs fast: a day here lasts 24 hours and plays in about a minute and a half. A real day–night cycle on the Moon takes about 29.5 Earth days, so real crews face nights two weeks long."
+            : "Training time runs fast: a sol plays in about a minute and a half. A real Mars sol lasts 24 hours 39 minutes; here it is rounded to 24 hours."}
+          {newcomer && " New to outposts? Start with the tutorial: it covers the Moon basics first."}
+        </p>
         <footer className="brief-actions">
           <button className="btn ghost" onClick={() => goToMap()}>
             <MapIcon size={17} /> Missions
@@ -256,6 +268,9 @@ export function ChoiceCard() {
   if (!choice) return null;
   const card = CARDS[choice.card];
   const Icon = CARD_ICON[card.icon];
+  // What the options trade: show how much of each the outpost has right now.
+  const res = useGame.getState().game.res;
+  const traded = [...new Set(card.options.flatMap((o) => o.effects.flatMap((e) => ("give" in e ? (Object.keys(e.give) as (keyof typeof res)[]) : []))))];
   return (
     <div className="scrim">
       <section className={`choice-card icon-${card.icon}`} role="dialog" aria-modal="true" aria-labelledby="choice-title">
@@ -265,12 +280,29 @@ export function ChoiceCard() {
         <span className="eyebrow">Decision · time paused</span>
         <h2 id="choice-title">{card.title}</h2>
         <p>{card.text}</p>
+        {traded.length > 0 && (
+          <p className="choice-have">
+            You have{" "}
+            {traded.map((k, i) => {
+              const RIcon = RESOURCE_ICON[k];
+              return (
+                <span key={k}>
+                  {i > 0 && " · "}
+                  <RIcon size={15} /> {Math.floor(res[k])} {HAVE_UNIT[k]}
+                </span>
+              );
+            })}
+          </p>
+        )}
         <div className="options">
-          {card.options.map((o, i) => (
+          {card.options.map((o, i) => {
+            const short = cantAfford(res, o);
+            return (
             <button
               key={o.label}
               className={`option ${picked === i ? "on" : ""}`}
-              data-autofocus={i === 0 || undefined}
+              disabled={!!short}
+              data-autofocus={(i === card.options.findIndex((x) => !cantAfford(res, x))) || undefined}
               onClick={() => {
                 setPicked(i);
                 play("click");
@@ -281,16 +313,21 @@ export function ChoiceCard() {
               }}
             >
               <b>{o.label}</b>
-              <span>{o.result}</span>
+              <span>{short ? `${short}: not enough` : o.result}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
   );
 }
 
+const HAVE_UNIT = { power: "kWh", o2: "kg O₂", water: "L water", food: "meals", materials: "materials", science: "science" } as const;
+
 const CARD_ICON = {
+  battery: BatteryWarning,
+  solar: SunDim,
   lander: Package,
   leak: Droplets,
   fever: Thermometer,

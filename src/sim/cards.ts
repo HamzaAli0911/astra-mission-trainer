@@ -20,10 +20,12 @@ export interface CardOption {
 }
 export interface Card {
   id: string;
-  icon: "lander" | "leak" | "fever" | "meteor" | "glint" | "devil" | "flask" | "plant" | "airlock";
+  icon: "lander" | "leak" | "fever" | "meteor" | "glint" | "devil" | "flask" | "plant" | "airlock" | "battery" | "solar";
   title: string;
   text: string;
   planets?: Planet[];
+  /** Only shown if the outpost has a finished module of this type. */
+  needs?: ModuleType;
   options: CardOption[];
   /** What this decision teaches, shown after choosing. */
   lesson: string;
@@ -144,6 +146,42 @@ export const CARDS: Record<string, Card> = {
     ],
     lesson: "In 2021 astronauts on the ISS grew and tasted chile peppers in space for the first time.",
   },
+  overheat: {
+    id: "overheat",
+    icon: "battery",
+    title: "A battery cell is overheating",
+    text: "One cell in a Battery Bank is running hot. Swap it now with spare parts, or keep it running and hope it holds until you have materials to spare.",
+    needs: "battery",
+    options: [
+      { label: "Swap the cell", result: "−15 materials", effects: [{ give: { materials: -15 } }] },
+      {
+        label: "Keep it running",
+        result: "50% chance the Battery Bank fails until repaired",
+        effects: [
+          {
+            chance: 0.5,
+            yes: [{ damage: "battery" }],
+            no: [],
+            yesText: "The hot cell failed and a Battery Bank shut down. Repair it before the Sun sets!",
+            noText: "The cell cooled down. The Battery Bank is fine, for now.",
+          },
+        ],
+      },
+    ],
+    lesson: "Batteries can overheat. Spacecraft batteries are watched cell by cell, and spare parts are packed for exactly this.",
+  },
+  crack: {
+    id: "crack",
+    icon: "solar",
+    title: "A solar array is damaged",
+    text: "A tiny impact cracked the cover glass on a Solar Array and it shut itself down. Repair it now, or leave it and fix it later.",
+    needs: "solar",
+    options: [
+      { label: "Repair it now", result: "−10 materials, keeps making power", effects: [{ give: { materials: -10 } }] },
+      { label: "Fix it later", result: "One array stops until you repair it", effects: [{ damage: "solar" }] },
+    ],
+    lesson: "Spare parts now or lost power later: crews weigh repairs against what they will need next.",
+  },
   airlock: {
     id: "airlock",
     icon: "airlock",
@@ -156,3 +194,17 @@ export const CARDS: Record<string, Card> = {
     lesson: "Every airlock cycle loses a little air. Engineers design seals and pumps to save it.",
   },
 };
+
+/** Resources an option spends that the outpost must actually have (other losses can simply happen). */
+const SPEND: (keyof Resources)[] = ["materials", "science"];
+
+/** Why an option can't be chosen right now (it costs more than the outpost has), or null if it can. */
+export function cantAfford(res: Resources, option: CardOption): string | null {
+  for (const e of option.effects)
+    if ("give" in e)
+      for (const k of SPEND) {
+        const v = e.give[k];
+        if (v !== undefined && v < 0 && res[k] < -v) return `Needs ${-v} ${k}`;
+      }
+  return null;
+}

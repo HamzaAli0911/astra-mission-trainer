@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { Planet } from "../../sim/types";
 import { addDetail, DETAIL } from "../surface";
-import { bolts, box, contactShadow, cyl, geo, keep, lathe, light, mesh, metal, paint, pipe, rbox, rubber, shared, soil, strut, torus } from "../kit";
+import { bolts, box, contactShadow, cyl, keep, lathe, light, metal, paint, pipe, rbox, rubber, shared, soil, strut, torus } from "../kit";
 import { C, cabinet, cells, hazard, label, radiationSign, skid, soilColor, statusLamp, type ModuleView } from "./common";
 
 /** A triangular lattice mast between two heights (three longerons with zig-zag lacing). */
@@ -169,20 +169,26 @@ export function buildReactor(view: ModuleView, planet: Planet) {
     cyl(g, 0.17, 0.17, 0.05, steel, ex, 1.62, ez, 18);
   }
   cyl(g, 0.3, 0.3, 0.7, steel, 0, 1.95, 0, 18);
-  // The radiator: a cone of white panels with heat pipes, rejecting waste heat to space.
-  const radiator = shared("reactor-radiator", () => addDetail(new THREE.MeshStandardMaterial({ color: "#eef0f2", roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide }), DETAIL.paint));
-  mesh(geo("reactor-cone", () => new THREE.CylinderGeometry(1.8, 0.78, 2.5, 48, 1, true)), radiator, g, 0, 3.6, 0);
+  // The radiator: a mast carrying six tall white panels set edge-on round it (like NASA's Fission
+  // Surface Power concepts). Heat pipes carry the waste heat up and out into the panels.
+  const radiator = shared("reactor-radiator", () => addDetail(new THREE.MeshStandardMaterial({ color: "#eef0f2", roughness: 0.5, metalness: 0.1 }), DETAIL.paint));
   const pipeLine = metal("#7d8595", 0.4);
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    strut(g, Math.cos(a) * 0.8, 2.36, Math.sin(a) * 0.8, Math.cos(a) * 1.83, 4.85, Math.sin(a) * 1.83, i % 2 ? 0.014 : 0.024, pipeLine, 5);
-  }
-  cyl(g, 0.12, 0.14, 2.6, steel, 0, 3.55, 0, 14);
-  torus(g, 1.78, 0.045, steel, 0, 4.85, 0).rotation.x = Math.PI / 2;
-  torus(g, 0.75, 0.045, steel, 0, 2.32, 0).rotation.x = Math.PI / 2;
+  cyl(g, 0.24, 0.3, 3.0, white, 0, 3.75, 0, 24);
+  for (const y of [2.6, 3.7, 4.8]) torus(g, 0.245, 0.03, steel, 0, y, 0).rotation.x = Math.PI / 2;
+  lathe(g, "reactor-cap", [[0, 5.25], [0.3, 5.25], [0.34, 5.32], [0.2, 5.44], [0, 5.47]], steel, 0, 0, 0, 24);
   for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    strut(g, 0, 4.6, 0, Math.cos(a) * 1.75, 4.84, Math.sin(a) * 1.75, 0.02, steel, 4);
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    const p = new THREE.Group();
+    p.rotation.y = -a;
+    g.add(p);
+    // Each panel stands out from the mast on two arms, edge-on to the mast.
+    box(p, 1.35, 2.7, 0.04, radiator, 1.05, 3.85, 0);
+    box(p, 1.39, 0.06, 0.07, steel, 1.05, 5.22, 0);
+    box(p, 1.39, 0.06, 0.07, steel, 1.05, 2.48, 0);
+    for (const y of [2.8, 4.9]) strut(p, 0.26, y, 0, 0.4, y, 0, 0.03, steel, 6);
+    // Heat pipes up each face.
+    for (let k = 0; k < 5; k++) for (const sz of [-1, 1]) box(p, 0.02, 2.6, 0.012, pipeLine, 0.5 + k * 0.27, 3.85, sz * 0.026);
+    strut(p, 0.3, 2.55, 0, 1.7, 2.55, 0, 0.025, pipeLine, 5);
   }
   // Power conditioning unit, and the cable run toward the outpost (+z).
   cabinet(g, 0.7, 0.6, 0.5, C.grey, 0, 0.5, 1.6);
@@ -202,5 +208,5 @@ export function buildReactor(view: ModuleView, planet: Planet) {
   }
   label(g, "FSP-1  KEEP OUT", 1.0, 0, 0.62, 1.86);
   view.status = statusLamp(g, 0.3, 1.12, 1.6);
-  view.top = 4.95;
+  view.top = 5.5;
 }

@@ -92,7 +92,7 @@ export function QuickActions() {
   return (
     <div className="quick-actions" role="group" aria-label="Mission shortcuts">
       <button className="btn secondary tiny" onClick={() => ask("restart")} title="Start this mission again from the beginning">
-        <RotateCcw size={14} /> Restart mission
+        <RotateCcw size={14} /> Restart<span className="qa-long"> mission</span>
       </button>
       {tutorial && (
         <button
@@ -270,7 +270,16 @@ function Clock() {
   );
   const P = PLANETS[c.planet];
   return (
-    <div className="clock" data-tut="clock" aria-live="off">
+    <div
+      className="clock"
+      data-tut="clock"
+      aria-live="off"
+      title={
+        c.planet === "moon"
+          ? "Training time: one day here is 24 hours. A real lunar day–night cycle lasts about 29.5 Earth days."
+          : "Training time: one sol here is 24 hours. A real Mars sol lasts 24 h 39 min."
+      }
+    >
       <span className={`sun-icon ${c.daytime ? "day" : "night"}`}>{c.daytime ? <Sun size={20} /> : <Moon size={19} />}</span>
       <span className="clock-text">
         <b>
@@ -390,6 +399,11 @@ export function Crew() {
         {list.map((c, i) => (
           <span key={c.id} className={`avatar ${c.health < 50 ? "hurt" : ""}`} style={{ "--c": CREW_COLORS[i], "--h": `${c.health * 3.6}deg` } as React.CSSProperties}>
             <span className="face">{full[i].name.split(" ").map((w) => w[0]).join("")}</span>
+            {c.health < 50 && (
+              <span className="hurt-mark" aria-label={`${full[i].name} is unwell`}>
+                !
+              </span>
+            )}
             <span className={`where ${c.place}`} aria-hidden="true">
               {c.place === "rover" ? <IconRover size={11} /> : c.place === "shelter" ? <IconShelter size={11} /> : null}
             </span>

@@ -1,4 +1,4 @@
-import { CARDS, type Effect } from "./cards";
+import { CARDS, cantAfford, type Effect } from "./cards";
 import {
   activeHazard,
   capacity,
@@ -254,8 +254,8 @@ function fire(s: GameState, e: ScriptEntry) {
   s.fired.push(e.id);
   if ("choice" in e) {
     const card = CARDS[e.choice];
-    if (card && (!card.planets || card.planets.includes(s.planet)))
-      s.choice = { card: e.choice, t: s.t };
+    const relevant = !card?.needs || s.modules.some((m) => m.type === card.needs && isBuilt(m));
+    if (card && (!card.planets || card.planets.includes(s.planet)) && relevant) s.choice = { card: e.choice, t: s.t };
   } else if ("meteor" in e) {
     const target = pickModule(s, e.meteor);
     if (target) damage(s, target, "Meteorite impact!");
@@ -704,6 +704,8 @@ export function act(prev: GameState, a: Action): Result {
       const card = CARDS[s.choice.card];
       const option = card?.options[a.option];
       if (!option) return no("Pick one of the options.");
+      const short = cantAfford(s.res, option);
+      if (short) return no(`${short}. Pick another option.`);
       s.choice = null;
       feed(s, "info", `${card.title} You chose: ${option.label}.`);
       applyEffects(s, option.effects);

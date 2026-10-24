@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowRight, GraduationCap, Volume2, X } from "lucide-react";
-import { TUTORIALS, type Ctx, type Step } from "../state/tutorial";
+import { tutorialFor, type Ctx, type Step } from "../state/tutorial";
 import { useGame } from "../state/game";
 import { useUI } from "../state/ui";
 import { anchors } from "../scene/anchors";
@@ -16,7 +16,8 @@ export function Coach() {
   const step = useUI((s) => s.tutorial);
   const id = useGame((s) => s.game.missionId);
   const status = useGame((s) => s.game.status);
-  const steps = TUTORIALS[id];
+  const stars = useUI((s) => s.progress.stars);
+  const steps = tutorialFor(id, stars);
   const spec = step !== null && steps ? steps[step] : null;
   const [done, setDone] = useState(false);
 
@@ -70,7 +71,7 @@ export function Coach() {
 }
 
 function advanceTo(n: number) {
-  const steps = TUTORIALS[useGame.getState().game.missionId];
+  const steps = tutorialFor(useGame.getState().game.missionId, useUI.getState().progress.stars);
   if (!steps || n >= steps.length) finish();
   else useUI.getState().setTutorial(n);
 }
@@ -84,7 +85,7 @@ export function finish() {
 
 function CoachBubble({ step, index, total, done, last }: { step: Step; index: number; total: number; done: boolean; last: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; arrow: "up" | "down" | "right" | "none"; ax: number } | null>(null);
+  const [pos, setPos] = useState<Pos | null>(null);
   // Place the bubble next to its target, every frame (targets can move).
   useLayoutEffect(() => {
     let raf = 0,
@@ -108,8 +109,8 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
         W = innerWidth,
         H = innerHeight;
       if (!rect || W < 700) {
-        const next = { left: W < 700 ? 10 : 20, top: H - h - (W < 700 ? 96 : 110), arrow: "none" as const, ax: 0 };
-        setPos((p) => (p && p.left === next.left && Math.abs(p.top - next.top) < 1 && p.arrow === next.arrow ? p : next));
+        const next = dodge({ left: W < 700 ? 10 : 20, top: H - h - (W < 700 ? 96 : 110), arrow: "none", ax: 0 }, w, h, W - 10);
+        commit(next);
         return;
       }
       const cx = rect.left + rect.width / 2;
@@ -118,8 +119,7 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
         const right = rect.right + 24 + w < W - 12;
         const left3 = right ? rect.right + 24 : Math.max(12, rect.left - w - 24);
         const top3 = Math.max(70, Math.min(H - h - 100, rect.top + rect.height / 2 - h / 2));
-        const next = { left: left3, top: top3, arrow: "none" as const, ax: 0 };
-        setPos((p) => (p && Math.abs(p.left - next.left) < 0.5 && Math.abs(p.top - next.top) < 0.5 && p.arrow === "none" ? p : next));
+        commit(dodge({ left: left3, top: top3, arrow: "none", ax: 0 }, w, h, W - 12));
         return;
       }
       const inDrawer = t && !t.startsWith("3d:") ? document.querySelector(t)?.closest(".drawer") : null;
@@ -128,8 +128,7 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
         const d = inDrawer.getBoundingClientRect();
         const top2 = Math.max(70, Math.min(H - h - 100, rect.top + rect.height / 2 - h / 2));
         const ay = Math.max(18, Math.min(h - 18, rect.top + rect.height / 2 - top2));
-        const next = { left: d.left - w - 18, top: top2, arrow: "right" as const, ax: ay };
-        setPos((p) => (p && Math.abs(p.left - next.left) < 0.5 && Math.abs(p.top - next.top) < 0.5 && p.arrow === "right" && Math.abs(p.ax - ay) < 0.5 ? p : next));
+        commit(dodge({ left: d.left - w - 18, top: top2, arrow: "right", ax: ay }, w, h, d.left - 18));
         return;
       }
       let left = Math.min(W - w - 12, Math.max(12, cx - w / 2));
@@ -148,9 +147,14 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
         left = rect.left > W / 2 ? Math.max(12, rect.left - w - 18) : Math.min(W - w - 12, rect.right + 18);
         top = Math.max(8, Math.min(H - h - 8, rect.top + rect.height / 2 - h / 2));
       }
-      const ax = Math.max(18, Math.min(w - 18, cx - left));
-      setPos((p) => (p && Math.abs(p.left - left) < 0.5 && Math.abs(p.top - top) < 0.5 && p.arrow === arrow && Math.abs(p.ax - ax) < 0.5 ? p : { left, top, arrow, ax }));
+      const placed = dodge({ left, top, arrow, ax: 0 }, w, h, W - 12);
+      placed.ax = Math.max(18, Math.min((placed.w ?? w) - 18, cx - placed.left));
+      commit(placed);
     };
+    const commit = (n: Pos) =>
+      setPos((p) =>
+        p && Math.abs(p.left - n.left) < 0.5 && Math.abs(p.top - n.top) < 0.5 && p.arrow === n.arrow && Math.abs(p.ax - n.ax) < 0.5 && p.w === n.w ? p : n,
+      );
     raf = requestAnimationFrame(place);
     return () => cancelAnimationFrame(raf);
   }, [step]);
@@ -159,7 +163,7 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
     <section
       ref={ref}
       className={`coach ${done ? "is-done" : ""} arrow-${pos?.arrow ?? "none"}`}
-      style={pos ? { left: pos.left, top: pos.top, "--ax": `${pos.ax}px` } as React.CSSProperties : { visibility: "hidden" }}
+      style={pos ? ({ left: pos.left, top: pos.top, width: pos.w, "--ax": `${pos.ax}px` } as React.CSSProperties) : { visibility: "hidden" }}
       role="dialog"
       aria-live="polite"
       aria-label={`Tutorial step ${index + 1} of ${total}`}
@@ -215,6 +219,61 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
       </footer>
     </section>
   );
+}
+
+type Pos = { left: number; top: number; arrow: "up" | "down" | "right" | "none"; ax: number; w?: number };
+
+/** Panels the coach must not cover: the goals (and shortcuts), the crew and map, the view buttons and the "paused" note. */
+function keepClear() {
+  const out: DOMRect[] = [];
+  for (const sel of [".hud-left", ".hud-right", ".view-switch", ".paused-chip"]) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0 && getComputedStyle(el).display !== "none") out.push(r);
+  }
+  return out;
+}
+const hits = (p: { left: number; top: number }, w: number, h: number, r: DOMRect) =>
+  p.left < r.right + 6 && p.left + w > r.left - 6 && p.top < r.bottom + 6 && p.top + h > r.top - 6;
+
+/**
+ * Move the coach off the panels it would cover: sideways first (keeping its arrow), then narrower to fit
+ * the gap, then above or below the panel. `maxRight` is the furthest right its right edge may go.
+ */
+function dodge(p: Pos, w: number, h: number, maxRight: number): Pos {
+  const W = innerWidth,
+    H = innerHeight;
+  const clear = keepClear();
+  let out: Pos = { ...p };
+  for (const r of clear) {
+    const cw = out.w ?? w;
+    if (!hits(out, cw, h, r)) continue;
+    // Sideways: right of a panel on the left half, left of one on the right half.
+    const side = r.left + r.width / 2 < W / 2 ? r.right + 12 : r.left - cw - 12;
+    const sideways = { ...out, left: side };
+    if (side >= 8 && side + cw <= maxRight && !clear.some((o) => o !== r && hits(sideways, cw, h, o))) {
+      out = sideways;
+      continue;
+    }
+    // Narrower, to fit between this panel and the right limit (only beside a panel on the left).
+    if (r.left + r.width / 2 < W / 2) {
+      const room = maxRight - (r.right + 12);
+      if (room >= 280) {
+        const narrow = { ...out, left: r.right + 12, w: Math.min(cw, room) };
+        if (!clear.some((o) => o !== r && hits(narrow, narrow.w!, h, o))) {
+          out = narrow;
+          continue;
+        }
+      }
+    }
+    // Above or below the panel, without an arrow (the spotlight still shows the target).
+    const above = { ...out, top: r.top - h - 12, arrow: "none" as const };
+    const below = { ...out, top: r.bottom + 12, arrow: "none" as const };
+    if (above.top >= 60 && !clear.some((o) => hits(above, cw, h, o))) out = above;
+    else if (below.top + h <= H - 90 && !clear.some((o) => hits(below, cw, h, o))) out = below;
+  }
+  return out;
 }
 
 function rectOf(target?: string) {

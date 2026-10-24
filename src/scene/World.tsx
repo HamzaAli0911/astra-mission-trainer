@@ -16,7 +16,7 @@ import type { GameState, Module, Planet } from "../sim/types";
 import { CRATER, DOCK, FOOTPRINT, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
 import { useGame } from "../state/game";
 import { useUI, type View } from "../state/ui";
-import { tick } from "../lib/sound";
+import { ambience, tick } from "../lib/sound";
 import { anchors, followers, scene3d } from "./anchors";
 import { buildCockpit, EYE, type CockpitData } from "./cockpit";
 import { buildSiteMarker, dustSystem, impactSystem, SITE_COLOR, sparkSystem, stormStreaks } from "./effects";
@@ -100,7 +100,7 @@ function buildCable(m: Module, planet: Planet): Entry["cable"] {
   tex.wrapS = THREE.RepeatWrapping;
   tex.repeat.set(Math.max(1, Math.round(curve.getLength() / 2.6)), 1);
   tex.needsUpdate = true;
-  const flow = light("#ffc94a", 1);
+  const flow = light("#ffe2b0", 0.7);
   flow.alphaMap = tex;
   flow.transparent = true;
   flow.depthWrite = false;
@@ -120,6 +120,10 @@ export function World() {
   const reduce = useUI((s) => s.settings.motion);
   const graphics = useUI((s) => s.settings.graphics);
   const [failed, setFailed] = useState(false);
+  // If the graphics chip resets (laptop sleep, a driver update, switching GPUs), the browser takes the
+  // 3D context away; when it gives it back, the whole scene is rebuilt from scratch.
+  const [lost, setLost] = useState(false);
+  const [rebuild, setRebuild] = useState(0);
   // The planet's ground and textures are baked in a worker; wait for them (usually they are ready).
   const fine = graphics === "ultra";
   const [baked, setBaked] = useState<Baked | null>(() => bakedNow(planet, fine));
@@ -157,22 +161,34 @@ export function World() {
       const touch = matchMedia("(pointer: coarse)").matches;
       let level: Level = graphics === "low" ? 0 : graphics === "ultra" ? 3 : graphics === "high" ? 2 : touch ? 1 : 2;
       let ratio = 1,
-        ratioCap = Infinity;
+        ratioCap = Infinity,
+        // Auto stepped up to Ultra's effects on a fast machine (it keeps High's resolution and ground).
+        autoUp = false;
       // Sharp screens get extra resolution only up to a pixel budget, so a Retina laptop doesn't render 4 million pixels with glow.
       const pickRatio = () => {
         const area = Math.max(1, el.clientWidth * el.clientHeight);
-        const fit = Math.sqrt((level === 3 ? 4.2e6 : level === 2 ? 3.2e6 : 1.8e6) / area);
-        const top = level === 3 ? 2 : level === 2 ? 1.5 : level === 1 ? 1.25 : 1;
+        const lv = autoUp ? 2 : level;
+        const fit = Math.sqrt((lv === 3 ? 4.2e6 : lv === 2 ? 3.2e6 : 1.8e6) / area);
+        // On an ordinary (1x) screen Ultra renders at 1.5x and lets SMAA smooth the edges: 2x would cost four times the pixels.
+        const top = lv === 3 ? (devicePixelRatio >= 1.5 ? 2 : 1.5) : lv === 2 ? 1.5 : lv === 1 ? 1.25 : 1;
         return Math.max(1, Math.min(devicePixelRatio, top, ratioCap, fit));
       };
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = planet === "mars" ? 1.0 : 1.12;
+      renderer.toneMappingExposure = planet === "mars" ? 1.12 : 1.32;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.className = "world-canvas";
       const debug = (window as unknown as { __astra?: Record<string, unknown> }).__astra;
       if (debug) debug.renderer = renderer;
       el.appendChild(renderer.domElement);
+      renderer.domElement.addEventListener("webglcontextlost", (e) => {
+        e.preventDefault();
+        setLost(true);
+      });
+      renderer.domElement.addEventListener("webglcontextrestored", () => {
+        setLost(false);
+        setRebuild((n) => n + 1);
+      });
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color("#000000");
@@ -205,18 +221,22 @@ export function World() {
       // Image-based light for metal and glass, plus the post-processing chain (HDR, MSAA, bloom).
       const env = environmentMap(renderer, planet);
       scene.environment = env.texture;
-      scene.environmentIntensity = planet === "moon" ? 0.32 : 0.55;
+      scene.environmentIntensity = planet === "moon" ? 0.42 : 0.6;
       const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: level === 3 || devicePixelRatio < 1.5 ? 4 : 2 });
       const composer = new EffectComposer(renderer, target);
       composer.addPass(new RenderPass(scene, camera));
       // Ultra: ground-truth ambient occlusion darkens creases, joints and where things meet the ground.
-      if (level === 3) {
-        const gtao = new GTAOPass(scene, camera, 512, 512);
+      const canUp = graphics === "auto" && !touch;
+      let gtao: GTAOPass | null = null,
+        smaa: SMAAPass | null = null;
+      if (level === 3 || canUp) {
+        gtao = new GTAOPass(scene, camera, 512, 512);
         gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12, distanceFallOff: 1 });
         gtao.blendIntensity = 0.85;
         // Occlusion is soft and low-frequency: compute it at half resolution (about a quarter of the cost) and upsample.
         const fullSize = gtao.setSize.bind(gtao);
         gtao.setSize = (w: number, h: number) => fullSize(Math.ceil(w / 2), Math.ceil(h / 2));
+        gtao.enabled = level === 3;
         composer.addPass(gtao);
       }
       // Bloom only on genuinely bright things (lamps, the Sun, screens), not on sunlit surfaces.
@@ -224,7 +244,11 @@ export function World() {
       composer.addPass(bloom);
       composer.addPass(new OutputPass());
       composer.addPass(gradePass(planet));
-      if (level === 3) composer.addPass(new SMAAPass());
+      if (level === 3 || canUp) {
+        smaa = new SMAAPass();
+        smaa.enabled = level === 3;
+        composer.addPass(smaa);
+      }
 
       // Lights.
       const sun = new THREE.DirectionalLight("#fff4e2", 3);
@@ -244,6 +268,8 @@ export function World() {
       scene.add(fill);
 
       const applyLevel = () => {
+        if (gtao) gtao.enabled = level === 3;
+        if (smaa) smaa.enabled = level === 3;
         renderer.shadowMap.enabled = level > 0;
         sun.castShadow = level > 0;
         renderer.shadowMap.type = level === 2 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
@@ -743,6 +769,10 @@ export function World() {
         last = performance.now(),
         clock = 0,
         slow = 0,
+        ambienceAt = 0,
+        smooth = 1 / 60,
+        steady = 0,
+        triedUp = false,
         warm = 0,
         geigerAt = 0,
         dustLevel = 0,
@@ -771,9 +801,29 @@ export function World() {
         // Adaptive quality on "auto": drop resolution, then the glow, then shadows on slow machines.
         if (graphics === "auto" && warm > 4 && !document.hidden) {
           slow = dt > 0.045 ? slow + dt : Math.max(0, slow - dt * 0.5);
+          // Smooth and steady on a desktop (every frame on time, nothing dropped for 8 s): try Ultra's
+          // ambient occlusion and edge smoothing, once. If that makes frames late, step straight back.
+          const shown = !(useUI.getState().briefing || useUI.getState().modal);
+          smooth += (dt - smooth) * 0.05;
+          steady = shown && dt < 0.0185 ? steady + dt : 0;
+          if (canUp && !triedUp && level === 2 && ratioCap === Infinity && steady > 8) {
+            triedUp = true;
+            autoUp = true;
+            level = 3;
+            applyLevel();
+          }
+          if (autoUp && level === 3 && shown && smooth > 0.021) {
+            autoUp = false;
+            level = 2;
+            applyLevel();
+          }
           if (slow > 2.5 && level > 0) {
             slow = 0;
-            if (level === 2 && ratio > 1.01) {
+            if (level === 3 && autoUp) {
+              autoUp = false;
+              level = 2;
+              applyLevel();
+            } else if (level === 2 && ratio > 1.01) {
               ratioCap = 1;
               size();
             } else {
@@ -849,7 +899,7 @@ export function World() {
         }
         // Radiation is invisible: storms are shown by the interface, not painted on the sky.
         sky.update(camera, dir, { day, dust: dustLevel, storm: 0, time: clock, pixelRatio: ratio });
-        scene.environmentIntensity = (planet === "moon" ? 0.32 : 0.55) * (0.35 + 0.65 * day);
+        scene.environmentIntensity = (planet === "moon" ? 0.42 : 0.6) * (0.35 + 0.65 * day);
 
 
         // Modules.
@@ -892,7 +942,10 @@ export function World() {
           const lamp = !done ? "#ffb020" : damaged ? "#ff4d5e" : !m.on ? "#5b6375" : r < 0.5 ? "#ffb020" : "#3ee39a";
           e.view.status.color.set(lamp);
           e.view.status.emissive.set(lamp);
-          e.view.status.emissiveIntensity = damaged ? (Math.sin(clock * 8) > 0 ? 3.5 : 0.4) : 2.4;
+          // Calm when all is well; amber breathes, red blinks (so the state shows by more than colour).
+          e.view.status.emissiveIntensity = damaged
+            ? Math.sin(clock * 8) > 0 ? 3.5 : 0.4
+            : lamp === "#3ee39a" ? 0.9 : lamp === "#5b6375" ? 0.2 : 1.4 + (reduced ? 0 : Math.sin(clock * 2.5) * 0.6);
           const power = m.type === "greenhouse" ? (m.light / 2) * r : r;
           for (const gm of e.view.glow) gm.emissiveIntensity = 0.08 + power * 1.9 * (gm.userData.glow ?? 1) * (m.type === "oxygen" ? 0.7 + Math.sin(clock * 3) * 0.3 : 1);
           for (const b of e.view.blink) b.emissiveIntensity = (clock * 0.8 + m.id * 0.37) % 1 < 0.12 ? 5 : 0.15;
@@ -918,8 +971,8 @@ export function World() {
           }
           if (e.cable) {
             const flowing = m.type === "solar" || m.type === "reactor" ? working && f.gen > 0.05 : working && r > 0.05 && f.ratio[m.id] !== undefined;
-            e.cable.flow.emissiveIntensity = flowing ? 1.1 : 0.03;
-            e.cable.flow.opacity = flowing ? 0.8 : 0.12;
+            e.cable.flow.emissiveIntensity = flowing ? 0.7 : 0.02;
+            e.cable.flow.opacity = flowing ? 0.6 : 0.08;
             if (!reduced) e.cable.tex.offset.x -= dt * 1.2 * e.cable.dir;
           }
         }
@@ -1065,6 +1118,11 @@ export function World() {
           }
         }
 
+        // Background sound: life support, Martian wind, the rover's motors.
+        if (clock - ambienceAt > 0.2) {
+          ambienceAt = clock;
+          ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock });
+        }
         // The rover's body rocks a little over the ground as it drives.
         const bump = reduced ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);
         rover.body.position.y = (Math.sin(clock * 11) * 0.018 + Math.sin(clock * 4.3 + 1) * 0.012) * bump;
@@ -1105,11 +1163,14 @@ export function World() {
         project("habitat", 0, 2.4, 0);
         project("crater", CRATER.x, terrainHeight(CRATER.x, CRATER.z, planet) + 2, CRATER.z);
 
-        if (warmStage === 0) {
-          renderer.shadowMap.autoUpdate = false;
+        if (warmStage < 2) {
+          // Warm-up frames draw where real frames will (into the composer's buffer on High and Ultra), so the shaders they compile are the ones used.
+          renderer.setRenderTarget(level > 0 ? target : null);
+          if (warmStage === 0) renderer.shadowMap.autoUpdate = false;
           renderer.render(scene, camera);
           renderer.shadowMap.autoUpdate = true;
-        } else if (warmStage === 1 || level === 0) renderer.render(scene, camera);
+          renderer.setRenderTarget(null);
+        } else if (level === 0) renderer.render(scene, camera);
         else composer.render(dt);
       };
       const loop = (now: number) => {
@@ -1154,13 +1215,22 @@ export function World() {
       }
       // Compile the shaders (in parallel where the browser can), then draw three warm-up frames, one
       // pause apart, that compile the rest (shadows, glow) while the landing screen is up.
-      Promise.all([renderer.compileAsync(scene, camera), level > 0 ? renderer.compileAsync(glowShaders, camera) : null])
+      // Compile for the buffer the scene is really drawn into: a shader drawn off-screen (no tone mapping, linear colour)
+      // is a different program from one drawn straight to the screen, and compiling the wrong one costs a freeze later.
+      renderer.setRenderTarget(level > 0 ? target : null);
+      const compiling = Promise.all([renderer.compileAsync(scene, camera), level > 0 ? renderer.compileAsync(glowShaders, camera) : null]);
+      renderer.setRenderTarget(null);
+      compiling
         .catch(() => undefined)
         .finally(async () => {
           for (const stage of [0, 1, 2]) {
             if (!alive) return;
             warmStage = stage;
+            // Auto may switch on Ultra's effects later: compile them now, on the glow frame, so that switch never stalls.
+            const preview = stage === 2 && canUp && level === 2 && gtao && smaa;
+            if (preview) gtao!.enabled = smaa!.enabled = true;
             frame(performance.now());
+            if (preview) gtao!.enabled = smaa!.enabled = false;
             await new Promise((r) => window.setTimeout(r, 0));
           }
           quad.dispose();
@@ -1171,6 +1241,7 @@ export function World() {
         });
 
       teardown = () => {
+        ambience({ on: false, planet, dust: 0, drive: 0, time: 0 });
         cancelAnimationFrame(raf);
         ro.disconnect();
         renderer.domElement.removeEventListener("pointerdown", onDown);
@@ -1195,14 +1266,14 @@ export function World() {
       alive = false;
       teardown?.();
     };
-  }, [planet, key, reduce, graphics, baked]);
+  }, [planet, key, reduce, graphics, baked, rebuild]);
 
   return (
     <div ref={host} className="world">
-      {(!baked || warming) && !failed && (
+      {(!baked || warming || lost) && !failed && (
         <div className="world-loading" role="status">
           <span className="world-loading-dot" aria-hidden="true" />
-          Landing on {planet === "mars" ? "Mars" : "the Moon"}…
+          {lost ? "Restarting the 3D view…" : `Landing on ${planet === "mars" ? "Mars" : "the Moon"}…`}
         </div>
       )}
       {failed && (

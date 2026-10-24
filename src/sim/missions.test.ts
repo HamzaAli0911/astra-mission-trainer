@@ -28,6 +28,12 @@ describe("mission data", () => {
     expect(CAMPAIGN.map((m) => m.number)).toEqual([1, 2, 3, 4, 5, 6]);
     for (let i = 1; i < CAMPAIGN.length; i++) expect(CAMPAIGN[i].after).toBe(CAMPAIGN[i - 1].id);
   });
+  it("asks for decisions in the middle of every mission, not just at the start", () => {
+    for (const m of CAMPAIGN) {
+      const cards = m.script.filter((e) => "choice" in e && e.at > 12).length + (m.random ? 2 : 0);
+      expect(cards, m.id).toBeGreaterThanOrEqual(m.number === 1 ? 1 : 2);
+    }
+  });
   it("only uses pads that fit, cards that exist and modules it offers", () => {
     PADS.forEach((p, i) => expect(p.id).toBe(i));
     for (const m of MISSIONS) {
@@ -122,6 +128,8 @@ describe("every mission can be won, and lost", () => {
     for (const seed of [42, 2026, 7]) {
       const r = new Runner("mars-colony", seed);
       r.reflex = reflexes;
+      // Science is a goal here: study the harvest's seeds rather than eat them.
+      r.choices = { harvest: 1 };
       for (const t of ["reactor", "recycler", "greenhouse", "shelter"] as const) r.do({ type: "build", module: t });
       r.trip("regolith");
       r.do({ type: "build", module: "icedrill" });
@@ -136,6 +144,8 @@ describe("every mission can be won, and lost", () => {
         // Broken and short of materials: fetch regolith for the repair.
         if (r.s.modules.some((m) => m.health < 50 && m.repair <= 0) && r.s.res.materials < 10) r.trip("regolith");
         if (r.s.res.materials >= 20 && freePad(r.s, "lab") && !r.s.modules.some((m) => m.type === "lab")) r.do({ type: "build", module: "lab" });
+        // Behind on science late in the mission: drive out for another sample.
+        if (r.s.t > 120 && r.s.res.science < 40 && !r.s.rover.cargo.samples.length && r.s.rover.docked && !stormNow(r)) r.trip("layers");
         r.tick(0.5);
       }
       expect(r.s.status, `${seed}: ${r.s.endReason}`).toBe("won");

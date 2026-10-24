@@ -69,7 +69,7 @@ function SettingsDialog({ close }: { close: () => void }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <Modal title="Settings" onClose={close} icon={<SettingsIcon size={20} />}>
-      <Toggle label="Sound effects" text="Beeps, alarms and the Geiger counter in storms." on={s.sound} set={(v) => set("sound", v)} />
+      <Toggle label="Sound" text="Beeps, alarms, the Geiger counter in storms, and a quiet background: life-support hum, Martian wind, rover motors." on={s.sound} set={(v) => set("sound", v)} />
       <Toggle
         label="Read CAPCOM aloud"
         text="Your browser reads messages and tips out loud."
@@ -80,6 +80,7 @@ function SettingsDialog({ close }: { close: () => void }) {
         }}
       />
       <Toggle label="Larger text" text="Makes all writing bigger." on={s.bigText} set={(v) => set("bigText", v)} />
+      <Toggle label="High contrast" text="Solid panels, brighter text and stronger outlines." on={s.contrast} set={(v) => set("contrast", v)} />
       <Toggle label="Reduce motion" text="Fewer animations and camera moves." on={s.motion} set={(v) => set("motion", v)} />
       <div className="setting">
         <div>

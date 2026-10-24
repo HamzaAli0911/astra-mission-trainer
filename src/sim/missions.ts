@@ -121,6 +121,7 @@ export const MISSIONS: Mission[] = [
       { id: "night", at: 20.3, say: "The Sun has set. We're on battery power now. If it runs low, switch off the Oxygen Maker for a while: we have stored oxygen." },
       { id: "dawn", at: 28.5, say: "Sunrise in 90 minutes. Hang in there!" },
       { id: "day2", at: 30.5, say: "You made it through your first night! Mission Control wants a bigger power reserve before the next one: two Solar Arrays and two Battery Banks." },
+      { id: "leak", at: 34, choice: "leak" },
       { id: "dusk2", at: 41.5, say: "Second sunset at 20:00. Open the Power panel: will the battery last until 06:00?" },
       { id: "dawn2", at: 52.5, say: "Almost sunrise on Day 3. Great work, Commander." },
     ],
@@ -188,7 +189,9 @@ export const MISSIONS: Mission[] = [
     hazards: [],
     script: [
       { id: "drill", at: 26, say: "Driving for ice takes hours. An Ice Drill on the crater's edge mines water by itself, but it costs 30 materials. The Boulder Field has plenty of building rock." },
+      { id: "glint", at: 31, choice: "glint" },
       { id: "half", at: 44, say: "Halfway there. Remember: the rover's battery recharges on the dock, using the outpost's power." },
+      { id: "airlock", at: 56, choice: "airlock" },
       { id: "late", at: 70, say: "Ten hours left. Is the water tank getting close to 200 L?" },
     ],
     goals: [
@@ -337,7 +340,9 @@ export const MISSIONS: Mission[] = [
     script: [
       { id: "out", at: 9.1, say: "Maya and Noor are out in the rover at the Crater Wall Layers, far from home. Collect the sample, then think about getting back." },
       { id: "over1", at: 24.5, say: "That was close! The Sun is still active. Use the quiet time to collect another sample, but stay close to home." },
+      { id: "experiment", at: 40, choice: "experiment" },
       { id: "over2", at: 55.5, say: "Two down. Forecasters expect one more storm, and this one may give us less warning." },
+      { id: "crack", at: 64, choice: "crack" },
     ],
     goals: [
       { id: "home", kind: "home", text: "Bring the rover crew back to the dock" },
@@ -406,6 +411,8 @@ export const MISSIONS: Mission[] = [
     ],
     script: [
       { id: "sunset1", at: 16.5, say: "Mars nights are long and cold too. Can your power last until 06:00?" },
+      { id: "supply", at: 30, choice: "supply" },
+      { id: "overheat", at: 56, choice: "overheat" },
       { id: "food", at: 70, say: "Fresh food matters on a long Mars mission. A Greenhouse works here too, if you have the power for its lights." },
       { id: "devil", at: 84, choice: "devil" },
     ],
@@ -507,7 +514,7 @@ export const MISSIONS: Mission[] = [
       storms: 2,
       dust: 1,
       meteors: 2,
-      cards: ["supply", "leak", "fever", "devil", "experiment", "harvest", "airlock", "meteor"],
+      cards: ["supply", "leak", "fever", "devil", "experiment", "harvest", "airlock", "meteor", "overheat", "crack"],
     },
     after: "red-planet",
   },
@@ -564,7 +571,7 @@ export const MISSIONS: Mission[] = [
       storms: 4,
       dust: 0,
       meteors: 3,
-      cards: ["supply", "leak", "fever", "meteor", "glint", "experiment", "harvest", "airlock"],
+      cards: ["supply", "leak", "fever", "meteor", "glint", "experiment", "harvest", "airlock", "overheat", "crack"],
     },
     after: "first-light",
   },
@@ -621,7 +628,7 @@ export const MISSIONS: Mission[] = [
       storms: 2,
       dust: 2,
       meteors: 2,
-      cards: ["supply", "leak", "fever", "devil", "experiment", "harvest", "airlock", "meteor"],
+      cards: ["supply", "leak", "fever", "devil", "experiment", "harvest", "airlock", "meteor", "overheat", "crack"],
     },
     after: "red-planet",
   },

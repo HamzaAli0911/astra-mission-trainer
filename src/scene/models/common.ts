@@ -43,10 +43,10 @@ export const soilColor = (planet: Planet) => (planet === "mars" ? "#8f5a42" : "#
 
 /** A small status lamp in a housing: its colour shows the module's state. */
 export function statusLamp(g: THREE.Object3D, x: number, y: number, z: number) {
-  const m = light("#3ee39a", 2.4);
-  ball(g, 0.09, m, x, y + 0.04, z, 12);
-  cyl(g, 0.12, 0.14, 0.1, paint(C.dark, 0.5, 0.3), x, y - 0.04, z, 14);
-  cyl(g, 0.105, 0.105, 0.02, metal(), x, y + 0.01, z, 14);
+  const m = light("#3ee39a", 0.9);
+  ball(g, 0.065, m, x, y + 0.03, z, 12);
+  cyl(g, 0.09, 0.105, 0.08, paint(C.dark, 0.5, 0.3), x, y - 0.03, z, 14);
+  cyl(g, 0.078, 0.078, 0.02, metal(), x, y + 0.01, z, 14);
   return m;
 }
 

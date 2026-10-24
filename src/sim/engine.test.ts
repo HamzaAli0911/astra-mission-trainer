@@ -6,6 +6,7 @@ import { daylight, sunlight } from "./planets";
 import type { GameState, ModuleType } from "./types";
 import { PADS } from "./world";
 import { mission } from "./missions";
+import { advanceAnswering } from "./harness";
 
 /** A finished module on the first free pad that fits. */
 function add(s: GameState, type: ModuleType) {
@@ -269,7 +270,7 @@ describe("goals and results", () => {
   it("running out of time with goals undone is a loss", () => {
     let s = createState("first-light");
     for (const t of ["solar", "oxygen", "battery"] as const) s = add(s, t);
-    s = advance(s, 50);
+    s = advanceAnswering(s, 50);
     expect(s.status).toBe("lost");
     expect(s.endReason).toMatch(/Time ran out/);
   });

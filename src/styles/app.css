@@ -40,6 +40,22 @@
 :root.big-text {
   font-size: 18.5px;
 }
+:root.high-contrast {
+  --glass: linear-gradient(180deg, #0b1330, #060a1d);
+  --glass-solid: #060a1d;
+  --line: rgba(225, 233, 255, 0.55);
+  --line-strong: rgba(240, 245, 255, 0.85);
+  --text-2: #eef2ff;
+  --text-3: #d0d8f5;
+  --blur: none;
+}
+:root.high-contrast :focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+:root.high-contrast .btn.secondary {
+  background: #1a2552;
+}
 
 * {
   box-sizing: border-box;
@@ -1317,7 +1333,8 @@ ul.check-list:not(:has(svg)) li::before {
 }
 .hud-right {
   position: absolute;
-  top: 92px;
+  /* Clear of the note under the speed buttons ("Training pause", "Paused"). */
+  top: 102px;
   right: 10px;
   z-index: 15;
   display: flex;
@@ -2009,7 +2026,7 @@ i.rad {
 /* Drawer */
 .drawer {
   position: absolute;
-  top: 82px;
+  top: 102px;
   right: 10px;
   bottom: 96px;
   z-index: 26;
@@ -2740,6 +2757,36 @@ p.catch::before {
   color: var(--text-2);
   font-size: 0.88rem;
 }
+.brief-time {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 28px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(150, 175, 255, 0.07);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.brief-time svg {
+  flex: none;
+  margin-top: 2px;
+}
+.avatar .hurt-mark {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #2a0008;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
 .brief-actions {
   display: flex;
   align-items: center;
@@ -2896,6 +2943,23 @@ p.catch::before {
   flex-direction: column;
   gap: 10px;
   margin-top: 18px;
+}
+.choice-have {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: -4px 0 12px;
+  font-size: 0.9rem;
+  color: var(--text-2);
+}
+.choice-have svg {
+  vertical-align: -3px;
+}
+.option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .option {
   display: flex;
@@ -3366,6 +3430,15 @@ p.catch::before {
   font-size: 0.84rem;
   color: var(--accent-hi);
 }
+/* A narrowed coach (squeezed between panels) drops the name; the avatar still says who is talking. */
+.coach {
+  container-type: inline-size;
+}
+@container (max-width: 300px) {
+  .coach header b {
+    visibility: hidden;
+  }
+}
 .coach-skip {
   gap: 4px;
   padding-inline: 7px;
@@ -3793,6 +3866,16 @@ table.keys .kbd {
   }
 }
 @media (max-width: 640px) {
+  /* The resource bar wraps under the top row here: the speed note would cover it, and the play button already shows the pause. */
+  .speed-note {
+    display: none;
+  }
+  .quick-actions {
+    flex-wrap: nowrap;
+  }
+  .quick-actions .qa-long {
+    display: none;
+  }
   :root {
     font-size: 15px;
   }
@@ -3955,6 +4038,9 @@ table.keys .kbd {
   }
   .brief-actions {
     padding: 16px 18px 20px;
+  }
+  .brief-time {
+    margin: 0 18px;
   }
   .brief-actions .btn.big {
     flex: 1;

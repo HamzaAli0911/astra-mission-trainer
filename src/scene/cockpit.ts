@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Planet } from "../sim/types";
-import { ball, box, cyl, finalize, glass, light, paint, rbox, strut, torus } from "./kit";
+import { ball, box, cyl, finalize, glass, light, paint, pipe, rbox, strut, torus } from "./kit";
 
 /** Where the driver's eyes are, in the rover's own frame (forward is −z). */
 export const EYE = new THREE.Vector3(-0.42, 2.0, 0.05);
@@ -294,49 +294,63 @@ function makeScreen(draw: (ctx: CanvasRenderingContext2D, d: CockpitData) => voi
 export function buildCockpit() {
   const g = new THREE.Group();
   // Cabin surfaces glow faintly (the crew's own lights), so the inside reads at night too.
-  const lit = (color: string, rough: number, metal = 0) =>
-    new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive: "#1c2436", emissiveIntensity: 0.55 });
-  const shell = lit("#3a4150", 0.85, 0.1),
-    trim = lit("#262c38", 0.75, 0.15),
-    soft = lit("#4a5263", 0.95),
-    frame = lit("#8892a6", 0.4, 0.6),
+  const lit = (color: string, rough: number, metal = 0, glow = 0.5) =>
+    new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive: "#252d40", emissiveIntensity: glow });
+  const shell = lit("#5b6374", 0.85, 0.1),
+    trim = lit("#2f3644", 0.7, 0.2),
+    soft = lit("#6c7588", 0.95),
+    frame = lit("#9aa3b4", 0.4, 0.6, 0.3),
     accent = paint("#ff8a3d", 0.5);
-  // Floor, ceiling and the walls below and above the side windows.
-  box(g, 1.96, 0.04, 3.35, trim, 0, 1.08, 0.075);
-  box(g, 2.0, 0.05, 2.75, shell, 0, 2.36, 0.35);
+  // Floor and ceiling. The canopy (front) and side windows are glass; everything else is wall.
+  box(g, 1.96, 0.04, 3.6, trim, 0, 1.06, 0.05);
+  box(g, 1.96, 0.05, 2.8, shell, 0, 2.24, 0.36);
   for (const x of [-1, 1]) {
-    box(g, 0.04, 0.72, 3.3, shell, x * 0.99, 1.44, 0.08);
-    box(g, 0.04, 0.14, 2.85, shell, x * 0.99, 2.28, 0.3);
-    box(g, 0.04, 0.44, 0.55, shell, x * 0.99, 2.0, -1.0);
-    box(g, 0.04, 0.44, 1.5, shell, x * 0.99, 2.0, 0.975);
-    box(g, 0.06, 0.05, 0.98, frame, x * 0.98, 1.79, -0.25);
-    box(g, 0.06, 0.05, 0.98, frame, x * 0.98, 2.21, -0.25);
-    box(g, 0.05, 0.035, 2.6, accent, x * 0.965, 1.6, 0.3);
+    // Below the windows: up to the belt line (lower at the front, where the canopy wraps round).
+    box(g, 0.04, 0.74, 2.83, shell, x * 0.99, 1.43, 0.335);
+    box(g, 0.04, 0.54, 0.7, shell, x * 0.97, 1.33, -1.42);
+    // Behind and between the side windows.
+    box(g, 0.04, 0.44, 1.45, shell, x * 0.99, 2.02, 1.025);
+    box(g, 0.04, 0.44, 0.2, shell, x * 0.99, 2.02, -0.96);
+    box(g, 0.04, 0.1, 1.16, shell, x * 0.99, 2.19, -0.3);
+    // Side window frames, and an orange stripe at the belt line.
+    box(g, 0.06, 0.04, 1.16, frame, x * 0.98, 1.82, -0.3);
+    box(g, 0.06, 0.04, 1.16, frame, x * 0.98, 2.14, -0.3);
+    box(g, 0.05, 0.035, 2.6, accent, x * 0.965, 1.62, 0.4);
+    // A-pillars along the canopy's edges.
+    strut(g, x * 0.92, 1.58, -1.86, x * 0.96, 2.22, -1.06, 0.04, trim);
   }
   // Window glass: a faint tint and reflections.
   for (const x of [-1, 1]) {
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.42), glass("#9fd6ff", 0.08));
-    pane.position.set(x * 1.0, 2.0, -0.25);
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.16, 0.32), glass("#9fd6ff", 0.08));
+    pane.position.set(x * 1.0, 1.98, -0.3);
     pane.rotation.y = (x * Math.PI) / 2;
     g.add(pane);
   }
-  const shield = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.66), glass("#9fd6ff", 0.06));
-  shield.position.set(0, 2.05, -1.2);
-  shield.rotation.x = 0.7;
+  const shield = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.16), glass("#9fd6ff", 0.06));
+  shield.position.set(0, 1.857, -1.473);
+  shield.rotation.x = 0.87;
   g.add(shield);
-  // Window frame: pillars and the header.
-  for (const x of [-1, 1]) strut(g, x * 0.95, 1.76, -1.46, x * 0.95, 2.32, -1.0, 0.045, trim);
-  box(g, 1.98, 0.08, 0.24, trim, 0, 2.33, -0.96);
-  rbox(g, 0.62, 0.06, 0.34, 0.02, trim, 0, 2.31, -0.18);
-  for (let i = 0; i < 4; i++) ball(g, 0.018, light(i === 0 ? "#3ee39a" : "#5ee0ff", 2), -0.18 + i * 0.12, 2.275, -0.08, 6);
-  // Dashboard.
-  rbox(g, 1.96, 0.4, 0.78, 0.08, trim, 0, 1.52, -1.13).rotation.x = 0.12;
-  rbox(g, 1.9, 0.06, 0.62, 0.03, soft, 0, 1.73, -1.02).rotation.x = -0.1;
+  // Header beam over the canopy, and the overhead switch panel.
+  box(g, 1.96, 0.07, 0.12, trim, 0, 2.21, -1.04);
+  rbox(g, 0.62, 0.06, 0.34, 0.02, trim, 0, 2.2, -0.18);
+  for (let i = 0; i < 4; i++) ball(g, 0.018, light(i === 0 ? "#3ee39a" : "#5ee0ff", 1.4), -0.18 + i * 0.12, 2.165, -0.08, 6);
+  // Ceiling light and grab handles.
+  box(g, 0.9, 0.012, 0.08, light("#fff1d8", 0.8), 0, 2.212, 0.65);
+  for (const x of [-0.8, 0.8]) pipe(g, [[x, 2.21, 0.35], [x, 2.15, 0.42], [x, 2.15, 1.38], [x, 2.21, 1.45]], 0.016, frame, 5);
+  // Dashboard under the canopy.
+  rbox(g, 1.9, 0.42, 0.7, 0.08, trim, 0, 1.4, -1.55).rotation.x = 0.1;
+  rbox(g, 1.86, 0.06, 0.56, 0.03, soft, 0, 1.6, -1.36).rotation.x = -0.08;
   // A control yoke in front of the driver, and a joystick for the co-driver.
-  torus(g, 0.15, 0.022, frame, EYE.x, 1.66, -0.52, Math.PI).rotation.x = -0.35;
-  cyl(g, 0.025, 0.025, 0.2, frame, EYE.x, 1.62, -0.6, 8).rotation.x = 1.2;
-  cyl(g, 0.02, 0.025, 0.16, frame, 0.42, 1.6, -0.35, 8);
-  ball(g, 0.04, paint("#1b2029", 0.6), 0.42, 1.7, -0.35, 10);
+  torus(g, 0.15, 0.022, frame, EYE.x, 1.62, -0.62, Math.PI).rotation.x = -0.35;
+  cyl(g, 0.025, 0.025, 0.3, frame, EYE.x, 1.55, -0.78, 8).rotation.x = 1.2;
+  cyl(g, 0.02, 0.025, 0.16, frame, 0.42, 1.52, -0.4, 8);
+  ball(g, 0.04, paint("#1b2029", 0.6), 0.42, 1.62, -0.4, 10);
+  // Centre console between the seats, and a side panel by the driver's left hand.
+  rbox(g, 0.3, 0.3, 0.7, 0.04, trim, 0, 1.22, -0.12);
+  const leds = [light("#3ee39a", 0.6), light("#ffb020", 0.6), light("#5ee0ff", 0.6)];
+  for (let i = 0; i < 6; i++) box(g, 0.05, 0.015, 0.035, leds[i % 3], -0.08 + (i % 3) * 0.08, 1.375, -0.3 + Math.floor(i / 3) * 0.12);
+  rbox(g, 0.08, 0.24, 0.42, 0.03, trim, -0.94, 1.48, -0.95);
+  for (let i = 0; i < 4; i++) box(g, 0.008, 0.022, 0.03, leds[i % 3], -0.896, 1.45 + (i % 2) * 0.06, -1.05 + Math.floor(i / 2) * 0.16);
   // Co-driver's seat and the driver's armrest.
   rbox(g, 0.52, 0.12, 0.52, 0.05, soft, 0.42, 1.36, 0.1);
   rbox(g, 0.52, 0.72, 0.12, 0.05, soft, 0.42, 1.74, 0.38).rotation.x = -0.12;
@@ -352,9 +366,9 @@ export function buildCockpit() {
   // Screens: driving, navigation, systems.
   const screens = [makeScreen(drawDrive), makeScreen(drawNav), makeScreen(drawSystems)];
   const at: [number, number, number, number][] = [
-    [EYE.x, 1.86, -0.9, 0.12],
-    [0.08, 1.86, -0.92, -0.02],
-    [0.58, 1.86, -0.9, -0.2],
+    [EYE.x, 1.78, -1.22, 0.12],
+    [0.08, 1.78, -1.25, -0.02],
+    [0.58, 1.78, -1.22, -0.2],
   ];
   screens.forEach((s, i) => {
     const [x, y, z, yaw] = at[i];

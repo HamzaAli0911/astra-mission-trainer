@@ -18,6 +18,8 @@ export interface Settings {
   voice: boolean;
   motion: boolean; // reduce motion
   bigText: boolean;
+  /** Solid panels, brighter text and stronger outlines. */
+  contrast: boolean;
   /** Teachers and judges can open every mission. */
   unlockAll: boolean;
   /** Show the on-screen drive pad: auto (touch screens), on, off. */
@@ -41,6 +43,7 @@ const defaults: Settings = {
   voice: false,
   motion: false,
   bigText: false,
+  contrast: false,
   unlockAll: false,
   pad: "auto",
   graphics: "auto",
@@ -71,6 +74,7 @@ function readSettings(): Settings {
     voice: bool(r.voice, defaults.voice),
     motion: bool(r.motion, defaults.motion),
     bigText: bool(r.bigText, defaults.bigText),
+    contrast: bool(r.contrast, defaults.contrast),
     unlockAll: bool(r.unlockAll, defaults.unlockAll),
     pad: r.pad === "on" || r.pad === "off" ? r.pad : "auto",
     graphics: r.graphics === "ultra" || r.graphics === "high" || r.graphics === "low" ? r.graphics : "auto",

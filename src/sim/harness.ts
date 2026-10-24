@@ -1,5 +1,5 @@
-import { act, createState, step, updateDock } from "./engine";
-import { CARDS } from "./cards";
+import { act, advance, createState, step, updateDock } from "./engine";
+import { CARDS, cantAfford } from "./cards";
 import { approachPoint, followRoute, planRoute, type Point } from "./rover";
 import type { Action, GameState } from "./types";
 import { DOCK, site } from "./world";
@@ -50,7 +50,9 @@ export class Runner {
     while (this.s.t < end - 1e-9 && this.s.status === "playing") {
       if (this.s.choice) {
         const card = CARDS[this.s.choice.card];
-        this.do({ type: "choose", option: this.choices[card.id] ?? 0 });
+        const want = this.choices[card.id] ?? 0;
+        const pick = cantAfford(this.s.res, card.options[want]) ? card.options.findIndex((o) => !cantAfford(this.s.res, o)) : want;
+        this.do({ type: "choose", option: Math.max(0, pick) });
         continue;
       }
       const dt = Math.min(0.05, end - this.s.t);
@@ -107,4 +109,20 @@ export class Runner {
     while (this.s.rover.battery < pct && this.s.t < until && this.s.status === "playing") this.tick(0.25);
     return this;
   }
+}
+
+/** Advance time like `advance`, answering any decision card with its first affordable option (a player who just clicks on). */
+export function advanceAnswering(prev: GameState, hours: number): GameState {
+  let s = prev;
+  const end = prev.t + hours;
+  while (s.status === "playing" && s.t < end - 1e-9) {
+    if (s.choice) {
+      const card = CARDS[s.choice.card];
+      const pick = Math.max(0, card.options.findIndex((o) => !cantAfford(s.res, o)));
+      s = act(s, { type: "choose", option: pick }).state;
+      continue;
+    }
+    s = advance(s, end - s.t);
+  }
+  return s;
 }

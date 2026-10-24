@@ -36,10 +36,11 @@ const typing = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !(t instanceof HTMLInputElement && t.type === "checkbox"));
 
 export default function App() {
-  const { screen, big, motion } = useUI(useShallow((s) => ({ screen: s.screen, big: s.settings.bigText, motion: s.settings.motion })));
+  const { screen, big, motion, contrast } = useUI(useShallow((s) => ({ screen: s.screen, big: s.settings.bigText, motion: s.settings.motion, contrast: s.settings.contrast })));
 
   useEffect(() => {
     document.documentElement.classList.toggle("big-text", big);
+    document.documentElement.classList.toggle("high-contrast", contrast);
     document.documentElement.classList.toggle("reduce-motion", motion);
   }, [big, motion]);
 
@@ -63,7 +64,8 @@ export default function App() {
     const vis = () => {
       held.clear();
       const st = useGame.getState();
-      if (document.hidden && useUI.getState().screen === "game" && !st.paused && st.game.status === "playing") st.pause("hidden");
+      // (Not while the tutorial holds the clock: time is already stopped, and a second "paused" note would only get in the way.)
+      if (document.hidden && useUI.getState().screen === "game" && !st.paused && !st.held && st.game.status === "playing") st.pause("hidden");
       if (document.hidden) hush();
     };
     document.addEventListener("visibilitychange", vis);

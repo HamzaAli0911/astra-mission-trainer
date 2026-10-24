@@ -8,8 +8,8 @@ import type { Planet } from "../sim/types";
  * touch of saturation control and a soft vignette.
  */
 const GRADES: Record<Planet, { lift: [number, number, number]; gain: [number, number, number]; saturation: number; contrast: number }> = {
-  moon: { lift: [0.0, 0.004, 0.014], gain: [0.99, 1.0, 1.03], saturation: 0.9, contrast: 0.14 },
-  mars: { lift: [0.012, 0.005, 0.0], gain: [1.03, 0.99, 0.94], saturation: 1.02, contrast: 0.12 },
+  moon: { lift: [0.0, 0.004, 0.014], gain: [0.99, 1.0, 1.03], saturation: 0.9, contrast: 0.08 },
+  mars: { lift: [0.012, 0.005, 0.0], gain: [1.03, 0.99, 0.94], saturation: 1.02, contrast: 0.07 },
 };
 
 export function gradePass(planet: Planet) {
@@ -21,7 +21,7 @@ export function gradePass(planet: Planet) {
       gain: { value: new THREE.Vector3(...g.gain) },
       saturation: { value: g.saturation },
       contrast: { value: g.contrast },
-      vignette: { value: 0.55 },
+      vignette: { value: 0.4 },
     },
     vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: /* glsl */ `

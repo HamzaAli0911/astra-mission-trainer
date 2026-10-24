@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advise, forecast, hoursLeft, lessonsFromFailure } from "./advisor";
 import { act, advance, createState } from "./engine";
+import { advanceAnswering } from "./harness";
 import { MODULES } from "./modules";
 import type { GameState, ModuleType } from "./types";
 
@@ -58,7 +59,7 @@ describe("debrief lessons", () => {
   it("explain a radiation failure", () => {
     const s = createState("solar-storm");
     s.rover.docked = true;
-    const end = advance(s, 60);
+    const end = advanceAnswering(s, 60);
     expect(end.status).toBe("lost");
     const tips = lessonsFromFailure(end);
     expect(tips[0]).toMatch(/Storm Shelter/);

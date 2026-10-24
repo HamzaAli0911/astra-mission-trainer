@@ -245,8 +245,45 @@ const RED_PLANET: Step[] = [
   },
 ];
 
+/** The Moon missions' basics, for players who went straight to Mars. */
+const MARS_BASICS: Step[] = [
+  {
+    id: "basics-hello",
+    hold: true,
+    say: "Welcome, Commander! You skipped the Moon missions, so here are the basics first. Three quick things, then Mars.",
+    next: "Show me",
+  },
+  {
+    id: "basics-lifelines",
+    hold: true,
+    target: ".resource-bar",
+    say: "These are your crew's lifelines: power, oxygen, water and food. A red arrow means one is running down. If any runs out, the crew is in trouble.",
+    next: "Next",
+  },
+  {
+    id: "basics-night",
+    hold: true,
+    target: '[data-res="power"]',
+    say: "Solar arrays only make power while the Sun is up. At night the Battery Banks keep the outpost running, so store power by day.",
+    next: "Next",
+  },
+  {
+    id: "basics-build",
+    hold: true,
+    target: '[data-dock="build"]',
+    say: "Build adds modules. Every card says what it makes and its catch: nothing is free out here. Now, Mars.",
+    next: "Got it",
+  },
+];
+
 export const TUTORIALS: Record<string, Step[]> = {
   "first-light": FIRST_LIGHT,
   "ice-hunters": ICE_HUNTERS,
   "red-planet": RED_PLANET,
 };
+
+/** The tutorial for a mission. A player who reaches Mars without finishing the first Moon mission gets the basics first. */
+export function tutorialFor(id: string, stars: Record<string, number>): Step[] | undefined {
+  if (id === "red-planet" && !stars["first-light"]) return [...MARS_BASICS, ...RED_PLANET];
+  return TUTORIALS[id];
+}

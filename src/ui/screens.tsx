@@ -22,7 +22,7 @@ import { readSave, resumeSave } from "../state/save";
 import { clockOf, dayOf } from "../sim/planets";
 import { Globe } from "../scene/Globe";
 import { play } from "../lib/sound";
-import { Stars } from "./common";
+import { Modal, Stars } from "./common";
 import { IconDose, IconGreenhouse, IconOxygen, IconReactor, IconSolar, IconWater, Logo } from "./icons";
 import { launch, playWithoutTutorial } from "./overlays";
 import { SoundToggle } from "./hud";
@@ -38,6 +38,17 @@ export function Title() {
   // Shortcuts: skip the tutorial on the next mission to play; restart the saved mission (or the last one chosen).
   const skipTo = started ? next.id : CAMPAIGN[0].id;
   const restartId = save?.game.missionId ?? useUI.getState().focus;
+  // Starting a mission replaces the saved one, so with a save on hand these shortcuts ask first.
+  const [confirm, setConfirm] = useState<null | "skip" | "restart">(null);
+  const skipNow = () => {
+    play("open");
+    playWithoutTutorial(skipTo);
+  };
+  const restartNow = () => {
+    play("open");
+    if (save) launch(save.game.missionId, save.game.seed);
+    else launch(restartId);
+  };
   return (
     <main className="title-screen">
       <div className="starfield" aria-hidden="true" />
@@ -120,21 +131,14 @@ export function Title() {
           <button
             className="btn secondary"
             title={`Play "${mission(skipTo).title}" now, without the step-by-step tutorial`}
-            onClick={() => {
-              play("open");
-              playWithoutTutorial(skipTo);
-            }}
+            onClick={() => (save ? setConfirm("skip") : skipNow())}
           >
             <SkipForward size={18} /> Skip tutorial
           </button>
           <button
             className="btn secondary"
             title={`Start "${mission(restartId).title}" again from the beginning`}
-            onClick={() => {
-              play("open");
-              if (save) launch(save.game.missionId, save.game.seed);
-              else launch(restartId);
-            }}
+            onClick={() => (save ? setConfirm("restart") : restartNow())}
           >
             <RotateCcw size={18} /> Restart mission
           </button>
@@ -159,6 +163,29 @@ export function Title() {
           </li>
         </ul>
       </section>
+      {confirm && save && (
+        <Modal title={confirm === "restart" ? "Restart your mission?" : "Skip the tutorial?"} onClose={() => setConfirm(null)} className="restart-confirm">
+          <p>
+            {confirm === "restart" ? (
+              <>
+                Start <b>{mission(save.game.missionId).title}</b> again from the beginning? Your saved progress ({save.game.planet === "mars" ? "Sol" : "Day"} {dayOf(save.game.t)} · {clockOf(save.game.t)}) will be lost.
+              </>
+            ) : (
+              <>
+                Play <b>{mission(skipTo).title}</b> now without the tutorial? This replaces your saved <b>{mission(save.game.missionId).title}</b> mission.
+              </>
+            )}
+          </p>
+          <div className="menu-list">
+            <button className="btn danger big" onClick={confirm === "restart" ? restartNow : skipNow}>
+              {confirm === "restart" ? <RotateCcw size={18} /> : <SkipForward size={18} />} {confirm === "restart" ? "Restart from the start" : "Skip tutorial and play"}
+            </button>
+            <button className="btn ghost" data-autofocus onClick={() => setConfirm(null)}>
+              Keep my saved mission
+            </button>
+          </div>
+        </Modal>
+      )}
       <footer className="title-foot">
         <button className="link" onClick={() => useUI.getState().setModal("guide")}>
           <Info size={16} /> How to play

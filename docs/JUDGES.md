@@ -12,7 +12,7 @@
 | Radiation shielding | Solar storms with warnings; shelter vs. regolith shielding vs. doing nothing; per-crew dose in millisieverts with a limit. |
 | Power | Day/night solar, batteries, a forecast of when the battery runs out, priorities when power is short, fission on Mars. |
 | Food production | Greenhouses whose grow lights compete with life support for stored power at night. |
-| **Trade-offs** | Every module card has a "catch"; every decision card has a cost on every option; sheltering pauses research and building. |
+| **Trade-offs** | Every module card has a "catch"; decision cards arrive mid-mission in every mission, each option has a cost, and some come back later (a failed battery needs repairing before night); sheltering pauses research and building. |
 | Not oversimplified, not too complex | Real relationships and rounded real numbers, introduced one mission at a time, with CAPCOM explaining causes in plain language. |
 | Experience success and failure | Missions can be lost (crew health, radiation limit, time). The debrief shows a chart of what happened and suggests what to try next. |
 
