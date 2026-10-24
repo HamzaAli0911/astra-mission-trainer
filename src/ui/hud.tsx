@@ -20,6 +20,7 @@ import {
   Pause,
   Play,
   Radio,
+  RotateCcw,
   Sun,
   TriangleAlert,
   Video,
@@ -57,6 +58,9 @@ export function TopBar() {
         <button className="icon-btn ghost" aria-label="Pause menu" title="Menu (Esc)" onClick={() => openPause()}>
           <Menu size={22} />
         </button>
+        <button className="icon-btn ghost tb-restart" aria-label="Restart mission" title="Restart mission from the start" onClick={() => askRestart()}>
+          <RotateCcw size={19} />
+        </button>
         <div className="mission-chip">
           <span className={`planet-dot ${m.planet}`} aria-hidden="true" />
           <span>
@@ -72,6 +76,14 @@ export function TopBar() {
       </div>
     </header>
   );
+}
+
+/** Ask before restarting the mission: the game is paused while the question is open. */
+export function askRestart() {
+  const st = useGame.getState();
+  if (st.game.status === "playing" && !st.paused) st.pause("menu");
+  useUI.getState().setModal("restart");
+  play("open");
 }
 
 export function openPause() {

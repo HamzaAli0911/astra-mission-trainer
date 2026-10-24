@@ -6,7 +6,7 @@ export type Screen = "title" | "map" | "game";
 export type Panel = "build" | "power" | "rover" | "crew";
 /** Camera: free look over the outpost, chase behind the rover, or the driver's seat. */
 export type View = "orbit" | "chase" | "cockpit";
-export type Modal = "pause" | "settings" | "guide" | "library" | "teachers" | "credits" | "reset";
+export type Modal = "pause" | "settings" | "guide" | "library" | "teachers" | "credits" | "reset" | "restart";
 export type Selection =
   | { kind: "module"; id: number }
   | { kind: "pad"; id: number }
@@ -181,9 +181,12 @@ export const useUI = create<UIStore>((set, get) => ({
   },
 }));
 
-/** A mission is open once the one before it has been won (or everything is unlocked). */
+/** The first Mars mission: always open, so players can go straight to Mars. */
+export const MARS_START = "red-planet";
+
+/** A mission is open once the one before it has been won (or everything is unlocked). The first Mars mission is always open. */
 export function unlocked(id: string, s: Pick<UIStore, "progress" | "settings"> = useUI.getState()) {
-  if (s.settings.unlockAll) return true;
+  if (s.settings.unlockAll || id === MARS_START) return true;
   const m = MISSIONS.find((x) => x.id === id);
   if (!m?.after) return true;
   return (s.progress.stars[m.after] ?? 0) > 0;

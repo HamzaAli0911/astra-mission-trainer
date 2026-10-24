@@ -1040,6 +1040,11 @@ ul.check-list:not(:has(svg)) li::before {
 .planet-dot.mars {
   background: radial-gradient(circle at 35% 35%, #ffc49a, #c2643a 60%, #5a2414);
 }
+.go-mars .planet-dot {
+  width: 20px;
+  height: 20px;
+  box-shadow: 0 0 10px rgba(255, 140, 90, 0.35);
+}
 .resource-bar {
   justify-self: center;
   display: flex;
@@ -3226,6 +3231,18 @@ p.catch::before {
   justify-content: flex-start;
 }
 
+/* Restart confirmation */
+.restart-confirm p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+}
+.restart-confirm .menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 /* ---------- Tutorial ---------- */
 
 .spotlight {
@@ -3304,12 +3321,21 @@ p.catch::before {
 .coach header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .coach header b {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.84rem;
   color: var(--accent-hi);
+}
+.coach-skip {
+  gap: 4px;
+  padding-inline: 7px;
+  white-space: nowrap;
 }
 .coach-count {
   display: inline-flex;

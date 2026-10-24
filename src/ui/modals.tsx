@@ -9,7 +9,7 @@ import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
 import { Kbd, Modal } from "./common";
 import { IconCapcom, Logo, RESOURCE_ICON, IconDose } from "./icons";
-import { PauseMenu } from "./overlays";
+import { PauseMenu, RestartConfirm } from "./overlays";
 
 export function Modals() {
   const modal = useUI((s) => s.modal);
@@ -22,6 +22,8 @@ export function Modals() {
   switch (modal) {
     case "pause":
       return <PauseMenu onClose={() => useUI.getState().setModal(null)} />;
+    case "restart":
+      return <RestartConfirm />;
     case "settings":
       return <SettingsDialog close={close} />;
     case "guide":

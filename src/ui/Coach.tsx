@@ -175,8 +175,15 @@ function CoachBubble({ step, index, total, done, last }: { step: Step; index: nu
         <button className="icon-btn tiny" aria-label="Read aloud" onClick={() => speak(step.say, true)}>
           <Volume2 size={15} />
         </button>
-        <button className="icon-btn tiny" aria-label="End the tutorial" title="End the tutorial" onClick={() => finish()}>
-          <X size={15} />
+        <button
+          className="btn ghost tiny coach-skip"
+          title="End the tutorial and play on your own"
+          onClick={() => {
+            play("click");
+            finish();
+          }}
+        >
+          Skip tutorial <X size={14} />
         </button>
       </header>
       <div className="coach-progress" aria-hidden="true">

@@ -15,7 +15,7 @@ import {
   Star,
 } from "lucide-react";
 import { CAMPAIGN, mission, MISSIONS, type Mission } from "../sim/missions";
-import { unlocked, useUI } from "../state/ui";
+import { MARS_START, unlocked, useUI } from "../state/ui";
 import { readSave, resumeSave } from "../state/save";
 import { clockOf, dayOf } from "../sim/planets";
 import { Globe } from "../scene/Globe";
@@ -99,6 +99,16 @@ export function Title() {
             }}
           >
             <Rocket size={19} /> Missions
+          </button>
+          <button
+            className="btn secondary big go-mars"
+            title={`Start "${mission(MARS_START).title}" now, without the Moon missions first`}
+            onClick={() => {
+              play("open");
+              launch(MARS_START);
+            }}
+          >
+            <span className="planet-dot mars" aria-hidden="true" /> Go to Mars
           </button>
         </div>
         {started && (

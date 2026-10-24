@@ -527,6 +527,43 @@ export function launch(id: string) {
   play("open");
 }
 
+/* ---------- Restart ---------- */
+
+/** Start the current mission again from the very beginning (same map and events), at its briefing. */
+export function restartMission() {
+  hush();
+  clearSave();
+  useUI.setState({ modal: null, debrief: false, briefing: true, tutorial: null, panel: null, selected: null, placing: null });
+  useGame.getState().restart();
+  useUI.getState().cam("reset");
+  play("open");
+}
+
+export function RestartConfirm() {
+  const id = useGame((s) => s.game.missionId);
+  const m = mission(id);
+  const keep = () => {
+    useUI.getState().setModal(null);
+    const st = useGame.getState();
+    if (st.reason === "menu") st.resume();
+  };
+  return (
+    <Modal title="Restart mission?" onClose={keep} className="restart-confirm">
+      <p>
+        Start <b>{m.title}</b> again from the beginning? Everything you have built and collected in this attempt will be lost.
+      </p>
+      <div className="menu-list">
+        <button className="btn danger big" onClick={restartMission}>
+          <RotateCcw size={18} /> Restart from the start
+        </button>
+        <button className="btn ghost" onClick={keep} data-autofocus>
+          Keep playing
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Pause menu ---------- */
 
 export function PauseMenu({ onClose }: { onClose: () => void }) {
@@ -549,15 +586,7 @@ export function PauseMenu({ onClose }: { onClose: () => void }) {
             <Play size={18} /> Resume
           </button>
         )}
-        <button
-          className="btn secondary"
-          onClick={() => {
-            onClose();
-            useUI.setState({ debrief: false, briefing: true, tutorial: null });
-            clearSave();
-            useGame.getState().restart();
-          }}
-        >
+        <button className="btn secondary" onClick={() => useUI.getState().setModal("restart")}>
           <RotateCcw size={17} /> Restart mission
         </button>
         <button className="btn secondary" onClick={() => useUI.getState().setModal("guide")}>

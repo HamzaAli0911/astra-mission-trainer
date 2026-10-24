@@ -74,10 +74,13 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Camera on base · rover | Camera button in the Rover panel | C · F |
 | Look somewhere else · plan a trip | click the map (top right) | |
 | Camera view: Overview · Follow · Cockpit | View buttons (bottom right); drag to look around | V |
+| Restart the mission from the start | ↺ button next to the menu (asks first) | |
+| End the tutorial | **Skip tutorial** on the CAPCOM card | |
 | Close · menu | | Esc |
 
 ## For teachers and judges
 
+- **Go to Mars** (title screen) starts the first Mars mission straight away; it is always unlocked.
 - **Settings → Unlock every mission** opens the whole campaign immediately.
 - **For teachers** (title screen) lists learning goals, NGSS connections and discussion questions for each mission.
 - **Science library** links every fact to its NASA source.
