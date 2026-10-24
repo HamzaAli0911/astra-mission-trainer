@@ -10,7 +10,9 @@ import {
   Lock,
   Play,
   Rocket,
+  RotateCcw,
   Settings,
+  SkipForward,
   Shuffle,
   Star,
 } from "lucide-react";
@@ -22,7 +24,7 @@ import { Globe } from "../scene/Globe";
 import { play } from "../lib/sound";
 import { Stars } from "./common";
 import { IconDose, IconGreenhouse, IconOxygen, IconReactor, IconSolar, IconWater, Logo } from "./icons";
-import { launch } from "./overlays";
+import { launch, playWithoutTutorial } from "./overlays";
 import { SoundToggle } from "./hud";
 
 /* ---------- Title ---------- */
@@ -33,6 +35,9 @@ export function Title() {
   const next = CAMPAIGN.find((m) => !progress.stars[m.id]) ?? CAMPAIGN[CAMPAIGN.length - 1];
   const started = earned > 0;
   const [save] = useState(readSave);
+  // Shortcuts: skip the tutorial on the next mission to play; restart the saved mission (or the last one chosen).
+  const skipTo = started ? next.id : CAMPAIGN[0].id;
+  const restartId = save?.game.missionId ?? useUI.getState().focus;
   return (
     <main className="title-screen">
       <div className="starfield" aria-hidden="true" />
@@ -100,8 +105,10 @@ export function Title() {
           >
             <Rocket size={19} /> Missions
           </button>
+        </div>
+        <div className="title-quick" role="group" aria-label="Quick start">
           <button
-            className="btn secondary big go-mars"
+            className="btn secondary go-mars"
             title={`Start "${mission(MARS_START).title}" now, without the Moon missions first`}
             onClick={() => {
               play("open");
@@ -109,6 +116,27 @@ export function Title() {
             }}
           >
             <span className="planet-dot mars" aria-hidden="true" /> Go to Mars
+          </button>
+          <button
+            className="btn secondary"
+            title={`Play "${mission(skipTo).title}" now, without the step-by-step tutorial`}
+            onClick={() => {
+              play("open");
+              playWithoutTutorial(skipTo);
+            }}
+          >
+            <SkipForward size={18} /> Skip tutorial
+          </button>
+          <button
+            className="btn secondary"
+            title={`Start "${mission(restartId).title}" again from the beginning`}
+            onClick={() => {
+              play("open");
+              if (save) launch(save.game.missionId, save.game.seed);
+              else launch(restartId);
+            }}
+          >
+            <RotateCcw size={18} /> Restart mission
           </button>
         </div>
         {started && (

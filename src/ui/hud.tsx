@@ -21,6 +21,7 @@ import {
   Play,
   Radio,
   RotateCcw,
+  SkipForward,
   Sun,
   TriangleAlert,
   Video,
@@ -45,6 +46,7 @@ import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
 import { duration } from "./common";
 import { runFix } from "./fixes";
+import { finish } from "./Coach";
 import { IconCapcom, IconDose, IconIce, IconRock, IconRover, IconSample, IconShelter, MODULE_ICON, RESOURCE_ICON } from "./icons";
 
 /* ---------- Top bar ---------- */
@@ -57,9 +59,6 @@ export function TopBar() {
       <div className="tb-left">
         <button className="icon-btn ghost" aria-label="Pause menu" title="Menu (Esc)" onClick={() => openPause()}>
           <Menu size={22} />
-        </button>
-        <button className="icon-btn ghost tb-restart" aria-label="Restart mission" title="Restart mission from the start" onClick={() => askRestart()}>
-          <RotateCcw size={19} />
         </button>
         <div className="mission-chip">
           <span className={`planet-dot ${m.planet}`} aria-hidden="true" />
@@ -78,12 +77,42 @@ export function TopBar() {
   );
 }
 
-/** Ask before restarting the mission: the game is paused while the question is open. */
-export function askRestart() {
+/** Ask before leaving the mission in progress (to restart it, or to go to Mars): the game is paused while the question is open. */
+function ask(kind: "restart" | "mars") {
   const st = useGame.getState();
   if (st.game.status === "playing" && !st.paused) st.pause("menu");
-  useUI.getState().setModal("restart");
+  useUI.getState().setModal(kind);
   play("open");
+}
+
+/** Labelled shortcuts above the goals: restart, skip the tutorial (while it runs) and go to Mars (from the Moon). */
+export function QuickActions() {
+  const planet = useGame((s) => s.game.planet);
+  const tutorial = useUI((s) => s.tutorial !== null);
+  return (
+    <div className="quick-actions" role="group" aria-label="Mission shortcuts">
+      <button className="btn secondary tiny" onClick={() => ask("restart")} title="Start this mission again from the beginning">
+        <RotateCcw size={14} /> Restart mission
+      </button>
+      {tutorial && (
+        <button
+          className="btn secondary tiny"
+          onClick={() => {
+            play("click");
+            finish();
+          }}
+          title="End the tutorial and play on your own"
+        >
+          <SkipForward size={14} /> Skip tutorial
+        </button>
+      )}
+      {planet === "moon" && (
+        <button className="btn secondary tiny" onClick={() => ask("mars")} title="Leave this mission and start the first Mars mission">
+          <span className="planet-dot mars" aria-hidden="true" /> Go to Mars
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function openPause() {

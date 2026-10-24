@@ -593,6 +593,16 @@ ul.check-list:not(:has(svg)) li::before {
   gap: 12px;
   margin-top: 28px;
 }
+.title-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.title-quick .btn {
+  min-height: 46px;
+  padding: 0 18px;
+}
 .title-actions .resume span {
   display: flex;
   flex-direction: column;
@@ -2734,11 +2744,35 @@ p.catch::before {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   padding: 20px 28px 26px;
 }
 .brief-actions .check {
   margin-right: auto;
+}
+.brief-actions .brief-start {
+  margin-left: auto;
+}
+.brief-actions .btn.big {
+  padding: 0 20px;
+}
+
+/* In-game shortcuts above the goals */
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.quick-actions .btn {
+  gap: 6px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+}
+.quick-actions .planet-dot {
+  width: 14px;
+  height: 14px;
 }
 .alert-card {
   width: min(520px, 100%);
@@ -3925,6 +3959,9 @@ table.keys .kbd {
   .brief-actions .btn.big {
     flex: 1;
   }
+  .brief-actions .brief-start {
+    margin-left: 0;
+  }
   .debrief-head,
   .debrief-grid,
   .debrief-actions {
@@ -3975,8 +4012,14 @@ table.keys .kbd {
   .title-actions {
     margin-top: 20px;
   }
-  .title-actions .btn {
+  .title-actions .btn,
+  .title-quick .btn {
     flex: 1;
+  }
+  .title-quick .btn {
+    min-height: 42px;
+    padding: 0 12px;
+    white-space: nowrap;
   }
   .title-hero h1 {
     font-size: 2.2rem;

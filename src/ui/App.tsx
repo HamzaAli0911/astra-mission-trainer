@@ -7,7 +7,7 @@ import { useUI } from "../state/ui";
 import { World } from "../scene/World";
 import { play } from "../lib/sound";
 import { hush } from "../lib/speech";
-import { Atmosphere, Capcom, Crew, Dock, DrivePad, Goals, nextView, openPause, Toasts, TopBar, useAdvisorHints, ViewSwitcher, WorldLabels } from "./hud";
+import { Atmosphere, Capcom, Crew, Dock, DrivePad, Goals, nextView, openPause, QuickActions, Toasts, TopBar, useAdvisorHints, ViewSwitcher, WorldLabels } from "./hud";
 import { Drawer, usePadGuard } from "./panels";
 import { AlertCard, Briefing, ChoiceCard, Debrief } from "./overlays";
 import { Coach } from "./Coach";
@@ -176,6 +176,7 @@ function Game() {
       <WorldLabels />
       <TopBar />
       <div className="hud-left">
+        <QuickActions />
         <Goals />
       </div>
       <div className="hud-right">

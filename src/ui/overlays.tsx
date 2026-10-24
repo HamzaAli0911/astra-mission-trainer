@@ -21,6 +21,7 @@ import {
   Play,
   RotateCcw,
   Settings,
+  SkipForward,
   Sparkles,
   Star,
   TriangleAlert,
@@ -32,7 +33,7 @@ import { goalProgress, starMet, starsFor } from "../sim/goals";
 import { CAMPAIGN, mission } from "../sim/missions";
 import { clockOf, dayOf, PLANETS } from "../sim/planets";
 import { useGame } from "../state/game";
-import { unlocked, useUI } from "../state/ui";
+import { MARS_START, unlocked, useUI } from "../state/ui";
 import { TUTORIALS } from "../state/tutorial";
 import { play } from "../lib/sound";
 import { hush, speak } from "../lib/speech";
@@ -49,15 +50,11 @@ export function Briefing() {
   const best = useUI((s) => s.progress.stars[id] ?? 0);
   const m = mission(id);
   const hasTutorial = !!TUTORIALS[id];
-  const [tutorial, setTutorial] = useState(true);
-  useEffect(() => {
-    setTutorial(best === 0);
-  }, [id, best]);
   useEffect(() => {
     if (show) speak(m.briefing.join(" "));
   }, [show, m]);
   if (!show) return null;
-  const start = () => {
+  const start = (tutorial: boolean) => {
     hush();
     useUI.setState({ briefing: false });
     const st = useGame.getState();
@@ -126,20 +123,28 @@ export function Briefing() {
           </div>
         </div>
         <footer className="brief-actions">
-          {hasTutorial && (
-            <label className="check">
-              <input type="checkbox" checked={tutorial} onChange={(e) => setTutorial(e.target.checked)} />
-              <span>
-                <GraduationCap size={17} /> Guide me step by step
-              </span>
-            </label>
-          )}
           <button className="btn ghost" onClick={() => goToMap()}>
             <MapIcon size={17} /> Missions
           </button>
-          <button className="btn primary big" onClick={start} data-autofocus autoFocus>
-            Start mission <Play size={18} />
-          </button>
+          {m.planet === "moon" && (
+            <button className="btn secondary go-mars" onClick={goToMars} title="Skip the Moon and start the first Mars mission">
+              <span className="planet-dot mars" aria-hidden="true" /> Go to Mars
+            </button>
+          )}
+          {hasTutorial ? (
+            <>
+              <button className="btn secondary big brief-start" onClick={() => start(false)} {...(best > 0 ? { "data-autofocus": true, autoFocus: true } : {})}>
+                <SkipForward size={18} /> Skip tutorial
+              </button>
+              <button className="btn primary big" onClick={() => start(true)} {...(best > 0 ? {} : { "data-autofocus": true, autoFocus: true })}>
+                <GraduationCap size={18} /> Start with tutorial
+              </button>
+            </>
+          ) : (
+            <button className="btn primary big brief-start" onClick={() => start(false)} data-autofocus autoFocus>
+              Start mission <Play size={18} />
+            </button>
+          )}
         </footer>
       </section>
     </div>
@@ -518,16 +523,31 @@ export function Debrief() {
   );
 }
 
-export function launch(id: string) {
+export function launch(id: string, seed?: number) {
   hush();
   clearSave();
-  useGame.getState().start(id);
+  useGame.getState().start(id, seed);
   useUI.setState({ screen: "game", briefing: true, debrief: false, modal: null, panel: null, selected: null, placing: null, tutorial: null, focus: id });
   useUI.getState().cam("reset");
   play("open");
 }
 
-/* ---------- Restart ---------- */
+/* ---------- Shortcuts: skip the tutorial, restart, go to Mars ---------- */
+
+/** Start a mission and drop straight into play, with no briefing and no tutorial. */
+export function playWithoutTutorial(id: string) {
+  launch(id);
+  useUI.setState({ briefing: false });
+  useUI.getState().setTutorial(null);
+  const st = useGame.getState();
+  st.hold(false);
+  st.resume();
+}
+
+/** Go to the first Mars mission (its briefing). */
+export function goToMars() {
+  launch(MARS_START);
+}
 
 /** Start the current mission again from the very beginning (same map and events), at its briefing. */
 export function restartMission() {
@@ -539,7 +559,8 @@ export function restartMission() {
   play("open");
 }
 
-export function RestartConfirm() {
+/** Ask before leaving a mission in progress: to restart it, or to go to Mars. */
+export function LeaveConfirm({ kind }: { kind: "restart" | "mars" }) {
   const id = useGame((s) => s.game.missionId);
   const m = mission(id);
   const keep = () => {
@@ -547,15 +568,25 @@ export function RestartConfirm() {
     const st = useGame.getState();
     if (st.reason === "menu") st.resume();
   };
+  const mars = kind === "mars";
   return (
-    <Modal title="Restart mission?" onClose={keep} className="restart-confirm">
+    <Modal title={mars ? "Go to Mars?" : "Restart mission?"} onClose={keep} className="restart-confirm">
       <p>
-        Start <b>{m.title}</b> again from the beginning? Everything you have built and collected in this attempt will be lost.
+        {mars ? "Leave " : "Start "}
+        <b>{m.title}</b>
+        {mars ? " and fly to Mars? " : " again from the beginning? "}
+        Everything you have built and collected in this attempt will be lost.
       </p>
       <div className="menu-list">
-        <button className="btn danger big" onClick={restartMission}>
-          <RotateCcw size={18} /> Restart from the start
-        </button>
+        {mars ? (
+          <button className="btn primary big" onClick={goToMars}>
+            <span className="planet-dot mars" aria-hidden="true" /> Go to Mars
+          </button>
+        ) : (
+          <button className="btn danger big" onClick={restartMission}>
+            <RotateCcw size={18} /> Restart from the start
+          </button>
+        )}
         <button className="btn ghost" onClick={keep} data-autofocus>
           Keep playing
         </button>

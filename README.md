@@ -74,8 +74,9 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Camera on base · rover | Camera button in the Rover panel | C · F |
 | Look somewhere else · plan a trip | click the map (top right) | |
 | Camera view: Overview · Follow · Cockpit | View buttons (bottom right); drag to look around | V |
-| Restart the mission from the start | ↺ button next to the menu (asks first) | |
-| End the tutorial | **Skip tutorial** on the CAPCOM card | |
+| Restart the mission from the start | **Restart mission** on the title screen, or above the goals in a mission (asks first) | |
+| Skip the tutorial | **Skip tutorial** on the title screen, the mission briefing, above the goals or on the CAPCOM card | |
+| Go straight to Mars | **Go to Mars** on the title screen, the briefing of a Moon mission, or above the goals | |
 | Close · menu | | Esc |
 
 ## For teachers and judges

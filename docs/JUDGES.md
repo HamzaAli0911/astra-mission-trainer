@@ -18,7 +18,7 @@
 
 ## A five-minute demo
 
-Tip: in **Settings**, turn on **Unlock every mission** first. To see Mars right away, press **Go to Mars** on the title screen. **Skip tutorial** on the CAPCOM card ends the guided steps, and the ↺ button in the top bar restarts a mission from the start.
+Tip: in **Settings**, turn on **Unlock every mission** first. **Go to Mars**, **Skip tutorial** and **Restart mission** are on the title screen; Go to Mars and Skip tutorial are also on each mission's briefing, and all three sit above the goals during a mission.
 
 1. **Title → Start training.** Mission 1 begins with a briefing from CAPCOM. Keep "Guide me step by step" ticked.
 2. **First Light tutorial (2 min).** Drag to look around, build a Solar Array (time speeds up to 4×), see the power arrow turn green, build an Oxygen Maker, open the **Power** panel and read the battery forecast. Build a Battery and start the clock. At night, show the battery draining and the solar arrays producing nothing.
