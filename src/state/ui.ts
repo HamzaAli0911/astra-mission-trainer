@@ -20,6 +20,10 @@ export interface Settings {
   unlockAll: boolean;
   /** Show the on-screen drive pad: auto (touch screens), on, off. */
   pad: "auto" | "on" | "off";
+  /** 3D detail: auto adapts to the device; high adds glow and soft shadows; low is for slow computers. */
+  graphics: "auto" | "high" | "low";
+  /** Show the map in the corner. */
+  minimap: boolean;
 }
 export interface Progress {
   /** Best stars per mission id (0–3). */
@@ -37,6 +41,8 @@ const defaults: Settings = {
   bigText: false,
   unlockAll: false,
   pad: "auto",
+  graphics: "auto",
+  minimap: true,
 };
 
 function load<T>(key: string, fallback: T, check: (raw: Record<string, unknown>) => T): T {
@@ -65,6 +71,8 @@ function readSettings(): Settings {
     bigText: bool(r.bigText, defaults.bigText),
     unlockAll: bool(r.unlockAll, defaults.unlockAll),
     pad: r.pad === "on" || r.pad === "off" ? r.pad : "auto",
+    graphics: r.graphics === "high" || r.graphics === "low" ? r.graphics : "auto",
+    minimap: bool(r.minimap, defaults.minimap),
   }));
 }
 function readProgress(): Progress {

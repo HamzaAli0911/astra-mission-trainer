@@ -21,8 +21,8 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 
 ## Deliberate simplifications
 
-- **Time is compressed.** One training day is 24 hours and plays in one minute at 1×. A real lunar day–night cycle lasts about 29.5 Earth days; a Mars sol lasts 24 h 39 min.
-- **The map is shrunk.** Sites are 40–60 m from the outpost instead of kilometres.
+- **Time is compressed.** One training day is 24 hours and plays in about a minute and a half at 1×. A real lunar day–night cycle lasts about 29.5 Earth days; a Mars sol lasts 24 h 39 min.
+- **The map is shrunk.** Sites are 80–180 m from the outpost instead of kilometres.
 - **Equipment outputs are rounded** (a 6 kW solar array, a 40 kWh battery bank, a greenhouse growing up to 8.6 meals a day) so that a handful of modules can support four people.
 - **Radiation limit.** The trainer uses a 50 mSv limit per mission so storms matter within a short game. Real NASA limits are set over a whole career (about 600 mSv).
 - **Health.** Crew health falls with missing oxygen (fast), water, food or heat; radiation is tracked as dose, not health.

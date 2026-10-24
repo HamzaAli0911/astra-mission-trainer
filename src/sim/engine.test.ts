@@ -5,6 +5,7 @@ import { MODULES, RATES } from "./modules";
 import { daylight, sunlight } from "./planets";
 import type { GameState, ModuleType } from "./types";
 import { PADS } from "./world";
+import { mission } from "./missions";
 
 /** A finished module on the first free pad that fits. */
 function add(s: GameState, type: ModuleType) {
@@ -229,11 +230,11 @@ describe("actions", () => {
     const s = createState("free-moon");
     expect(act(s, { type: "collect", site: "ice" }).ok).toBe(false);
     const there = structuredClone(s);
-    there.rover = { ...there.rover, x: -34, z: -21, docked: false };
+    there.rover = { ...there.rover, x: -70, z: -46, docked: false };
     const r = act(there, { type: "collect", site: "ice" });
     expect(r.ok).toBe(true);
     const done = advance(r.state, 1.1);
-    expect(done.rover.cargo.water).toBe(40);
+    expect(done.rover.cargo.water).toBe(45);
   });
   it("cleaning dusty panels is a Mars job", () => {
     const moon = createState("free-moon");
@@ -258,7 +259,7 @@ describe("actions", () => {
 describe("goals and results", () => {
   it("goals stay complete once reached", () => {
     let s = createState("first-light");
-    s = add(s, "solar");
+    s = add(add(s, "solar"), "solar");
     step(s, 0.05);
     expect(s.goals).toContain("solar");
     s.modules = s.modules.filter((m) => m.type !== "solar");
@@ -266,7 +267,9 @@ describe("goals and results", () => {
     expect(s.goals).toContain("solar");
   });
   it("running out of time with goals undone is a loss", () => {
-    const s = advance(createState("first-light"), 30);
+    let s = createState("first-light");
+    for (const t of ["solar", "oxygen", "battery"] as const) s = add(s, t);
+    s = advance(s, 50);
     expect(s.status).toBe("lost");
     expect(s.endReason).toMatch(/Time ran out/);
   });
@@ -279,7 +282,7 @@ describe("random events", () => {
       const times = [...s.hazards.map((h) => h.startAt), ...s.script.map((e) => e.at)].sort((a, b) => a - b);
       for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThan(8);
       expect(times[0]).toBeGreaterThanOrEqual(s.startT + 12);
-      expect(times.at(-1)!).toBeLessThanOrEqual(151 - 8);
+      expect(times.at(-1)!).toBeLessThanOrEqual(mission("mars-colony").endT - 8);
       expect(createState("mars-colony", seed)).toEqual(s);
     }
   });

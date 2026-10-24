@@ -91,6 +91,20 @@ function SettingsDialog({ close }: { close: () => void }) {
           ))}
         </span>
       </div>
+      <div className="setting">
+        <div>
+          <b>Graphics</b>
+          <small>High adds glowing lights and soft shadows. Low runs faster on older computers.</small>
+        </div>
+        <span className="segmented">
+          {(["auto", "high", "low"] as Settings["graphics"][]).map((v) => (
+            <button key={v} className={s.graphics === v ? "on" : ""} aria-pressed={s.graphics === v} onClick={() => set("graphics", v)}>
+              {v[0].toUpperCase() + v.slice(1)}
+            </button>
+          ))}
+        </span>
+      </div>
+      <Toggle label="Show the map" text="A small map of the area in the corner. Click it to look somewhere or send the rover to a site." on={s.minimap} set={(v) => set("minimap", v)} />
       <Toggle label="Unlock every mission" text="For teachers and judges: open any mission without playing the ones before it." on={s.unlockAll} set={(v) => set("unlockAll", v)} />
       <div className="setting">
         <div>
@@ -221,7 +235,7 @@ function Guide({ close }: { close: () => void }) {
               <>Time stops for emergencies and decisions, so you always have time to think.</>,
               <>Open the Power panel before sunset and check that the battery will last the night.</>,
               <>Every machine has a catch. Read it before you build!</>,
-              <>A day lasts one minute at 1×. Use 2× and 4× when things are calm.</>,
+              <>A day lasts about a minute and a half at 1×. Use 2× and 4× when things are calm.</>,
             ].map((tip, i) => (
               <li key={i}>
                 <IconCapcom size={18} />
@@ -334,7 +348,7 @@ function Library({ close }: { close: () => void }) {
           <span className="eyebrow">How the trainer simplifies</span>
           <h3>A model you can learn from</h3>
           <p>
-            Crew needs (0.84 kg of oxygen, about 3 L of water and 3 meals per person per day) and radiation levels are based on real figures. Days are sped up to one minute, the map is shrunk, and machine outputs are rounded so cause and effect are easy to see. Don't plan a real mission with these numbers!
+            Crew needs (0.84 kg of oxygen, about 3 L of water and 3 meals per person per day) and radiation levels are based on real figures. Days are sped up to about a minute and a half, distances are shrunk, and machine outputs are rounded so cause and effect are easy to see. Don't plan a real mission with these numbers!
           </p>
         </article>
       </div>
@@ -364,7 +378,7 @@ function Teachers({ close }: { close: () => void }) {
     <Modal title="For teachers" onClose={close} wide icon={<GraduationCap size={20} />}>
       <div className="teachers">
         <p>
-          <b>ASTRA</b> is a free browser game for ages 9–14 (and curious grown-ups). Each mission takes 5–12 minutes and builds one engineering trade-off at a time: power and storage, water and oxygen, food and energy, radiation shielding, and the different conditions on Mars. No login, no downloads, works on tablets.
+          <b>ASTRA</b> is a free browser game for ages 9–14 (and curious grown-ups). Each mission takes about 10–20 minutes and builds one engineering trade-off at a time: power and storage, water and oxygen, food and energy, radiation shielding, and the different conditions on Mars. No login, no downloads, works on tablets.
         </p>
         <h3>Missions and learning goals</h3>
         <table className="mission-table">

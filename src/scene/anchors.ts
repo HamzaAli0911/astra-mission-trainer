@@ -24,4 +24,8 @@ export function follow(key: string, el: HTMLElement | null) {
 /** A ray from the camera through a screen point, answered by the scene (null while no scene is mounted). */
 export const scene3d: {
   pick: ((x: number, y: number) => { x: number; z: number } | null) | null;
-} = { pick: null };
+  /** Glide the camera to look at a point on the ground. */
+  lookAt: ((x: number, z: number) => void) | null;
+  /** Where the camera looks: ground point, compass heading (radians, 0 = north) and distance. Updated every frame. */
+  view: { x: number; z: number; heading: number; distance: number; fov: number };
+} = { pick: null, lookAt: null, view: { x: 0, z: 0, heading: 0, distance: 50, fov: 0.7 } };

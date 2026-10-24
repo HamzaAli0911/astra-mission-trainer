@@ -217,13 +217,13 @@ const ICE_HUNTERS: Step[] = [
     id: "recycler",
     hold: true,
     target: buildTarget("recycler"),
-    say: "+40 L of water! Now build a Water Recycler. It cleans used water so the crew can use it again.",
+    say: "+45 L of water! Now build a Water Recycler. It cleans used water so the crew can use it again.",
     done: (c) => has(c.game, "recycler"),
   },
   {
     id: "done",
     hold: true,
-    say: "Nice driving, Commander! Fill the tanks to 150 L before Day 3. Watch the rover's battery on longer trips.",
+    say: "Nice driving, Commander! Now fill the tanks to 200 L before Day 4, and build an Ice Drill to mine water for you. Watch the rover's battery on long trips.",
     next: "Let's do this",
   },
 ];

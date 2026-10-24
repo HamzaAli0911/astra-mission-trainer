@@ -23,13 +23,13 @@ Tip: in **Settings**, turn on **Unlock every mission** first.
 1. **Title → Start training.** Mission 1 begins with a briefing from CAPCOM. Keep "Guide me step by step" ticked.
 2. **First Light tutorial (2 min).** Drag to look around, build a Solar Array (time speeds up to 4×), see the power arrow turn green, build an Oxygen Maker, open the **Power** panel and read the battery forecast. Build a Battery and start the clock. At night, show the battery draining and the solar arrays producing nothing.
 3. **Debrief.** Stars, the power chart (filling by day, draining at night), "what you learned", a NASA fact with a link, and a quick quiz question.
-4. **Mission map → Ice Hunters.** Open **Rover**, press Go on Shadow Crater. The crater floor is permanently dark: the rover drains faster. Collect ice, drive home, unload +40 L. Point out that the Oxygen Maker uses water: on the Moon, water is air.
+4. **Mission map → Ice Hunters.** Open **Rover**, press Go on Shadow Crater. The crater floor is permanently dark: the rover drains faster. Collect ice, drive home, unload +45 L. Point out that the Oxygen Maker uses water: on the Moon, water is air.
 5. **Solar Storm.** The heads-up card pauses the game when a flare is spotted, with CAPCOM's suggestions (drive home, build a shelter). When the storm hits, the screen tints purple and a Geiger counter clicks; take shelter and watch the dose readout.
 6. **Red Planet.** The Power panel shows less than half the solar power of the Moon. Build MOXIE and a fission reactor and ride out the dust storm.
 
 ## What makes it work in a classroom
 
-- **Short and focused:** 5–12 minute missions, each about one idea.
+- **Focused:** 10–20 minute missions, each built around one idea.
 - **Learning by doing:** tutorial steps finish when the player does the thing, not when they click Next.
 - **Feedback before failure:** every supply shows how long it will last; CAPCOM warns early; emergencies pause time.
 - **Reflection:** debrief charts, "what you learned", a NASA source, one quiz question per mission.

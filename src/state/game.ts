@@ -18,8 +18,8 @@ import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
 import { useUI } from "./ui";
 
-/** Real seconds per training hour at 1×. A training day lasts one minute. */
-export const HOUR_SECONDS = 2.5;
+/** Real seconds per training hour at 1×. A training day lasts about a minute and a half. */
+export const HOUR_SECONDS = 3.5;
 export const SPEEDS = [1, 2, 4] as const;
 export type Speed = (typeof SPEEDS)[number];
 

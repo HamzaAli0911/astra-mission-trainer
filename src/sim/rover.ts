@@ -5,8 +5,9 @@ import {
   DOCK_RADIUS,
   FOOTPRINT,
   inShadow,
+  LANDER,
   PADS,
-  ROCKS,
+  rocksNear,
   WORLD,
 } from "./world";
 
@@ -28,14 +29,16 @@ export const STOP: DriveInput = {
   right: false,
 };
 export const ROVER = {
-  maxSpeed: 20, // metres per training hour
-  crawl: 4, // with a flat battery
-  turn: 4, // radians per training hour
+  maxSpeed: 36, // metres per training hour
+  crawl: 6, // with a flat battery
+  turn: 3.4, // radians per training hour
   radius: 1.2,
   /** Battery drain multiplier in the cold, dark crater. */
   shadowDrain: 2.5,
 };
-const LIMIT = WORLD - 3;
+const LIMIT = WORLD - 4;
+/** Autopilot lattice spacing, metres. */
+const CELL = 2;
 /** Longest sub-step for movement, hours (keeps collisions solid at high game speeds). */
 const MAX_STEP = 0.02;
 
@@ -47,17 +50,17 @@ export function modulePos(m: Pick<Module, "pad">): Point {
   return { x: p.x, z: p.z };
 }
 
-/** True when the rover fits at (x, z). */
-export function canOccupy(x: number, z: number, modules: Module[]) {
+/** True when the rover fits at (x, z), with `margin` metres to spare (routes plan with a margin). */
+export function canOccupy(x: number, z: number, modules: Module[], margin = 0) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
   if (Math.abs(x) > LIMIT || Math.abs(z) > LIMIT) return false;
-  const r = ROVER.radius;
+  const r = ROVER.radius + margin;
   for (const m of modules) {
     const p = modulePos(m);
     if (Math.hypot(p.x - x, p.z - z) < FOOTPRINT[m.type] + r) return false;
   }
-  for (const k of ROCKS)
-    if (k.solid && Math.hypot(k.x - x, k.z - z) < k.r * 0.85 + r) return false;
+  if (Math.hypot(LANDER.x - x, LANDER.z - z) < LANDER.r + r) return false;
+  for (const k of rocksNear(x, z)) if (Math.hypot(k.x - x, k.z - z) < k.r * 0.85 + r) return false;
   return true;
 }
 
@@ -94,8 +97,9 @@ function move(
     else if (canOccupy(x, z + dz, modules)) z += dz;
   }
   const moved = Math.hypot(x - r.x, z - r.z);
+  // The Moon's permanently shadowed crater is far colder, so heaters and lights drain more.
   const drain =
-    moved * PLANETS[planet].roverDrain * (inShadow(x, z) ? ROVER.shadowDrain : 1);
+    moved * PLANETS[planet].roverDrain * (planet === "moon" && inShadow(x, z) ? ROVER.shadowDrain : 1);
   return {
     ...r,
     x,
@@ -171,57 +175,64 @@ class Heap {
 }
 
 /** Straight segment check, sampled every 0.4 m. */
-export function clearLine(a: Point, b: Point, modules: Module[]) {
+export function clearLine(a: Point, b: Point, modules: Module[], margin = 0) {
   const d = Math.hypot(b.x - a.x, b.z - a.z),
     n = Math.max(1, Math.ceil(d / 0.4));
   for (let i = 1; i <= n; i++) {
     const t = i / n;
-    if (!canOccupy(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, modules))
+    // Near the ends the rover is arriving or leaving, so only the true size counts there.
+    const m = (i * 0.4 < 1.5 || (n - i) * 0.4 < 1.5) ? 0 : margin;
+    if (!canOccupy(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, modules, m))
       return false;
   }
   return true;
 }
+/** Room to spare around obstacles when planning, so turning never clips them. */
+const SAFE = 0.6;
 
 /**
- * A* on a one-metre lattice (8-connected, no corner cutting), then line-of-sight
+ * A* on a 2 m lattice (8-connected, no corner cutting), then line-of-sight
  * smoothing so the rover drives natural straight lines. [] when unreachable.
  */
 export function planRoute(from: Point, target: Point, modules: Module[]): Point[] {
   if (!canOccupy(target.x, target.z, modules)) return [];
-  if (clearLine(from, target, modules)) return [target];
-  const size = LIMIT * 2 + 1,
-    off = LIMIT;
-  const idx = (x: number, z: number) => (z + off) * size + (x + off);
-  const sx = Math.round(from.x),
-    sz = Math.round(from.z),
-    ex = Math.round(target.x),
-    ez = Math.round(target.z);
+  if (clearLine(from, target, modules, SAFE)) return [target];
+  const half = Math.floor(LIMIT / CELL),
+    size = half * 2 + 1;
+  const idx = (i: number, j: number) => (j + half) * size + (i + half);
+  const at = (n: number) => n * CELL;
+  const si = Math.round(from.x / CELL),
+    sj = Math.round(from.z / CELL),
+    ei = Math.round(target.x / CELL),
+    ej = Math.round(target.z / CELL);
   const cost = new Float64Array(size * size).fill(Infinity),
     parent = new Int32Array(size * size).fill(-1),
     closed = new Uint8Array(size * size),
     free = new Int8Array(size * size);
-  const ok = (x: number, z: number) => {
-    if (Math.abs(x) > LIMIT || Math.abs(z) > LIMIT) return false;
-    const i = idx(x, z);
-    if (!free[i]) free[i] = canOccupy(x, z, modules) ? 1 : -1;
-    return free[i] === 1;
+  const ok = (i: number, j: number) => {
+    if (Math.abs(i) > half || Math.abs(j) > half) return false;
+    const n = idx(i, j);
+    if (!free[n]) free[n] = canOccupy(at(i), at(j), modules, SAFE) ? 1 : -1;
+    return free[n] === 1;
   };
-  const start = idx(sx, sz),
-    goal = idx(ex, ez);
-  const h = (x: number, z: number) => Math.hypot(x - ex, z - ez);
+  const start = idx(si, sj),
+    goal = idx(ei, ej);
+  free[start] = 1; // the rover is already there, even if the cell centre is tight
+  free[goal] = 1;
+  const h = (i: number, j: number) => Math.hypot(i - ei, j - ej);
   const open = new Heap();
   cost[start] = 0;
-  open.push(h(sx, sz), start);
+  open.push(h(si, sj), start);
   let expanded = 0;
-  while (open.size && expanded < 40000) {
+  while (open.size && expanded < 60000) {
     const current = open.pop();
     if (closed[current]) continue;
     closed[current] = 1;
     expanded++;
     if (current === goal) break;
-    const cx = (current % size) - off,
-      cz = Math.floor(current / size) - off;
-    for (const [dx, dz] of [
+    const ci = (current % size) - half,
+      cj = Math.floor(current / size) - half;
+    for (const [di, dj] of [
       [1, 0],
       [-1, 0],
       [0, 1],
@@ -231,32 +242,38 @@ export function planRoute(from: Point, target: Point, modules: Module[]): Point[
       [1, -1],
       [-1, -1],
     ]) {
-      const nx = cx + dx,
-        nz = cz + dz;
-      if (!ok(nx, nz)) continue;
-      if (dx && dz && (!ok(cx + dx, cz) || !ok(cx, cz + dz))) continue;
-      const n = idx(nx, nz);
+      const ni = ci + di,
+        nj = cj + dj;
+      if (!ok(ni, nj)) continue;
+      if (di && dj && (!ok(ci + di, cj) || !ok(ci, cj + dj))) continue;
+      // Cells are 2 m apart: also check the ground between them, so no step clips a rock.
+      const mx = at(ci + di / 2),
+        mz = at(cj + dj / 2);
+      if (!canOccupy(mx, mz, modules, SAFE) || !canOccupy((at(ci) + mx) / 2, (at(cj) + mz) / 2, modules, SAFE) || !canOccupy((at(ni) + mx) / 2, (at(nj) + mz) / 2, modules, SAFE)) continue;
+      const n = idx(ni, nj);
       if (closed[n]) continue;
-      const c = cost[current] + (dx && dz ? Math.SQRT2 : 1);
+      const c = cost[current] + (di && dj ? Math.SQRT2 : 1);
       if (c < cost[n]) {
         cost[n] = c;
         parent[n] = current;
-        open.push(c + h(nx, nz), n);
+        open.push(c + h(ni, nj), n);
       }
     }
   }
   if (!closed[goal]) return [];
   const cells: Point[] = [];
-  for (let at = goal; at !== start && at !== -1; at = parent[at])
-    cells.unshift({ x: (at % size) - off, z: Math.floor(at / size) - off });
+  for (let a = goal; a !== start && a !== -1; a = parent[a])
+    cells.unshift({ x: at((a % size) - half), z: at(Math.floor(a / size) - half) });
   if (!cells.length) return [target];
   cells[cells.length - 1] = { x: target.x, z: target.z };
+  // The rover starts off the lattice; if it can't see the first cell, go via its own cell centre.
+  if (!clearLine(from, cells[0], modules, SAFE)) cells.unshift({ x: at(si), z: at(sj) });
   const route: Point[] = [];
   let anchor: Point = { x: from.x, z: from.z },
     i = 0;
   while (i < cells.length) {
     let j = cells.length - 1;
-    while (j > i && !clearLine(anchor, cells[j], modules)) j--;
+    while (j > i && !clearLine(anchor, cells[j], modules, SAFE)) j--;
     route.push(cells[j]);
     anchor = cells[j];
     i = j + 1;
@@ -290,7 +307,8 @@ export function followRoute(
     const heading = wrap(
       out.heading + Math.sign(diff) * Math.min(Math.abs(diff), ROVER.turn * 1.6 * h),
     );
-    const align = Math.max(0, Math.cos(diff));
+    // Turn on the spot for sharp corners so the rover stays on the planned line.
+    const align = Math.abs(diff) > 0.5 ? 0 : Math.cos(diff);
     const last = rest.length === 1;
     const cruise =
       maxSpeed(out) * align * (last ? Math.min(1, (distance + 0.8) / 4) : 1);
@@ -354,7 +372,7 @@ export function tripCost(from: Point, route: Point[], planet: Planet) {
       const x = at.x + ((p.x - at.x) * (i + 0.5)) / n,
         z = at.z + ((p.z - at.z) * (i + 0.5)) / n;
       pct +=
-        (d / n) * PLANETS[planet].roverDrain * (inShadow(x, z) ? ROVER.shadowDrain : 1);
+        (d / n) * PLANETS[planet].roverDrain * (planet === "moon" && inShadow(x, z) ? ROVER.shadowDrain : 1);
     }
     at = p;
   }

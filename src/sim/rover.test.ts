@@ -21,7 +21,7 @@ describe("driving", () => {
   });
   it("drains the battery with distance, faster in the dark crater", () => {
     const open = drive(rover(0, 30, 0), fwd, 0.3, [], "moon");
-    const crater = drive(rover(-30, -22, Math.PI / 2), fwd, 0.3, [], "moon");
+    const crater = drive(rover(-66, -48, Math.PI / 2), fwd, 0.3, [], "moon");
     const used = (r: Rover) => 100 - r.battery;
     expect(used(open)).toBeGreaterThan(0);
     expect(used(crater) / used(open)).toBeGreaterThan(2);

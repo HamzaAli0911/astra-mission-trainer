@@ -10,7 +10,7 @@ It is an independent educational project, not a NASA product, and is not endorse
 
 ## How it plays
 
-A campaign of six short training missions (5–12 minutes each). Each one teaches one trade-off by making you live with it, then debriefs you with a chart of what happened, the real science behind it and a quick check question.
+A campaign of six training missions (about 10–20 minutes each). Each one teaches one trade-off by making you live with it, then debriefs you with a chart of what happened, the real science behind it and a quick check question.
 
 | # | Mission | You learn |
 |---|---------|-----------|
@@ -33,6 +33,16 @@ The core loop:
 - **CAPCOM** (Jo, at Mission Control) explains, warns before trouble and offers one button that helps. Messages can be read aloud.
 
 Every supply shows how long it will last ("▼ 2.1 days"), so cause and effect is visible before it becomes an emergency. Time pauses for emergencies and decisions, so players always have time to think.
+
+## What you see
+
+Everything is drawn in real time in the browser, with no image or model files: every model, texture and sky is made by code.
+
+- A **300 m × 300 m** area around the outpost on each world, ringed by distant hills: an icy crater that never sees the Sun, boulder fields, smaller craters, a lava-tube skylight (Moon), dunes and a layered mesa (Mars), and the lander that brought the crew.
+- **Moon**: a black sky with the Milky Way, a low Sun that casts long shadows, and Earth hanging over the horizon. **Mars**: a butterscotch sky, blue sunsets, Phobos and Deimos at night, and dust storms that dim the Sun.
+- Detailed modules (an inflatable habitat with a cupola and airlock, tall Sun-tracking solar arrays on the Moon, a fission reactor with a cone of radiators, an ice-drill derrick…), a pressurised rover that leaves tyre tracks, astronauts in suits, welding sparks while things are built, glowing lights and power cables that pulse in the direction energy flows.
+- A **map** in the corner shows the whole area. Click a site on it to plan a rover trip, or anywhere else to look there.
+- **Settings → Graphics**: *Auto* adapts to the device (it lowers detail if the game runs slowly), *High* adds glow and soft shadows, *Low* is for older computers.
 
 ## Run it
 
@@ -59,6 +69,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Drive the rover | pick a site and press Go, click the ground, or the on-screen pad | W A S D / arrows |
 | Pause · speed | top-right buttons | Space · 1 2 3 |
 | Camera on base · rover | Camera button in the Rover panel | C · F |
+| Look somewhere else · plan a trip | click the map (top right) | |
 | Close · menu | | Esc |
 
 ## For teachers and judges

@@ -1,27 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { activeHazard, capacity, flows, isBuilt, isWorking, shieldDone } from "../sim/core";
 import { MODULES, SHIELD_TIME } from "../sim/modules";
 import { daylight, PLANETS } from "../sim/planets";
 import { modulePos } from "../sim/rover";
 import type { GameState, Module, Planet } from "../sim/types";
-import { CRATER, DOCK, inShadow, PADS, padFits, SITES, terrainHeight } from "../sim/world";
+import { CRATER, DOCK, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
 import { useGame } from "../state/game";
 import { useUI } from "../state/ui";
 import { tick } from "../lib/sound";
 import { anchors, followers, scene3d } from "./anchors";
-import { buildRocks, buildSiteMarker, buildSky, buildTerrain, dustSystem, iceSparkles, PALETTE, stormStreaks } from "./environment";
+import { buildSiteMarker, dustSystem, impactSystem, sparkSystem, stormStreaks } from "./effects";
 import { dispose, light, paint } from "./kit";
-import { buildAstronaut, buildDock, buildFlag, buildModule, buildPad, buildRover, scaffold, type ModuleView } from "./models";
+import { buildAstronaut, buildDock, buildFlag, buildLander, buildModule, buildPad, buildRover, scaffold, type ModuleView } from "./models";
+import { buildSky, environmentMap } from "./sky";
+import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem } from "./terrain";
 
 const HOME = new THREE.Vector3(0, 0, 2);
-const MARS_NIGHT = new THREE.Color("#07060d"),
-  MARS_NOON = new THREE.Color("#d4a27c"),
-  MARS_DUST = new THREE.Color("#9c6b4b"),
-  MARS_DUSK = new THREE.Color("#6d8fb8"),
-  MARS_LIGHT = new THREE.Color("#ffd9b8");
-const OFFSET = new THREE.Vector3(22, 27, 33);
+const OFFSET = new THREE.Vector3(24, 30, 36);
+const MARS = {
+  night: new THREE.Color("#07060c"),
+  day: new THREE.Color("#d9ab82"),
+  dust: new THREE.Color("#8f5e40"),
+  light: new THREE.Color("#ffd9b8"),
+};
 
 function sunDirection(planet: Planet, t: number) {
   const P = PLANETS[planet];
@@ -39,6 +46,8 @@ interface Entry {
   view: ModuleView;
   scaffold: THREE.Group | null;
   cable: { group: THREE.Group; flow: THREE.MeshStandardMaterial; tex: THREE.Texture; dir: number } | null;
+  /** Health last frame, to notice a meteor strike. */
+  hp: number;
 }
 
 let cableTexture: THREE.Texture | null = null;
@@ -57,6 +66,7 @@ function flowTexture() {
   return cableTexture;
 }
 
+/** A power cable from the habitat to a module, with pulses that show which way energy flows. */
 function buildCable(m: Module, planet: Planet): Entry["cable"] {
   const p = modulePos(m);
   const d = Math.hypot(p.x, p.z);
@@ -64,7 +74,7 @@ function buildCable(m: Module, planet: Planet): Entry["cable"] {
   const ux = p.x / d,
     uz = p.z / d;
   const start = new THREE.Vector3(ux * 3.4, 0, uz * 3.4),
-    end = new THREE.Vector3(p.x - ux * 2.5, 0, p.z - uz * 2.5);
+    end = new THREE.Vector3(p.x - ux * 2.3, 0, p.z - uz * 2.3);
   const pts: THREE.Vector3[] = [];
   const n = Math.max(4, Math.ceil(start.distanceTo(end) / 2));
   for (let i = 0; i <= n; i++) {
@@ -94,11 +104,15 @@ function buildCable(m: Module, planet: Planet): Entry["cable"] {
   return { group, flow, tex, dir: gen ? -1 : 1 };
 }
 
+/** Render quality: 0 low (no glow, no shadows), 1 medium, 2 high. */
+type Level = 0 | 1 | 2;
+
 export function World() {
   const host = useRef<HTMLDivElement>(null);
   const planet = useGame((s) => s.game.planet);
   const key = useGame((s) => `${s.game.missionId}:${s.game.seed}`);
   const reduce = useUI((s) => s.settings.motion);
+  const graphics = useUI((s) => s.settings.graphics);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -112,42 +126,57 @@ export function World() {
       return;
     }
     const reduced = reduce || matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let ratio = Math.min(devicePixelRatio, 1.75);
-    renderer.setPixelRatio(ratio);
-    renderer.shadowMap.enabled = true;
+    const touch = matchMedia("(pointer: coarse)").matches;
+    let level: Level = graphics === "low" ? 0 : graphics === "high" ? 2 : touch ? 1 : 2;
+    let ratio = 1;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = planet === "mars" ? 1.1 : 1.22;
+    renderer.toneMappingExposure = planet === "mars" ? 1.0 : 1.12;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.className = "world-canvas";
+    const debug = (window as unknown as { __astra?: Record<string, unknown> }).__astra;
+    if (debug) debug.renderer = renderer;
     el.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.3, 2000);
+    scene.background = new THREE.Color("#000000");
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 6000);
     camera.position.copy(HOME).add(OFFSET);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(HOME);
     controls.enableDamping = !reduced;
     controls.dampingFactor = 0.08;
-    controls.minDistance = 12;
-    controls.maxDistance = 150;
-    controls.maxPolarAngle = 1.36;
-    controls.minPolarAngle = 0.25;
+    controls.minDistance = 10;
+    controls.maxDistance = 260;
+    controls.maxPolarAngle = 1.48;
+    controls.minPolarAngle = 0.22;
     controls.screenSpacePanning = false;
-    controls.panSpeed = 0.9;
+    controls.panSpeed = 1;
     controls.rotateSpeed = 0.7;
+    controls.zoomSpeed = 1.2;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
+    // Image-based light for metal and glass, plus the post-processing chain (HDR, MSAA, bloom).
+    const env = environmentMap(renderer, planet);
+    scene.environment = env.texture;
+    scene.environmentIntensity = planet === "moon" ? 0.32 : 0.55;
+    const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    const composer = new EffectComposer(renderer, target);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.42, 1.05);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+
     // Lights.
     const sun = new THREE.DirectionalLight("#fff4e2", 3);
-    sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 260;
-    Object.assign(sun.shadow.camera, { left: -48, right: 48, top: 48, bottom: -48 });
-    sun.shadow.bias = -0.0004;
-    sun.shadow.normalBias = 0.04;
+    sun.shadow.camera.far = 600;
+    let shadowHalf = 50;
+    Object.assign(sun.shadow.camera, { left: -shadowHalf, right: shadowHalf, top: shadowHalf, bottom: -shadowHalf });
+    sun.shadow.bias = -0.0003;
+    sun.shadow.normalBias = 0.05;
     scene.add(sun, sun.target);
     const hemi = new THREE.HemisphereLight("#b9c6ff", "#2a2a30", 0.4);
     scene.add(hemi);
@@ -155,24 +184,42 @@ export function World() {
     fill.position.set(-40, 30, 30);
     scene.add(fill);
 
-    const skyColor = new THREE.Color("#000000");
-    scene.background = skyColor;
+    const applyLevel = () => {
+      ratio = level === 2 ? Math.min(devicePixelRatio, 2) : level === 1 ? Math.min(devicePixelRatio, 1.25) : 1;
+      renderer.setPixelRatio(ratio);
+      composer.setPixelRatio(ratio);
+      renderer.shadowMap.enabled = level > 0;
+      sun.castShadow = level > 0;
+      renderer.shadowMap.type = level === 2 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+      size();
+    };
 
-    // World.
+    // The world.
     const terrain = buildTerrain(planet);
     scene.add(terrain);
-    const rocks = buildRocks(planet);
-    scene.add(rocks);
+    scene.add(buildHorizon(planet));
+    scene.add(buildRocks(planet, level > 0));
+    const ice = buildIce(planet);
+    scene.add(ice);
     const sky = buildSky(planet);
     scene.add(sky.group);
-    if (planet === "moon") scene.fog = new THREE.Fog("#000000", 150, 330);
-    else scene.fog = new THREE.FogExp2("#c99a74", 0.0065);
-    const sparkles = iceSparkles(planet);
-    scene.add(sparkles);
+    // No air on the Moon, so no haze: distant hills stay as sharp as near ones.
+    const marsFog = new THREE.FogExp2("#c99a74", 0.0024);
+    scene.fog = planet === "moon" ? null : marsFog;
+    const tracks = trackSystem(planet);
+    scene.add(tracks.mesh);
     const dust = dustSystem(PALETTE[planet].light);
     scene.add(dust.points);
+    const sparks = sparkSystem();
+    scene.add(sparks.points);
+    const impact = impactSystem();
+    scene.add(impact.group);
     const streaks = stormStreaks();
     scene.add(streaks.lines);
+    const lander = buildLander(planet);
+    lander.position.set(LANDER.x, terrainHeight(LANDER.x, LANDER.z, planet), LANDER.z);
+    lander.rotation.y = 0.6;
+    scene.add(lander);
     const dock = buildDock(planet);
     dock.position.set(DOCK.x, terrainHeight(DOCK.x, DOCK.z, planet), DOCK.z);
     scene.add(dock);
@@ -189,7 +236,7 @@ export function World() {
       m.group.traverse((o) => (o.userData.siteId = s.id));
       scene.add(m.group);
       const flag = buildFlag();
-      flag.position.set(1.4, 0, -1.2);
+      flag.position.set(1.6, 0, -1.4);
       flag.visible = false;
       m.group.add(flag);
       return { ...m, flag, site: s };
@@ -198,11 +245,11 @@ export function World() {
     const rover = buildRover();
     rover.group.traverse((o) => (o.userData.rover = true));
     scene.add(rover.group);
-    const headlight = new THREE.SpotLight("#fff1d6", 0, 34, 0.55, 0.5, 1.2);
-    headlight.position.set(0, 1.4, -1.9);
-    headlight.target.position.set(0, 0, -12);
+    const headlight = new THREE.SpotLight("#fff1d6", 0, 45, 0.6, 0.55, 1.2);
+    headlight.position.set(0, 1.4, -2.0);
+    headlight.target.position.set(0, 0, -14);
     rover.group.add(headlight, headlight.target);
-    const walkers = [buildAstronaut(), buildAstronaut("#9fd8ff")];
+    const walkers = [buildAstronaut("#ff4d5e"), buildAstronaut("#5ee0ff")];
     for (const w of walkers) {
       w.visible = false;
       scene.add(w);
@@ -211,19 +258,20 @@ export function World() {
     const entries = new Map<number, Entry>();
     const shieldPct = { v: 0 };
 
-    const size = () => {
-      const w = el.clientWidth,
-        h = el.clientHeight;
+    function size() {
+      const w = el!.clientWidth,
+        h = el!.clientHeight;
       renderer.setSize(w, h, false);
+      composer.setSize(w, h);
       camera.aspect = w / Math.max(1, h);
       // Keep the same width of world in view on tall phone screens.
       const half = THREE.MathUtils.degToRad(21);
       camera.fov = camera.aspect >= 1.2 ? 42 : Math.min(78, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(half) * 1.2) / camera.aspect)));
       camera.updateProjectionMatrix();
-    };
+    }
     const ro = new ResizeObserver(size);
     ro.observe(el);
-    size();
+    applyLevel();
 
     // Picking.
     const ray = new THREE.Raycaster();
@@ -311,6 +359,10 @@ export function World() {
       if (!follow) goal.copy(controls.target);
       useUI.getState().noteLook();
     });
+    scene3d.lookAt = (x, z) => {
+      follow = false;
+      goal.set(x, 0, z);
+    };
     const runCamera = (g: GameState) => {
       const c = useUI.getState().camera;
       if (c.n !== lastCam) {
@@ -371,7 +423,7 @@ export function World() {
         f.style.transform = `translate3d(${a.x.toFixed(1)}px, ${a.y.toFixed(1)}px, 0)`;
         // Labels hide under the top bar and the dock rather than overlapping them.
         f.dataset.visible = a.visible && a.y > 96 && a.y < h - 70 ? "1" : "0";
-        f.dataset.far = a.depth > 120 ? "1" : "0";
+        f.dataset.far = a.depth > 160 ? "1" : "0";
       }
     };
 
@@ -379,26 +431,34 @@ export function World() {
       last = performance.now(),
       clock = 0,
       slow = 0,
-      quality = 2,
-      geigerAt = 0;
+      warm = 0,
+      geigerAt = 0,
+      dustLevel = 0,
+      stormLevel = 0,
+      sparkAt = 0;
     const roverPos = new THREE.Vector3(DOCK.x, 0, DOCK.z);
+    const trackFrom = new THREE.Vector3(DOCK.x, 0, DOCK.z);
+    const fogDay = new THREE.Color();
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       clock += dt;
-      // Adaptive quality: drop resolution, then shadows, on slow machines.
-      slow = dt > 0.045 ? slow + dt : Math.max(0, slow - dt * 0.5);
-      if (slow > 2.5 && quality > 0) {
-        quality--;
-        slow = 0;
-        if (quality === 1) {
-          ratio = 1;
-          renderer.setPixelRatio(1);
-          size();
-        } else {
-          renderer.shadowMap.enabled = false;
-          sun.castShadow = false;
+      warm += dt;
+      // Adaptive quality on "auto": drop resolution, then the glow, then shadows on slow machines.
+      if (graphics === "auto" && warm > 4 && !document.hidden) {
+        slow = dt > 0.045 ? slow + dt : Math.max(0, slow - dt * 0.5);
+        if (slow > 2.5 && level > 0) {
+          slow = 0;
+          if (level === 2 && ratio > 1.01) {
+            ratio = 1;
+            renderer.setPixelRatio(1);
+            composer.setPixelRatio(1);
+            size();
+          } else {
+            level = (level - 1) as Level;
+            applyLevel();
+          }
         }
       }
       const st = useGame.getState();
@@ -408,38 +468,46 @@ export function World() {
       const day = daylight(planet, g.t);
       const dustStorm = activeHazard(g, "dust");
       const storm = activeHazard(g, "storm");
+      dustLevel += ((dustStorm ? 1 : 0) - dustLevel) * Math.min(1, dt * 0.6);
+      stormLevel += ((storm ? 1 : 0) - stormLevel) * Math.min(1, dt * 1.2);
 
       // Sun, sky and light.
       const dir = sunDirection(planet, g.t);
-      sun.position.copy(controls.target).addScaledVector(dir, 120);
+      const reach = camera.position.distanceTo(controls.target);
+      sun.position.copy(controls.target).addScaledVector(dir, 260);
       sun.target.position.copy(controls.target);
-      const dim = dustStorm ? 0.35 : 1;
-      sun.intensity = (planet === "moon" ? 3.4 : 2.7) * Math.max(0, Math.min(1, dir.y * 8)) * dim;
+      // Shadows cover what the camera can see.
+      const half = THREE.MathUtils.clamp(reach * 0.8, 30, 130);
+      if (Math.abs(half - shadowHalf) > 4) {
+        shadowHalf = half;
+        Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half });
+        sun.shadow.camera.updateProjectionMatrix();
+      }
+      const dim = 1 - dustLevel * 0.65;
+      sun.intensity = (planet === "moon" ? 3.6 : 2.9) * THREE.MathUtils.clamp(dir.y * 8, 0, 1) * dim;
       sun.color.set(planet === "mars" && dir.y < 0.25 ? "#ffd2a8" : "#fff4e2");
       if (planet === "moon") {
         // Earthshine keeps the lunar night readable: a cool blue fill.
         hemi.color.set(day > 0.5 ? "#d8e0ff" : "#9fb4ff");
         hemi.groundColor.set("#3a3a44");
-        hemi.intensity = 0.75 + day * 0.35;
-        fill.intensity = 0.55 - day * 0.25;
+        hemi.intensity = 0.8 - day * 0.1;
+        fill.intensity = 0.75 - day * 0.5;
       } else {
-        // Butterscotch by day, blue around the setting Sun (Mars sunsets really are blue).
-        skyColor.copy(MARS_NIGHT).lerp(dustStorm ? MARS_DUST : MARS_NOON, day);
-        if (day > 0.02 && dir.y < 0.3 && !dustStorm) skyColor.lerp(MARS_DUSK, (1 - dir.y / 0.3) * 0.45 * day);
-        (scene.fog as THREE.FogExp2).color.copy(skyColor);
-        (scene.fog as THREE.FogExp2).density += ((dustStorm ? 0.03 : 0.0065) - (scene.fog as THREE.FogExp2).density) * Math.min(1, dt * 0.8);
-        hemi.color.copy(skyColor).lerp(MARS_LIGHT, 0.3);
+        fogDay.copy(MARS.night).lerp(MARS.day, day).lerp(MARS.dust, dustLevel * Math.max(0.15, day));
+        marsFog.color.copy(fogDay);
+        marsFog.density = 0.0024 + dustLevel * 0.011;
+        hemi.color.copy(fogDay).lerp(MARS.light, 0.35);
         hemi.groundColor.set("#4a2a1e");
-        hemi.intensity = 0.5 + day * 0.6 * dim;
-        fill.intensity = 0.35 - day * 0.1;
+        hemi.intensity = 0.35 + day * 0.55 * dim;
+        fill.intensity = 0.3 - day * 0.1;
       }
-      (sky.stars.material as THREE.PointsMaterial).opacity = planet === "moon" ? 0.75 + (1 - day) * 0.25 : Math.max(0, 1 - day * 1.4);
-      sky.sun.position.copy(camera.position).addScaledVector(dir, 600);
-      sky.sun.visible = dir.y > -0.05 && !dustStorm;
-      if (sky.earth) sky.earth.rotation.y += dt * 0.02;
+      sky.update(camera, dir, { day, dust: dustLevel, storm: stormLevel, time: clock, pixelRatio: ratio });
+      scene.environmentIntensity = (planet === "moon" ? 0.32 : 0.55) * (0.35 + 0.65 * day);
+      bloom.strength = 0.45 + stormLevel * 0.15;
 
       // Modules.
       const live = new Set<number>();
+      const meteor = g.feed.slice(-3).some((x) => x.text.startsWith("Meteorite"));
       for (const m of g.modules) {
         live.add(m.id);
         let e = entries.get(m.id);
@@ -454,13 +522,13 @@ export function World() {
           }
           const view = buildModule(m.type, planet);
           const p = modulePos(m);
-          view.group.position.set(p.x, terrainHeight(p.x, p.z, planet) + (m.pad >= 0 ? 0.18 : 0), p.z);
+          view.group.position.set(p.x, terrainHeight(p.x, p.z, planet) + (m.pad >= 0 ? 0.2 : 0), p.z);
           if (m.pad >= 0) view.group.rotation.y = Math.atan2(p.x, p.z) + Math.PI;
           view.group.traverse((o) => (o.userData.moduleId = m.id));
           scene.add(view.group);
           const cable = m.type === "habitat" ? null : buildCable(m, planet);
           if (cable) scene.add(cable.group);
-          e = { id: m.id, type: m.type, pad: m.pad, view, scaffold: null, cable };
+          e = { id: m.id, type: m.type, pad: m.pad, view, scaffold: null, cable, hp: m.health };
           entries.set(m.id, e);
           if (m.type === "habitat") e.view.shield!.visible = false;
         }
@@ -478,28 +546,43 @@ export function World() {
           scene.remove(e.scaffold);
           dispose(e.scaffold);
           e.scaffold = null;
-          if (!reduced) grp.scale.set(1.12, 1.12, 1.12);
+          if (!reduced) {
+            grp.scale.set(1.12, 1.12, 1.12);
+            for (let i = 0; i < 4; i++) dust.emit(grp.position.x + (Math.random() - 0.5) * 3, grp.position.y + 0.3, grp.position.z + (Math.random() - 0.5) * 3, 0, 0.6, 0, 3, 2.5, 0.7);
+          }
+        }
+        // Welding sparks while it is being built.
+        if (!done && !st.paused && !reduced && clock > sparkAt) {
+          const top = e.view.top * progress;
+          sparks.emit(grp.position.x + (Math.random() - 0.5) * 2.6, grp.position.y + Math.max(0.4, top * Math.random()), grp.position.z + (Math.random() - 0.5) * 2.2, 5, 2.4);
         }
         if (done && grp.scale.x > 1) grp.scale.multiplyScalar(Math.max(1 / grp.scale.x, 1 - dt * 1.6));
+        // A meteor strike: a streak from the sky, a flash and debris.
+        if (done && m.health < e.hp - 15 && meteor && !reduced) impact.hit(grp.position.x, grp.position.y + e.view.top * 0.5, grp.position.z);
+        e.hp = m.health;
         const working = isWorking(m);
         const r = working ? (f.ratio[m.id] ?? 1) : 0;
         const damaged = done && m.health < 50;
         const lamp = !done ? "#ffb020" : damaged ? "#ff4d5e" : !m.on ? "#5b6375" : r < 0.5 ? "#ffb020" : "#3ee39a";
         e.view.status.color.set(lamp);
         e.view.status.emissive.set(lamp);
-        e.view.status.emissiveIntensity = damaged ? (Math.sin(clock * 8) > 0 ? 3 : 0.4) : 2.2;
+        e.view.status.emissiveIntensity = damaged ? (Math.sin(clock * 8) > 0 ? 3.5 : 0.4) : 2.4;
         const power = m.type === "greenhouse" ? (m.light / 2) * r : r;
         for (const gm of e.view.glow) gm.emissiveIntensity = 0.08 + power * (m.type === "reactor" ? 2.6 : 1.9) * (m.type === "oxygen" ? 0.7 + Math.sin(clock * 3) * 0.3 : 1);
+        for (const b of e.view.blink) b.emissiveIntensity = (clock * 0.8 + m.id * 0.37) % 1 < 0.12 ? 5 : 0.15;
         if (working && r > 0.2 && !reduced) for (const sp of e.view.spin) sp.rotation.y += dt * (m.type === "icedrill" ? 6 : m.type === "lab" ? 0.4 : 3) * r;
         if (e.view.yaw && e.view.tilt) {
           const local = Math.atan2(dir.x, dir.z) - grp.rotation.y;
-          e.view.yaw.rotation.y += (local + Math.PI - e.view.yaw.rotation.y) * Math.min(1, dt * 1.5);
-          const el = Math.max(0.05, Math.asin(Math.max(-1, Math.min(1, dir.y))));
-          e.view.tilt.rotation.x = planet === "moon" ? -el * 0.9 : -(Math.PI / 2 - Math.max(0.35, Math.PI / 2 - el)) - 0.25;
+          let delta = local + Math.PI - e.view.yaw.rotation.y;
+          delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+          e.view.yaw.rotation.y += delta * Math.min(1, dt * 1.5);
+          const elev = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
+          const want = planet === "moon" ? Math.max(0, elev) : THREE.MathUtils.clamp(elev, 0.3, 1.35);
+          e.view.tilt.rotation.x += (want - e.view.tilt.rotation.x) * Math.min(1, dt * 1.5);
         }
         if (e.view.bars) {
-          const level = g.res.power / capacity(g).power;
-          e.view.bars.forEach((b, i) => (b.emissiveIntensity = level > i / 5 + 0.02 ? 1.8 : 0.08));
+          const charge = g.res.power / capacity(g).power;
+          e.view.bars.forEach((b, i) => (b.emissiveIntensity = charge > i / 5 + 0.02 ? 1.8 : 0.08));
         }
         if (e.view.windows) e.view.windows.emissiveIntensity = (0.5 + (1 - day) * 1.8) * (f.ratio[m.id] ?? 1);
         if (e.view.shield) {
@@ -510,12 +593,13 @@ export function World() {
           e.view.shield.position.y = shieldDone(g) ? 0 : -0.2;
         }
         if (e.cable) {
-          const flowing = m.type === "solar" || m.type === "reactor" ? working && f.gen > 0.05 : working && r > 0.05 && (f.ratio[m.id] !== undefined);
+          const flowing = m.type === "solar" || m.type === "reactor" ? working && f.gen > 0.05 : working && r > 0.05 && f.ratio[m.id] !== undefined;
           e.cable.flow.emissiveIntensity = flowing ? 1.8 : 0.05;
           e.cable.flow.opacity = flowing ? 0.95 : 0.25;
           if (!reduced) e.cable.tex.offset.x -= dt * 1.2 * e.cable.dir;
         }
       }
+      if (clock > sparkAt) sparkAt = clock + 0.12 + Math.random() * 0.25;
       for (const [id, e] of entries)
         if (!live.has(id)) {
           scene.remove(e.view.group);
@@ -530,6 +614,11 @@ export function World() {
           }
           entries.delete(id);
         }
+      if (impact.update(dt)) {
+        const p = impact.group.children[0].position;
+        sparks.emit(p.x, p.y - 1, p.z, 40, 6);
+        for (let i = 0; i < 10; i++) dust.emit(p.x, p.y - 1.2, p.z, 0, 1.5, 0, 6, 3, 0.5);
+      }
 
       // Pads light up while you choose where to build.
       const placing = ui.placing;
@@ -541,9 +630,11 @@ export function World() {
         const ok = free && (placing ? padFits(placing, p.kind) : true);
         const pulse = 0.55 + Math.sin(clock * 4) * 0.3;
         mat.opacity = !free ? 0 : placing ? (ok ? pulse : 0.05) : i === selPad ? 0.9 : ui.panel === "build" ? 0.3 : 0.12;
-        mat.emissiveIntensity = placing && ok ? 2.4 : 1.2;
+        mat.emissiveIntensity = placing && ok ? 2.6 : 1.2;
       });
-      ((dock.userData.plug as THREE.MeshStandardMaterial).emissiveIntensity = g.rover.docked && f.roverKw > 0 ? 1.5 + Math.sin(clock * 5) : 1);
+      (dock.userData.plug as THREE.MeshStandardMaterial).emissiveIntensity = g.rover.docked && f.roverKw > 0 ? 1.5 + Math.sin(clock * 5) : 1;
+      (dock.userData.guide as THREE.MeshStandardMaterial).emissiveIntensity = g.rover.docked ? 0.6 : 1 + Math.max(0, Math.sin(clock * 4)) * 2;
+      (lander.userData.beacon as THREE.MeshStandardMaterial).emissiveIntensity = (clock * 0.6) % 1 < 0.1 ? 5 : 0.15;
 
       // Rover.
       const rv = g.rover;
@@ -560,18 +651,27 @@ export function World() {
       rover.group.rotateX(pitch);
       rover.group.rotateZ(roll);
       const moved = prev.distanceTo(roverPos);
-      if (moved < 3) for (const w of rover.wheels) w.rotation.x -= (moved / 0.46) * Math.sign(rv.speed || 1);
-      const dark = 1 - day > 0.5 || inShadow(rv.x, rv.z) || !!dustStorm;
-      rover.heads.emissiveIntensity = dark ? 3 : 0.6;
-      headlight.intensity = dark ? 60 : 0;
-      rover.tail.emissiveIntensity = rv.speed < -0.5 ? 3 : 1.2;
-      if (Math.abs(rv.speed) > 2 && !reduced && moved < 3)
-        for (let i = 0; i < 2; i++)
-          dust.emit(rv.x - fx * 1.9 + (Math.random() - 0.5) * 1.6, ground + 0.3, rv.z - fz * 1.9, -fx * 0.8, 1.2, -fz * 0.8, 1.4);
-      if (dustStorm && !reduced)
-        for (let i = 0; i < 3; i++)
-          dust.emit(controls.target.x - 36 + Math.random() * 12, 0.5 + Math.random() * 6, controls.target.z - 30 + Math.random() * 40, 18, 0.2, 2, 2);
+      if (moved < 12) for (const w of rover.wheels) w.rotation.x -= (moved / 0.47) * Math.sign(rv.speed || 1);
+      if (moved > 12) {
+        tracks.reset();
+        trackFrom.copy(roverPos);
+      } else if (trackFrom.distanceTo(roverPos) > 0.7) {
+        tracks.add(rv.x, rv.z, rv.heading);
+        trackFrom.copy(roverPos);
+      }
+      const dark = 1 - day > 0.5 || inShadow(rv.x, rv.z) || dustLevel > 0.5;
+      rover.heads.emissiveIntensity = dark ? 4 : 0.6;
+      headlight.intensity = dark ? 90 : 0;
+      rover.tail.emissiveIntensity = rv.speed < -0.5 ? 3.5 : 1.2;
+      rover.beacon.emissiveIntensity = (clock * 0.9) % 1 < 0.12 ? 5 : 0.15;
+      if (Math.abs(rv.speed) > 2 && !reduced && moved < 12)
+        for (let i = 0; i < 2; i++) dust.emit(rv.x - fx * 2 + (Math.random() - 0.5) * 1.8, ground + 0.3, rv.z - fz * 2, -fx * 0.8, 1.2, -fz * 0.8, 1.4, 1, 0.9);
+      if (dustLevel > 0.3 && !reduced)
+        for (let i = 0; i < 3; i++) dust.emit(controls.target.x - 45 + Math.random() * 14, 0.5 + Math.random() * 8, controls.target.z - 40 + Math.random() * 60, 20, 0.2, 2, 2, 3, 0.45);
       dust.update(dt, planet === "moon" ? 1.6 : 3.7);
+      sparks.update(dt, planet === "moon" ? 1.6 : 3.7);
+      dust.mat.uniforms.scale.value = ratio;
+      sparks.mat.uniforms.scale.value = ratio;
 
       // Crew outside while collecting.
       const task = rv.task;
@@ -601,6 +701,7 @@ export function World() {
         arms[0].rotation.x = -swing * 0.8;
         arms[1].rotation.x = walking ? swing * 0.8 : -1.1 + Math.sin(clock * 4) * 0.2;
         w.position.y += walking ? Math.abs(Math.sin(clock * 7 + i)) * (planet === "moon" ? 0.22 : 0.1) : 0;
+        if (!walking && !reduced && Math.random() < dt * 3) dust.emit(tx, terrainHeight(tx, tz, planet) + 0.2, tz, 0, 0.5, 0, 0.8, 0.6, 1.2);
       });
 
       // Sites.
@@ -611,15 +712,17 @@ export function World() {
         mk.flag.visible = g.stats.sites.includes(mk.site.id);
         mk.beam.visible = !done;
         const hot = selSite === mk.site.id || targetSite === mk.site.id;
-        mk.ringMat.opacity = done ? 0.25 : hot ? 0.8 + Math.sin(clock * 5) * 0.2 : 0.6;
-        mk.ringMat.emissiveIntensity = hot ? 2.6 : 1.4;
-        (mk.beam.material as THREE.MeshBasicMaterial).opacity = hot ? 0.95 : 0.55;
-        mk.ring.rotation.z += dt * 0.3;
+        mk.ringMat.opacity = done ? 0.2 : hot ? 0.85 + Math.sin(clock * 5) * 0.15 : 0.55;
+        mk.beamMat.opacity = hot ? 0.95 : 0.5;
+        mk.pool.opacity = done ? 0.1 : hot ? 0.55 : 0.3;
+        mk.lamp.emissiveIntensity = done ? 0.5 : (clock * 0.7 + mk.site.x) % 1 < 0.15 ? 6 : 1.5;
+        mk.ring.rotation.z += dt * (hot ? 0.8 : 0.25);
       }
-      (sparkles.material as THREE.PointsMaterial).opacity = 0.55 + Math.sin(clock * 3) * 0.3;
+      const glints = ice.userData.glints as THREE.Points;
+      (glints.material as THREE.PointsMaterial).opacity = 0.55 + Math.sin(clock * 3) * 0.3;
 
       // Storm effects and Geiger clicks.
-      streaks.update(clock, controls.target.x, controls.target.z, storm ? 1 : 0);
+      streaks.update(clock, controls.target.x, controls.target.z, reduced ? stormLevel * 0.4 : stormLevel * 0.8);
       if (storm && ui.settings.sound && !st.paused) {
         const exposed = !g.sheltering || !rv.docked;
         geigerAt -= dt;
@@ -631,21 +734,28 @@ export function World() {
 
       runCamera(g);
       controls.update();
+      const look = controls.target.clone().sub(camera.position);
+      scene3d.view.x = controls.target.x;
+      scene3d.view.z = controls.target.z;
+      scene3d.view.heading = Math.atan2(look.x, -look.z);
+      scene3d.view.distance = reach;
+      scene3d.view.fov = THREE.MathUtils.degToRad(camera.fov) * camera.aspect;
 
       // Anchors for HTML overlays.
-      for (const s of SITES) project(`site:${s.id}`, s.x, terrainHeight(s.x, s.z, planet) + 4.2, s.z);
+      for (const s of SITES) project(`site:${s.id}`, s.x, terrainHeight(s.x, s.z, planet) + 4.6, s.z);
       for (const e of entries.values()) {
         const p = e.view.group.position;
         project(`module:${e.id}`, p.x, p.y + e.view.top + 0.9, p.z);
       }
       for (const p of PADS) project(`pad:${p.id}`, p.x, terrainHeight(p.x, p.z, planet) + 0.6, p.z);
-      project("rover", rv.x, ground + 3.4, rv.z);
+      project("rover", rv.x, ground + 3.6, rv.z);
       project("rover-body", rv.x, ground + 1.4, rv.z);
       project("dock", DOCK.x, terrainHeight(DOCK.x, DOCK.z, planet) + 0.5, DOCK.z);
       project("habitat", 0, 2.4, 0);
       project("crater", CRATER.x, terrainHeight(CRATER.x, CRATER.z, planet) + 2, CRATER.z);
 
-      renderer.render(scene, camera);
+      if (level > 0) composer.render(dt);
+      else renderer.render(scene, camera);
     };
     raf = requestAnimationFrame(loop);
 
@@ -657,16 +767,16 @@ export function World() {
       renderer.domElement.removeEventListener("pointermove", onMove);
       controls.dispose();
       scene3d.pick = null;
+      scene3d.lookAt = null;
       anchors.clear();
-      scene.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.geometry && !m.geometry.userData.shared) m.geometry.dispose();
-      });
-      for (const e of entries.values()) dispose(e.view.group);
+      dispose(scene);
+      env.dispose();
+      composer.dispose();
+      target.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [planet, key, reduce]);
+  }, [planet, key, reduce, graphics]);
 
   return (
     <div ref={host} className="world">

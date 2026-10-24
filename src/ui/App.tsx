@@ -13,6 +13,7 @@ import { AlertCard, Briefing, ChoiceCard, Debrief } from "./overlays";
 import { Coach } from "./Coach";
 import { MissionMap, Title } from "./screens";
 import { Modals } from "./modals";
+import { Minimap } from "./Minimap";
 
 /** Keys held for driving, by physical key code. */
 const held = new Set<string>();
@@ -175,6 +176,7 @@ function Game() {
       </div>
       <div className="hud-right">
         <Crew />
+        <Minimap />
       </div>
       <Toasts />
       <Capcom />

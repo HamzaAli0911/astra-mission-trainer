@@ -14,6 +14,9 @@ export class Runner {
   errors: string[] = [];
   /** Option picked for each decision card (default: the first). */
   choices: Record<string, number> = {};
+  /** Called every simulated half hour, even mid-trip: a player's reflexes. */
+  reflex?: (r: Runner) => void;
+  private nextReflex = 0;
 
   constructor(id: string, seed?: number) {
     this.s = createState(id, seed);
@@ -58,6 +61,10 @@ export class Runner {
       }
       updateDock(this.s);
       step(this.s, dt);
+      if (this.reflex && this.s.t >= this.nextReflex) {
+        this.nextReflex = this.s.t + 0.5;
+        this.reflex(this);
+      }
     }
     return this;
   }
@@ -83,6 +90,15 @@ export class Runner {
 
   until(t: number) {
     return this.tick(Math.max(0, t - this.s.t));
+  }
+
+  /** A careful trip: wait out storm warnings on the dock, then drive, collect and come home. */
+  trip(siteId: string) {
+    const stormy = () => this.s.hazards.some((h) => h.kind === "storm" && (h.phase === "warned" || h.phase === "active"));
+    // Long drives need a clear forecast: don't set off if a warning is due within 10 hours.
+    const soon = () => this.s.hazards.some((h) => h.kind === "storm" && h.phase === "pending" && h.warnAt - this.s.t < 10);
+    while ((stormy() || soon()) && this.s.status === "playing") this.tick(0.5);
+    return this.charge(90).drive(siteId).collect(siteId).drive("dock");
   }
 
   /** Wait on the dock until the rover battery reaches `pct` (or `maxHours` pass). */

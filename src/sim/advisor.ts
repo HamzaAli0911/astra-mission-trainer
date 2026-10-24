@@ -1,6 +1,6 @@
 import { activeHazard, capacity, flows, hasWorking, isBuilt, isWorking, SIM_STEP } from "./core";
 import { mission } from "./missions";
-import { DAMAGED, spec } from "./modules";
+import { DAMAGED, REPAIR_COST, spec } from "./modules";
 import { clockOf, hoursToSunChange, isDaytime, PLANETS } from "./planets";
 import type { Action, GameState, ModuleType } from "./types";
 
@@ -130,7 +130,11 @@ export function advise(s: GameState): Advice[] {
   // Repairs, dust, rover.
   for (const x of s.modules)
     if (isBuilt(x) && x.health < DAMAGED && x.repair <= 0)
-      out.push({ id: `repair-${x.id}`, level: "warn", text: `The ${name(x.type)} is damaged and not working.`, fix: { kind: "act", label: "Repair (10 materials)", action: { type: "repair", id: x.id } } });
+      out.push(
+        s.res.materials >= REPAIR_COST
+          ? { id: `repair-${x.id}`, level: "warn", text: `The ${name(x.type)} is damaged and not working.`, fix: { kind: "act", label: `Repair (${REPAIR_COST} materials)`, action: { type: "repair", id: x.id } } }
+          : { id: `repair-${x.id}`, level: "warn", text: `The ${name(x.type)} is damaged, and repairs need ${REPAIR_COST} materials. Haul regolith with the rover, or recycle a module you can spare.`, fix: { kind: "rover", label: "Get regolith", target: "regolith" } },
+      );
   if (s.dust > 0.2 && !activeHazard(s, "dust"))
     out.push({ id: "dust", level: "warn", text: "Dust is blocking the solar panels. Clean them for full power.", fix: { kind: "act", label: "Clean panels", action: { type: "clean" } } });
   const rv = s.rover;
