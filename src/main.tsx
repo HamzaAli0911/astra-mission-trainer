@@ -39,5 +39,5 @@ createRoot(document.getElementById("root")!).render(
 );
 
 // Bake the Moon and Mars in the background while the title screen is up.
-warmUp();
+warmUp(useUI.getState().settings.graphics === "ultra");
 startAutosave();

@@ -62,8 +62,7 @@ function dome(planet: Planet) {
         col += vec3(0.85, 0.72, 0.55) * pow(band, 5.0) * clouds * 0.06 * (1.0 - lanes);
         // No air to scatter sunlight: only a tight glare around the Sun.
         col += vec3(1.0, 0.94, 0.82) * (pow(sd, 1600.0) * 30.0 + pow(sd, 90.0) * 0.12 + pow(sd, 12.0) * 0.012);
-        // A radiation storm tints the sky (for the player; it is invisible in reality).
-        col += vec3(0.45, 0.12, 0.6) * storm * (0.03 + 0.05 * fbm3(d * 3.0 + vec3(0.0, storm, 0.0)));
+
       #else
         float h = max(d.y, 0.0);
         float up = smoothstep(-0.12, 0.18, sunDir.y);
@@ -71,13 +70,15 @@ function dome(planet: Planet) {
         // Dust scatters blue light forward, so the Sun sits in a blue halo at sunset.
         float low = 1.0 - smoothstep(0.02, 0.5, sunDir.y);
         sky = mix(sky, dusk, pow(sd, 5.0) * (0.25 + low * 0.7));
+        // A pale aureole around the Sun from dust scattering light forward, and a hazy, brighter horizon.
+        sky += vec3(1.0, 0.92, 0.8) * pow(sd, 8.0) * 0.22 * up;
+        sky *= 0.86 + 0.3 * pow(1.0 - h, 4.0);
         sky += vec3(1.0, 0.96, 0.9) * (pow(sd, 2400.0) * 20.0 + pow(sd, 60.0) * 0.25);
         // The horizon away from the Sun goes dim first.
         sky *= mix(1.0, 0.55 + 0.45 * sd, low * 0.6);
         vec3 night = vec3(0.006, 0.006, 0.014) + vec3(0.02, 0.012, 0.01) * (1.0 - h);
         col = mix(night, sky, up);
         col = mix(col, dustColor * (0.08 + 0.92 * up) * (0.9 + 0.2 * fbm3(d * 4.0)), dust);
-        col += vec3(0.45, 0.12, 0.6) * storm * 0.04;
       #endif
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
@@ -233,6 +234,9 @@ function litBody(geo: THREE.BufferGeometry, map: THREE.Texture | null, color: st
         vec3 base = useMap > 0.5 ? texture2D(map, vUv).rgb : tint;
         float lit = smoothstep(-0.08, 0.35, l);
         vec3 col = base * (0.012 + lit * 1.5);
+        // Sunlight glinting off the oceans (blue, unclouded areas).
+        float ocean = useMap > 0.5 ? smoothstep(0.05, 0.25, base.b - max(base.r, base.g)) : 0.0;
+        col += vec3(1.0, 0.95, 0.85) * pow(max(dot(reflect(-sunDir, n), vV), 0.0), 60.0) * ocean * 0.8 * lit;
         float f = pow(1.0 - max(dot(n, vV), 0.0), 3.0);
         col += rim * f * smoothstep(-0.3, 0.4, l) * 1.6;
         gl_FragColor = vec4(col, fade);
@@ -275,16 +279,18 @@ export function buildSky(baked: Baked): Sky {
   if (planet === "moon") {
     // From the lunar south pole Earth hangs low over the horizon and never sets.
     const earth = litBody(new THREE.SphereGeometry(1, 48, 32), baked.earth ? earthTexture(baked.earth) : null, "#2a62b8", "#5aa0ff");
-    earth.mesh.scale.setScalar(70);
+    // Close to Earth's real size in the lunar sky (about 2°), a little enlarged so it reads at game distances.
+    earth.mesh.scale.setScalar(44);
     earth.mesh.rotation.set(0.4, 2.2, 0.1);
-    bodies.push({ ...earth, dir: new THREE.Vector3(-0.42, 0.21, -0.9).normalize(), dist: SKY_RADIUS * 0.85, drift: 0.01 });
+    bodies.push({ ...earth, dir: new THREE.Vector3(-0.42, 0.17, -0.9).normalize(), dist: SKY_RADIUS * 0.85, drift: 0.01 });
     group.add(earth.mesh);
   } else {
     const phobos = litBody(lumpy(3, 1.3), null, "#7d6f66", null);
-    phobos.mesh.scale.setScalar(26);
+    // Phobos looks about a third the size of our Moon from Mars; Deimos is little more than a bright star.
+    phobos.mesh.scale.setScalar(9);
     bodies.push({ ...phobos, dir: new THREE.Vector3(0.6, 0.38, -0.7).normalize(), dist: SKY_RADIUS * 0.85, drift: 0.06 });
     const deimos = litBody(lumpy(9, 1.15), null, "#8a7d72", null);
-    deimos.mesh.scale.setScalar(9);
+    deimos.mesh.scale.setScalar(3);
     bodies.push({ ...deimos, dir: new THREE.Vector3(-0.5, 0.55, 0.66).normalize(), dist: SKY_RADIUS * 0.85, drift: 0.015 });
     group.add(phobos.mesh, deimos.mesh);
   }
@@ -299,7 +305,8 @@ export function buildSky(baked: Baked): Sky {
       sky.uniforms.dust.value = o.dust;
       sky.uniforms.storm.value = o.storm;
       const night = planet === "moon" ? 1 : 1 - THREE.MathUtils.smoothstep(dir.y, -0.15, 0.15);
-      st.uniforms.fade.value = (planet === "moon" ? 1 : night * 0.9) * (1 - o.dust * 0.95);
+      // Stars fade in daylight (the bright ground swamps them), and fully on Mars where the sky glows.
+      st.uniforms.fade.value = (planet === "moon" ? 0.4 + 0.6 * (1 - o.day) : night * 0.9) * (1 - o.dust * 0.95);
       st.uniforms.time.value = o.time;
       st.uniforms.scale.value = o.pixelRatio;
       sun.position.copy(dir).multiplyScalar(SKY_RADIUS * 0.9);
@@ -318,19 +325,28 @@ export function buildSky(baked: Baked): Sky {
 /** A soft image of the sky and ground, so metal and glass have something to reflect. */
 export function environmentMap(renderer: THREE.WebGLRenderer, planet: Planet) {
   const scene = new THREE.Scene();
-  const top = planet === "moon" ? "#0b0e18" : "#a77a58",
-    mid = planet === "moon" ? "#3b3d44" : "#d7a77d",
-    ground = planet === "moon" ? "#6f7077" : "#8f5537";
+  // What shiny things see: on the Moon a black sky over bright grey ground; on Mars a butterscotch sky over rusty ground.
+  const top = planet === "moon" ? "#020306" : "#9a6c4c",
+    mid = planet === "moon" ? "#2b2c31" : "#d9a77b",
+    ground = planet === "moon" ? "#8d8e93" : "#94593b";
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
-    uniforms: { top: { value: new THREE.Color(top) }, mid: { value: new THREE.Color(mid) }, ground: { value: new THREE.Color(ground) } },
+    uniforms: {
+      top: { value: new THREE.Color(top) },
+      mid: { value: new THREE.Color(mid) },
+      ground: { value: new THREE.Color(ground) },
+      sun: { value: new THREE.Vector3(0.6, planet === "moon" ? 0.22 : 0.45, -0.75).normalize() },
+    },
     vertexShader: "varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: /* glsl */ `
-      uniform vec3 top, mid, ground; varying vec3 vP;
+      uniform vec3 top, mid, ground, sun; varying vec3 vP;
       void main() {
         vec3 d = normalize(vP);
-        vec3 c = d.y > 0.0 ? mix(mid, top, pow(d.y, 0.4)) : mix(mid, ground, pow(-d.y, 0.3));
-        c += vec3(1.0, 0.95, 0.85) * pow(max(dot(d, normalize(vec3(0.6, 0.25, -0.75))), 0.0), 64.0) * 8.0;
+        vec3 c = d.y > 0.0 ? mix(mid, top, pow(d.y, 0.35)) : mix(mid, ground, pow(-d.y, 0.25));
+        // The sunlit side of the ground is brighter than the side in shadow.
+        float facing = dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(sun.x, 0.0, sun.z)));
+        if (d.y < 0.0) c *= 0.75 + 0.45 * (facing * 0.5 + 0.5);
+        c += vec3(1.0, 0.95, 0.85) * pow(max(dot(d, sun), 0.0), 220.0) * 30.0 + vec3(1.0, 0.92, 0.8) * pow(max(dot(d, sun), 0.0), 12.0) * 0.25;
         gl_FragColor = vec4(c, 1.0);
       }`,
   });

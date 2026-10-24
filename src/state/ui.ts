@@ -22,8 +22,8 @@ export interface Settings {
   unlockAll: boolean;
   /** Show the on-screen drive pad: auto (touch screens), on, off. */
   pad: "auto" | "on" | "off";
-  /** 3D detail: auto adapts to the device; high adds glow and soft shadows; low is for slow computers. */
-  graphics: "auto" | "high" | "low";
+  /** 3D detail: auto adapts to the device; ultra is the best the browser can do; high adds glow and soft shadows; low is for slow computers. */
+  graphics: "auto" | "ultra" | "high" | "low";
   /** Show the map in the corner. */
   minimap: boolean;
 }
@@ -73,7 +73,7 @@ function readSettings(): Settings {
     bigText: bool(r.bigText, defaults.bigText),
     unlockAll: bool(r.unlockAll, defaults.unlockAll),
     pad: r.pad === "on" || r.pad === "off" ? r.pad : "auto",
-    graphics: r.graphics === "high" || r.graphics === "low" ? r.graphics : "auto",
+    graphics: r.graphics === "ultra" || r.graphics === "high" || r.graphics === "low" ? r.graphics : "auto",
     minimap: bool(r.minimap, defaults.minimap),
   }));
 }

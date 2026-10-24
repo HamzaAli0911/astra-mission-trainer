@@ -3381,38 +3381,29 @@ p.catch::before {
   transition: opacity 1.2s;
   z-index: 4;
 }
+/* Radiation is invisible, so the storm cue is an interface frame (a warning border), not a tint on the world. */
 .fx-storm {
-  background:
-    radial-gradient(ellipse at center, transparent 45%, rgba(170, 60, 255, 0.35) 100%),
-    repeating-linear-gradient(115deg, transparent 0 22px, rgba(220, 140, 255, 0.05) 22px 23px);
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 92, 170, 0.55),
+    inset 0 0 90px rgba(255, 92, 170, 0.16);
   animation: storm 2.4s ease-in-out infinite;
 }
 .fx-storm.on {
   opacity: 1;
 }
 .fx-storm.safe {
-  opacity: 0.45;
+  opacity: 0.35;
 }
 @keyframes storm {
   50% {
-    filter: brightness(1.4);
+    box-shadow:
+      inset 0 0 0 3px rgba(255, 92, 170, 0.85),
+      inset 0 0 120px rgba(255, 92, 170, 0.24);
   }
 }
+/* The dust storm itself is drawn in 3D; this only darkens the edges a little. */
 .fx-dust {
-  background:
-    repeating-linear-gradient(100deg, transparent 0 40px, rgba(214, 150, 100, 0.07) 40px 44px, transparent 44px 90px),
-    radial-gradient(ellipse at center, rgba(190, 110, 60, 0.14), rgba(150, 80, 40, 0.5));
-  background-size:
-    400px 100%,
-    100% 100%;
-  animation: blow 1.6s linear infinite;
-}
-@keyframes blow {
-  to {
-    background-position:
-      400px 0,
-      0 0;
-  }
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(120, 66, 34, 0.32));
 }
 .fx-dust.on {
   opacity: 1;

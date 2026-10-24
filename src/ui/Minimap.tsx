@@ -5,7 +5,7 @@ import { modulePos } from "../sim/rover";
 import type { Planet } from "../sim/types";
 import { DOCK, LANDER, SITES } from "../sim/world";
 import { MAP_SPAN, RELIEF_SIZE } from "../scene/bake";
-import { bakedNow } from "../scene/prebake";
+import { anyBaked } from "../scene/prebake";
 import { scene3d } from "../scene/anchors";
 import { SITE_COLOR } from "../scene/effects";
 import { useGame } from "../state/game";
@@ -20,7 +20,7 @@ const reliefs = new Map<Planet, HTMLCanvasElement>();
 function relief(planet: Planet) {
   const cached = reliefs.get(planet);
   if (cached) return cached;
-  const baked = bakedNow(planet);
+  const baked = anyBaked(planet);
   if (!baked) return null;
   const c = document.createElement("canvas");
   c.width = c.height = RELIEF_SIZE;

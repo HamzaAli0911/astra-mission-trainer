@@ -94,10 +94,10 @@ function SettingsDialog({ close }: { close: () => void }) {
       <div className="setting">
         <div>
           <b>Graphics</b>
-          <small>High adds glowing lights and soft shadows. Low runs faster on older computers.</small>
+          <small>Ultra adds ambient occlusion, sharper shadows and the finest detail (needs a strong graphics card). High adds glow and soft shadows. Low runs faster on older computers.</small>
         </div>
         <span className="segmented">
-          {(["auto", "high", "low"] as Settings["graphics"][]).map((v) => (
+          {(["auto", "low", "high", "ultra"] as Settings["graphics"][]).map((v) => (
             <button key={v} className={s.graphics === v ? "on" : ""} aria-pressed={s.graphics === v} onClick={() => set("graphics", v)}>
               {v[0].toUpperCase() + v.slice(1)}
             </button>

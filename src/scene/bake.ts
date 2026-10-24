@@ -37,9 +37,8 @@ export interface MeshArrays {
 }
 
 /** The playable ground, coloured by geology. */
-function terrainArrays(planet: Planet): MeshArrays {
-  const size = HORIZON * 2,
-    seg = 340;
+function terrainArrays(planet: Planet, seg: number): MeshArrays {
+  const size = HORIZON * 2;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -58,7 +57,8 @@ function terrainArrays(planet: Planet): MeshArrays {
     crater = new THREE.Color(P.crater),
     rim = new THREE.Color(P.rim),
     c = new THREE.Color(),
-    tmp = new THREE.Color();
+    tmp = new THREE.Color(),
+    frost = new THREE.Color(planet === "moon" ? "#aeb8c4" : "#d9d4cf");
   const colors = new Float32Array(pos.count * 3);
   const ray = SITES.find((s) => s.id === "ray")!;
   for (let i = 0; i < pos.count; i++) {
@@ -97,6 +97,12 @@ function terrainArrays(planet: Planet): MeshArrays {
       }
       if (y > 1.5 && Math.hypot((x + 30) * 0.8, z + 132) < 32) c.lerp(tmp.set(Math.sin(y * 3.1) > 0 ? "#c98a62" : "#8a4a33"), 0.5);
       c.lerp(tmp.set("#c4805a"), smooth(70, 25, Math.hypot(x - 40, z - 112)) * 0.4);
+    }
+    // Frost mixed into the regolith on the floor of the permanently dark crater.
+    const cd = Math.hypot(x - CRATER.x, z - CRATER.z) / CRATER.r;
+    if (cd < 0.85) {
+      const patches = THREE.MathUtils.smoothstep(fbm(x * 0.09 + 3, z * 0.09 - 7), 0.42, 0.62);
+      c.lerp(frost, patches * (1 - THREE.MathUtils.smoothstep(cd, 0.55, 0.85)) * (planet === "moon" ? 0.5 : 0.35));
     }
     // Around the lander: a blast-scoured patch.
     const ld = Math.hypot(x - LANDER.x, z - LANDER.z);
@@ -293,6 +299,8 @@ function reliefPixels(planet: Planet) {
 
 export interface Baked {
   planet: Planet;
+  /** Finer ground mesh (about 0.9 m between points instead of 1.4 m), for the Ultra setting. */
+  fine: boolean;
   terrain: MeshArrays;
   horizon: MeshArrays;
   detail: { color: Uint8ClampedArray; normal: Uint8ClampedArray };
@@ -300,10 +308,11 @@ export interface Baked {
   relief: Uint8ClampedArray;
 }
 
-export function bakePlanet(planet: Planet): Baked {
+export function bakePlanet(planet: Planet, fine = false): Baked {
   return {
     planet,
-    terrain: terrainArrays(planet),
+    fine,
+    terrain: terrainArrays(planet, fine ? 520 : 340),
     horizon: horizonArrays(planet),
     detail: detailPixels(planet),
     earth: planet === "moon" ? earthPixels() : null,

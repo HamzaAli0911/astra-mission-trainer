@@ -238,15 +238,22 @@ const NO_CRATERS: Crater[] = [];
 export const cratersNear = (x: number, z: number) => craterGrid.get(`${Math.floor(x / CRATER_BUCKET)},${Math.floor(z / CRATER_BUCKET)}`) ?? NO_CRATERS;
 
 function crater(y: number, x: number, z: number, c: Crater) {
-  const d = Math.hypot(x - c.x, z - c.z) / c.r;
+  const dx = x - c.x,
+    dz = z - c.z;
+  const d = Math.hypot(dx, dz) / c.r;
   if (d >= 2.2) return y;
-  const rim = c.depth * 0.32;
+  // Real rims are never perfect circles: the crest rises and dips around the crater.
+  const a = Math.atan2(dz, dx);
+  const wobble = 1 + (noise(Math.cos(a) * 1.8 + c.x * 0.13, Math.sin(a) * 1.8 + c.z * 0.13) - 0.5) * 0.4;
+  const rim = c.depth * 0.32 * wobble;
   if (d < 1) {
     // Bowl with a slightly flat floor, rising to the rim crest.
     const bowl = -c.depth * (1 - d * d) ** 1.15;
     return y * (0.35 + 0.65 * d) + bowl + rim * d ** 6;
   }
-  return y + rim * Math.exp(-(((d - 1) / 0.38) ** 2));
+  // Outside the rim: the crest falls away into a hummocky blanket of ejecta.
+  const ejecta = (noise(x * 0.32 + c.x, z * 0.32 + c.z) - 0.5) * c.depth * 0.14 * (1 - smooth(1.05, 2.2, d)) * smooth(0.98, 1.12, d);
+  return y + rim * Math.exp(-(((d - 1) / 0.38) ** 2)) + ejecta;
 }
 
 /** Ground height in metres: flat at the outpost, rolling plains, craters, and mountains at the map edge. */
@@ -262,8 +269,15 @@ export function terrainHeight(x: number, z: number, planet: Planet = "moon") {
     // Dunes to the north-east, a layered mesa to the south.
     const dunes = smooth(70, 30, Math.hypot(x - 40, z - 112));
     y += dunes * (Math.sin(x * 0.32 + z * 0.12) * 0.75 + Math.sin(x * 0.11 - z * 0.05) * 0.5);
-    const mesa = smooth(30, 22, Math.hypot((x + 30) * 0.8, z + 132));
-    y += mesa * 7 + (mesa > 0.05 && mesa < 0.95 ? Math.sin(mesa * 18) * 0.25 : 0);
+    // The mesa: an eroded, irregular outline and stepped sides where harder layers stand out as ledges.
+    const ma = Math.atan2(z + 132, (x + 30) * 0.8);
+    const edge = Math.hypot((x + 30) * 0.8, z + 132) + (noise(Math.cos(ma) * 2.2 + 40, Math.sin(ma) * 2.2 + 40) - 0.5) * 7;
+    const mesa = smooth(31, 21, edge);
+    const strata = mesa * 7.5,
+      layer = 1.25,
+      steps = Math.floor(strata / layer),
+      frac = strata / layer - steps;
+    y += (steps + smooth(0.45, 1, frac)) * layer * 0.8 + strata * 0.2;
   }
   const r = Math.hypot(x, z);
   y *= smooth(FLAT - 6, FLAT + 16, r);

@@ -5,6 +5,9 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import { gradePass } from "./grade";
 import { activeHazard, capacity, flows, isBuilt, isWorking, shieldDone } from "../sim/core";
 import { MODULES, SHIELD_TIME } from "../sim/modules";
 import { clockOf, dayOf, daylight, isDaytime, PLANETS } from "../sim/planets";
@@ -17,8 +20,8 @@ import { tick } from "../lib/sound";
 import { anchors, followers, scene3d } from "./anchors";
 import { buildCockpit, EYE, type CockpitData } from "./cockpit";
 import { buildSiteMarker, dustSystem, impactSystem, SITE_COLOR, sparkSystem, stormStreaks } from "./effects";
-import { dispose, light, paint } from "./kit";
-import { buildAstronaut, buildDock, buildFlag, buildLander, buildModule, buildPad, buildRover, scaffold, type ModuleView } from "./models";
+import { dispose, light, rubber } from "./kit";
+import { buildAstronaut, buildDock, buildFlag, buildLander, buildModule, buildPad, buildRover, poseAstronaut, scaffold, type ModuleView } from "./models";
 import type { Baked } from "./bake";
 import { bakedNow, prebake } from "./prebake";
 import { buildSky, environmentMap } from "./sky";
@@ -63,7 +66,7 @@ function flowTexture() {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, 64, 4);
   ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, 22, 4);
+  ctx.fillRect(0, 0, 7, 4);
   cableTexture = new THREE.CanvasTexture(c);
   cableTexture.wrapS = THREE.RepeatWrapping;
   return cableTexture;
@@ -85,30 +88,30 @@ function buildCable(m: Module, planet: Planet): Entry["cable"] {
     const bend = Math.sin((i / n) * Math.PI) * 0.6;
     v.x += -uz * bend;
     v.z += ux * bend;
-    v.y = terrainHeight(v.x, v.z, planet) + 0.09;
+    v.y = terrainHeight(v.x, v.z, planet) + 0.06;
     pts.push(v);
   }
   const curve = new THREE.CatmullRomCurve3(pts);
   const group = new THREE.Group();
-  const cord = new THREE.Mesh(new THREE.TubeGeometry(curve, n * 6, 0.07, 6), paint("#262b36", 0.9));
-  cord.receiveShadow = true;
+  const cord = new THREE.Mesh(new THREE.TubeGeometry(curve, n * 6, 0.055, 7), rubber("#24282f"));
+  cord.receiveShadow = cord.castShadow = true;
   group.add(cord);
   const tex = flowTexture().clone();
   tex.wrapS = THREE.RepeatWrapping;
-  tex.repeat.set(Math.max(1, Math.round(curve.getLength() / 1.6)), 1);
+  tex.repeat.set(Math.max(1, Math.round(curve.getLength() / 2.6)), 1);
   tex.needsUpdate = true;
-  const flow = light("#ffc94a", 1.6);
+  const flow = light("#ffc94a", 1);
   flow.alphaMap = tex;
   flow.transparent = true;
   flow.depthWrite = false;
-  const strip = new THREE.Mesh(new THREE.TubeGeometry(curve, n * 6, 0.085, 6), flow);
+  const strip = new THREE.Mesh(new THREE.TubeGeometry(curve, n * 6, 0.06, 7), flow);
   group.add(strip);
   const gen = m.type === "solar" || m.type === "reactor";
   return { group, flow, tex, dir: gen ? -1 : 1 };
 }
 
-/** Render quality: 0 low (no glow, no shadows), 1 medium, 2 high. */
-type Level = 0 | 1 | 2;
+/** Render quality: 0 low (no glow, no shadows), 1 medium, 2 high, 3 ultra (ambient occlusion, SMAA, sharper shadows). */
+type Level = 0 | 1 | 2 | 3;
 
 export function World() {
   const host = useRef<HTMLDivElement>(null);
@@ -118,25 +121,26 @@ export function World() {
   const graphics = useUI((s) => s.settings.graphics);
   const [failed, setFailed] = useState(false);
   // The planet's ground and textures are baked in a worker; wait for them (usually they are ready).
-  const [baked, setBaked] = useState<Baked | null>(() => bakedNow(planet));
+  const fine = graphics === "ultra";
+  const [baked, setBaked] = useState<Baked | null>(() => bakedNow(planet, fine));
   const [warming, setWarming] = useState(true);
   useEffect(() => {
-    const now = bakedNow(planet);
+    const now = bakedNow(planet, fine);
     if (now) {
       setBaked(now);
       return;
     }
     setBaked(null);
     let alive = true;
-    void prebake(planet).then((b) => alive && setBaked(b));
+    void prebake(planet, fine).then((b) => alive && setBaked(b));
     return () => {
       alive = false;
     };
-  }, [planet]);
+  }, [planet, fine]);
 
   useEffect(() => {
     const el = host.current;
-    if (!el || !baked || baked.planet !== planet) return;
+    if (!el || !baked || baked.planet !== planet || baked.fine !== fine) return;
     // The scene is built in slices with short pauses between them, so the page never locks up for long.
     let alive = true;
     let teardown: (() => void) | null = null;
@@ -151,14 +155,14 @@ export function World() {
       }
       const reduced = reduce || matchMedia("(prefers-reduced-motion: reduce)").matches;
       const touch = matchMedia("(pointer: coarse)").matches;
-      let level: Level = graphics === "low" ? 0 : graphics === "high" ? 2 : touch ? 1 : 2;
+      let level: Level = graphics === "low" ? 0 : graphics === "ultra" ? 3 : graphics === "high" ? 2 : touch ? 1 : 2;
       let ratio = 1,
         ratioCap = Infinity;
       // Sharp screens get extra resolution only up to a pixel budget, so a Retina laptop doesn't render 4 million pixels with glow.
       const pickRatio = () => {
         const area = Math.max(1, el.clientWidth * el.clientHeight);
-        const fit = Math.sqrt((level === 2 ? 3.2e6 : 1.8e6) / area);
-        const top = level === 2 ? 1.5 : level === 1 ? 1.25 : 1;
+        const fit = Math.sqrt((level === 3 ? 4.2e6 : level === 2 ? 3.2e6 : 1.8e6) / area);
+        const top = level === 3 ? 2 : level === 2 ? 1.5 : level === 1 ? 1.25 : 1;
         return Math.max(1, Math.min(devicePixelRatio, top, ratioCap, fit));
       };
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -202,16 +206,30 @@ export function World() {
       const env = environmentMap(renderer, planet);
       scene.environment = env.texture;
       scene.environmentIntensity = planet === "moon" ? 0.32 : 0.55;
-      const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: devicePixelRatio >= 1.5 ? 2 : 4 });
+      const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: level === 3 || devicePixelRatio < 1.5 ? 4 : 2 });
       const composer = new EffectComposer(renderer, target);
       composer.addPass(new RenderPass(scene, camera));
-      const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.42, 1.05);
+      // Ultra: ground-truth ambient occlusion darkens creases, joints and where things meet the ground.
+      if (level === 3) {
+        const gtao = new GTAOPass(scene, camera, 512, 512);
+        gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12, distanceFallOff: 1 });
+        gtao.blendIntensity = 0.85;
+        // Occlusion is soft and low-frequency: compute it at half resolution (about a quarter of the cost) and upsample.
+        const fullSize = gtao.setSize.bind(gtao);
+        gtao.setSize = (w: number, h: number) => fullSize(Math.ceil(w / 2), Math.ceil(h / 2));
+        composer.addPass(gtao);
+      }
+      // Bloom only on genuinely bright things (lamps, the Sun, screens), not on sunlit surfaces.
+      const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.38, 1.25);
       composer.addPass(bloom);
       composer.addPass(new OutputPass());
+      composer.addPass(gradePass(planet));
+      if (level === 3) composer.addPass(new SMAAPass());
 
       // Lights.
       const sun = new THREE.DirectionalLight("#fff4e2", 3);
-      sun.shadow.mapSize.set(2048, 2048);
+      const shadowSize = level === 3 ? 4096 : 2048;
+      sun.shadow.mapSize.set(shadowSize, shadowSize);
       sun.shadow.camera.near = 1;
       sun.shadow.camera.far = 600;
       let shadowHalf = 50;
@@ -251,7 +269,7 @@ export function World() {
       const terrain = buildTerrain(baked);
       scene.add(terrain);
       scene.add(buildHorizon(baked));
-      scene.add(buildRocks(baked, level > 0));
+      scene.add(buildRocks(baked, level > 0, level === 3));
       if (!(await slice())) return;
       const ice = buildIce(planet);
       scene.add(ice);
@@ -262,11 +280,11 @@ export function World() {
       scene.fog = planet === "moon" ? null : marsFog;
       const tracks = trackSystem(planet);
       scene.add(tracks.mesh);
-      const dust = dustSystem(PALETTE[planet].light);
+      const dust = dustSystem(PALETTE[planet].light, planet);
       scene.add(dust.points);
       const sparks = sparkSystem();
       scene.add(sparks.points);
-      const impact = impactSystem();
+      const impact = impactSystem(planet);
       scene.add(impact.group);
       const streaks = stormStreaks();
       scene.add(streaks.lines);
@@ -735,8 +753,14 @@ export function World() {
       const shift = new THREE.Vector2(),
         shiftWant = new THREE.Vector2();
       const roverPos = new THREE.Vector3(DOCK.x, 0, DOCK.z);
+      const wheelAt = new THREE.Vector3();
       const trackFrom = new THREE.Vector3(DOCK.x, 0, DOCK.z);
       const fogDay = new THREE.Color();
+      const lightBasis = new THREE.Matrix4(),
+        lightInverse = new THREE.Matrix4(),
+        snapped = new THREE.Vector3(),
+        ORIGIN = new THREE.Vector3(),
+        UP_AXIS = new THREE.Vector3(0, 1, 0);
       /** Warm-up stage while the landing screen is up: 0 no shadows or glow, 1 shadows, 2 glow, 3 running. */
       let warmStage = 3;
       const frame = (now: number) => {
@@ -791,8 +815,6 @@ export function World() {
         // Sun, sky and light.
         const dir = sunDirection(planet, g.t);
         const reach = camera.position.distanceTo(controls.target);
-        sun.position.copy(controls.target).addScaledVector(dir, 260);
-        sun.target.position.copy(controls.target);
         // Shadows cover what the camera can see.
         const half = THREE.MathUtils.clamp(reach * 0.8, 30, 130);
         if (Math.abs(half - shadowHalf) > 4) {
@@ -800,6 +822,13 @@ export function World() {
           Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half });
           sun.shadow.camera.updateProjectionMatrix();
         }
+        // Snap the shadow camera to whole shadow-map texels, so shadow edges don't shimmer as the view moves.
+        const texel = (2 * shadowHalf) / shadowSize;
+        lightBasis.lookAt(dir, ORIGIN, UP_AXIS);
+        snapped.copy(controls.target).applyMatrix4(lightInverse.copy(lightBasis).invert());
+        snapped.set(Math.round(snapped.x / texel) * texel, Math.round(snapped.y / texel) * texel, snapped.z).applyMatrix4(lightBasis);
+        sun.target.position.copy(snapped);
+        sun.position.copy(snapped).addScaledVector(dir, 260);
         const dim = 1 - dustLevel * 0.65;
         sun.intensity = (planet === "moon" ? 3.6 : 2.9) * THREE.MathUtils.clamp(dir.y * 8, 0, 1) * dim;
         sun.color.set(planet === "mars" && dir.y < 0.25 ? "#ffd2a8" : "#fff4e2");
@@ -818,9 +847,10 @@ export function World() {
           hemi.intensity = 0.35 + day * 0.55 * dim;
           fill.intensity = 0.3 - day * 0.1;
         }
-        sky.update(camera, dir, { day, dust: dustLevel, storm: stormLevel, time: clock, pixelRatio: ratio });
+        // Radiation is invisible: storms are shown by the interface, not painted on the sky.
+        sky.update(camera, dir, { day, dust: dustLevel, storm: 0, time: clock, pixelRatio: ratio });
         scene.environmentIntensity = (planet === "moon" ? 0.32 : 0.55) * (0.35 + 0.65 * day);
-        bloom.strength = 0.45 + stormLevel * 0.15;
+
 
         // Modules.
         const live = new Set<number>();
@@ -864,7 +894,7 @@ export function World() {
           e.view.status.emissive.set(lamp);
           e.view.status.emissiveIntensity = damaged ? (Math.sin(clock * 8) > 0 ? 3.5 : 0.4) : 2.4;
           const power = m.type === "greenhouse" ? (m.light / 2) * r : r;
-          for (const gm of e.view.glow) gm.emissiveIntensity = 0.08 + power * (m.type === "reactor" ? 2.6 : 1.9) * (m.type === "oxygen" ? 0.7 + Math.sin(clock * 3) * 0.3 : 1);
+          for (const gm of e.view.glow) gm.emissiveIntensity = 0.08 + power * 1.9 * (gm.userData.glow ?? 1) * (m.type === "oxygen" ? 0.7 + Math.sin(clock * 3) * 0.3 : 1);
           for (const b of e.view.blink) b.emissiveIntensity = (clock * 0.8 + m.id * 0.37) % 1 < 0.12 ? 5 : 0.15;
           if (working && r > 0.2 && !reduced) for (const sp of e.view.spin) sp.rotation.y += dt * (m.type === "icedrill" ? 6 : m.type === "lab" ? 0.4 : 3) * r;
           if (e.view.yaw && e.view.tilt) {
@@ -884,14 +914,12 @@ export function World() {
           if (e.view.shield) {
             const target = g.shieldStarted ? 0.25 + 0.75 * Math.min(1, g.shield / SHIELD_TIME) : 0;
             shieldPct.v += (target - shieldPct.v) * Math.min(1, dt * 2);
-            e.view.shield.visible = shieldPct.v > 0.02;
-            e.view.shield.scale.set(1, Math.max(0.01, shieldPct.v), 1);
-            e.view.shield.position.y = shieldDone(g) ? 0 : -0.2;
+            e.view.shieldProgress?.(shieldDone(g) ? 1 : shieldPct.v);
           }
           if (e.cable) {
             const flowing = m.type === "solar" || m.type === "reactor" ? working && f.gen > 0.05 : working && r > 0.05 && f.ratio[m.id] !== undefined;
-            e.cable.flow.emissiveIntensity = flowing ? 1.8 : 0.05;
-            e.cable.flow.opacity = flowing ? 0.95 : 0.25;
+            e.cable.flow.emissiveIntensity = flowing ? 1.1 : 0.03;
+            e.cable.flow.opacity = flowing ? 0.8 : 0.12;
             if (!reduced) e.cable.tex.offset.x -= dt * 1.2 * e.cable.dir;
           }
         }
@@ -947,7 +975,14 @@ export function World() {
         rover.group.rotateX(pitch);
         rover.group.rotateZ(roll);
         const moved = prev.distanceTo(roverPos);
-        if (moved < 12) for (const w of rover.wheels) w.rotation.x -= (moved / 0.47) * Math.sign(rv.speed || 1);
+        if (moved < 12) for (const w of rover.wheels) w.rotation.x -= (moved / 0.478) * Math.sign(rv.speed || 1);
+        // Each wheel follows the ground under it: the suspension soaks up what the body's tilt doesn't.
+        rover.group.updateMatrixWorld();
+        for (const w of rover.wheels) {
+          wheelAt.set(w.position.x, rover.wheelY, w.position.z).applyMatrix4(rover.group.matrixWorld);
+          const lift = THREE.MathUtils.clamp(terrainHeight(wheelAt.x, wheelAt.z, planet) - (wheelAt.y - rover.wheelY), -0.16, 0.16);
+          w.position.y += (rover.wheelY + lift - w.position.y) * Math.min(1, dt * 12);
+        }
         if (moved > 12) {
           tracks.reset();
           trackFrom.copy(roverPos);
@@ -961,10 +996,17 @@ export function World() {
         rover.tail.emissiveIntensity = rv.speed < -0.5 ? 3.5 : 1.2;
         rover.beacon.emissiveIntensity = (clock * 0.9) % 1 < 0.12 ? 5 : 0.15;
         if (Math.abs(rv.speed) > 2 && !reduced && moved < 12)
-          for (let i = 0; i < 2; i++) dust.emit(rv.x - fx * 2 + (Math.random() - 0.5) * 1.8, ground + 0.3, rv.z - fz * 2, -fx * 0.8, 1.2, -fz * 0.8, 1.4, 1, 0.9);
+          for (const side of [-1, 1]) {
+            // A spray from each rear wheel: on the Moon a ballistic "rooster tail", on Mars a puff that hangs.
+            const wx = rv.x - fx * 1.5 + Math.cos(rv.heading) * side * 1.2,
+              wz = rv.z - fz * 1.5 - Math.sin(rv.heading) * side * 1.2;
+            const kick = Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);
+            for (let i = 0; i < (planet === "moon" ? 3 : 1); i++)
+              dust.emit(wx, ground + 0.15, wz, -fx * kick * 2.2, planet === "moon" ? 1.2 + kick * 1.6 : 0.8, -fz * kick * 2.2, planet === "moon" ? 0.9 : 1.4, 1, planet === "moon" ? 1.1 : 0.8);
+          }
         if (dustLevel > 0.3 && !reduced)
           for (let i = 0; i < 3; i++) dust.emit(controls.target.x - 45 + Math.random() * 14, 0.5 + Math.random() * 8, controls.target.z - 40 + Math.random() * 60, 20, 0.2, 2, 2, 3, 0.45);
-        dust.update(dt, planet === "moon" ? 1.6 : 3.7);
+        dust.update(dt, planet === "mars" ? 1.5 + dustLevel * 9 : 0);
         sparks.update(dt, planet === "moon" ? 1.6 : 3.7);
         dust.mat.uniforms.scale.value = ratio;
         sparks.mat.uniforms.scale.value = ratio;
@@ -989,14 +1031,7 @@ export function World() {
           w.position.set(x, terrainHeight(x, z, planet), z);
           w.rotation.y = Math.atan2(-(tx - sx), -(tz - sz)) + (back > 0 ? Math.PI : 0);
           const walking = (k < 0.34 || k > 0.75) && !reduced;
-          const swing = walking ? Math.sin(clock * 7 + i) * 0.6 : 0;
-          const legs = w.userData.legs as THREE.Object3D[],
-            arms = w.userData.arms as THREE.Object3D[];
-          legs[0].rotation.x = swing;
-          legs[1].rotation.x = -swing;
-          arms[0].rotation.x = -swing * 0.8;
-          arms[1].rotation.x = walking ? swing * 0.8 : -1.1 + Math.sin(clock * 4) * 0.2;
-          w.position.y += walking ? Math.abs(Math.sin(clock * 7 + i)) * (planet === "moon" ? 0.22 : 0.1) : 0;
+          w.position.y += poseAstronaut(w, reduced ? 0 : clock, walking || (reduced && (k < 0.34 || k > 0.75)), planet, i * 1.7);
           if (!walking && !reduced && Math.random() < dt * 3) dust.emit(tx, terrainHeight(tx, tz, planet) + 0.2, tz, 0, 0.5, 0, 0.8, 0.6, 1.2);
         });
 
@@ -1020,7 +1055,7 @@ export function World() {
         (glints.material as THREE.PointsMaterial).opacity = 0.55 + Math.sin(clock * 3) * 0.3;
 
         // Storm effects and Geiger clicks.
-        streaks.update(clock, controls.target.x, controls.target.z, reduced ? stormLevel * 0.4 : stormLevel * 0.8);
+        streaks.update(clock, controls.target.x, controls.target.z, 0);
         if (storm && ui.settings.sound && !st.paused) {
           const exposed = !g.sheltering || !rv.docked;
           geigerAt -= dt;
@@ -1081,6 +1116,29 @@ export function World() {
         raf = requestAnimationFrame(loop);
         frame(now);
       };
+      if (debug) {
+        // Test hooks (?debug only): place the overview camera exactly, and grab a frame as an image.
+        debug.place = (pos: [number, number, number], at: [number, number, number]) => {
+          setView("orbit");
+          blend = 1;
+          follow = false;
+          goal.set(at[0], 0, at[2]);
+          controls.target.set(...at);
+          camera.position.set(...pos);
+          controls.enabled = true;
+          controls.update();
+        };
+        debug.view = (v: View) => {
+          setView(v);
+          blend = 0.999;
+        };
+        debug.snap = (frames = 1) => {
+          for (let i = 0; i < frames; i++) frame(performance.now());
+          return renderer.domElement.toDataURL("image/jpeg", 0.9);
+        };
+        debug.scene = scene;
+        debug.composer = composer;
+      }
       // The buildings already standing at the start, one slice at a time.
       for (const m of useGame.getState().game.modules) {
         if (!(await slice())) return;

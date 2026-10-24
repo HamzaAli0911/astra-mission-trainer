@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Planet } from "../sim/types";
-import { ball, box, cyl, finalize, glass, light, metal, paint, rbox, strut, torus } from "./kit";
+import { ball, box, cyl, finalize, glass, light, paint, rbox, strut, torus } from "./kit";
 
 /** Where the driver's eyes are, in the rover's own frame (forward is −z). */
 export const EYE = new THREE.Vector3(-0.42, 2.0, 0.05);
@@ -299,39 +299,39 @@ export function buildCockpit() {
   const shell = lit("#3a4150", 0.85, 0.1),
     trim = lit("#262c38", 0.75, 0.15),
     soft = lit("#4a5263", 0.95),
-    frame = metal("#8892a6", 0.4),
+    frame = lit("#8892a6", 0.4, 0.6),
     accent = paint("#ff8a3d", 0.5);
   // Floor, ceiling and the walls below and above the side windows.
-  box(g, 1.96, 0.04, 2.9, trim, 0, 1.08, 0.3);
-  box(g, 2.0, 0.05, 2.25, shell, 0, 2.36, 0.58);
+  box(g, 1.96, 0.04, 3.35, trim, 0, 1.08, 0.075);
+  box(g, 2.0, 0.05, 2.75, shell, 0, 2.36, 0.35);
   for (const x of [-1, 1]) {
-    box(g, 0.04, 0.72, 2.85, shell, x * 0.99, 1.44, 0.3);
+    box(g, 0.04, 0.72, 3.3, shell, x * 0.99, 1.44, 0.08);
     box(g, 0.04, 0.14, 2.85, shell, x * 0.99, 2.28, 0.3);
-    box(g, 0.04, 0.44, 0.45, shell, x * 0.99, 2.0, -0.92);
-    box(g, 0.04, 0.44, 1.45, shell, x * 0.99, 2.0, 1.0);
-    box(g, 0.06, 0.05, 0.98, frame, x * 0.98, 1.79, -0.2);
-    box(g, 0.06, 0.05, 0.98, frame, x * 0.98, 2.21, -0.2);
+    box(g, 0.04, 0.44, 0.55, shell, x * 0.99, 2.0, -1.0);
+    box(g, 0.04, 0.44, 1.5, shell, x * 0.99, 2.0, 0.975);
+    box(g, 0.06, 0.05, 0.98, frame, x * 0.98, 1.79, -0.25);
+    box(g, 0.06, 0.05, 0.98, frame, x * 0.98, 2.21, -0.25);
     box(g, 0.05, 0.035, 2.6, accent, x * 0.965, 1.6, 0.3);
   }
   // Window glass: a faint tint and reflections.
   for (const x of [-1, 1]) {
     const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.42), glass("#9fd6ff", 0.08));
-    pane.position.set(x * 1.0, 2.0, -0.2);
+    pane.position.set(x * 1.0, 2.0, -0.25);
     pane.rotation.y = (x * Math.PI) / 2;
     g.add(pane);
   }
-  const shield = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.72), glass("#9fd6ff", 0.06));
-  shield.position.set(0, 2.02, -0.8);
-  shield.rotation.x = -0.45;
+  const shield = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.66), glass("#9fd6ff", 0.06));
+  shield.position.set(0, 2.05, -1.2);
+  shield.rotation.x = 0.7;
   g.add(shield);
   // Window frame: pillars and the header.
-  for (const x of [-1, 1]) strut(g, x * 0.97, 1.7, -0.88, x * 0.95, 2.34, -0.74, 0.045, trim);
-  box(g, 1.98, 0.08, 0.2, trim, 0, 2.33, -0.8);
+  for (const x of [-1, 1]) strut(g, x * 0.95, 1.76, -1.46, x * 0.95, 2.32, -1.0, 0.045, trim);
+  box(g, 1.98, 0.08, 0.24, trim, 0, 2.33, -0.96);
   rbox(g, 0.62, 0.06, 0.34, 0.02, trim, 0, 2.31, -0.18);
   for (let i = 0; i < 4; i++) ball(g, 0.018, light(i === 0 ? "#3ee39a" : "#5ee0ff", 2), -0.18 + i * 0.12, 2.275, -0.08, 6);
   // Dashboard.
-  rbox(g, 1.96, 0.36, 0.55, 0.08, trim, 0, 1.5, -0.95).rotation.x = 0.18;
-  rbox(g, 1.9, 0.06, 0.42, 0.03, soft, 0, 1.69, -0.84).rotation.x = -0.12;
+  rbox(g, 1.96, 0.4, 0.78, 0.08, trim, 0, 1.52, -1.13).rotation.x = 0.12;
+  rbox(g, 1.9, 0.06, 0.62, 0.03, soft, 0, 1.73, -1.02).rotation.x = -0.1;
   // A control yoke in front of the driver, and a joystick for the co-driver.
   torus(g, 0.15, 0.022, frame, EYE.x, 1.66, -0.52, Math.PI).rotation.x = -0.35;
   cyl(g, 0.025, 0.025, 0.2, frame, EYE.x, 1.62, -0.6, 8).rotation.x = 1.2;
@@ -352,13 +352,13 @@ export function buildCockpit() {
   // Screens: driving, navigation, systems.
   const screens = [makeScreen(drawDrive), makeScreen(drawNav), makeScreen(drawSystems)];
   const at: [number, number, number, number][] = [
-    [EYE.x, 1.77, -0.82, 0.12],
-    [0.08, 1.77, -0.84, -0.02],
-    [0.58, 1.77, -0.82, -0.2],
+    [EYE.x, 1.86, -0.9, 0.12],
+    [0.08, 1.86, -0.92, -0.02],
+    [0.58, 1.86, -0.9, -0.2],
   ];
   screens.forEach((s, i) => {
     const [x, y, z, yaw] = at[i];
-    const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.47, 0.31, 0.03), paint("#141922", 0.5));
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.47, 0.31, 0.03), lit("#141922", 0.5));
     const face = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.2625), s.mat);
     const holder = new THREE.Group();
     holder.position.set(x, y, z);

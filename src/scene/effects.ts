@@ -117,8 +117,14 @@ export function buildSiteMarker(s: Site, planet: Planet): SiteMarker {
   return { group: g, ring, ringMat, beam, beamMat, pool, lamp, color };
 }
 
-/** Soft dust particles kicked up by wheels, storms and construction. */
-export function dustSystem(color: string, count = 420) {
+/**
+ * Dust kicked up by wheels, boots, storms and construction. On the airless Moon
+ * grains fly in clean ballistic arcs and fall straight back (no billowing, no
+ * drift); on Mars the thin air slows them, lets them hang and carries them downwind.
+ */
+export function dustSystem(color: string, planet: Planet, count = 520) {
+  const air = planet === "mars";
+  const gravity = air ? 3.71 : 1.62;
   const pos = new Float32Array(count * 3),
     vel = new Float32Array(count * 3),
     life = new Float32Array(count),
@@ -130,7 +136,7 @@ export function dustSystem(color: string, count = 420) {
   geo.setAttribute("alpha", new THREE.BufferAttribute(alpha, 1));
   geo.setAttribute("size", new THREE.BufferAttribute(size, 1));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color(color) }, scale: { value: 1 } },
+    uniforms: { color: { value: new THREE.Color(color) }, scale: { value: 1 }, soft: { value: air ? 1 : 0.35 } },
     vertexShader: /* glsl */ `
       attribute float alpha; attribute float size; varying float vA; uniform float scale;
       void main() {
@@ -141,11 +147,12 @@ export function dustSystem(color: string, count = 420) {
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 color; varying float vA;
+      uniform vec3 color; uniform float soft; varying float vA;
       void main() {
         float d = length(gl_PointCoord - 0.5) * 2.0;
         if (d > 1.0) discard;
-        gl_FragColor = vec4(color, vA * (1.0 - d) * (1.0 - d));
+        float edge = mix(1.0 - smoothstep(0.55, 1.0, d), (1.0 - d) * (1.0 - d), soft);
+        gl_FragColor = vec4(color, vA * edge);
         #include <colorspace_fragment>
       }`,
     transparent: true,
@@ -163,9 +170,9 @@ export function dustSystem(color: string, count = 420) {
       vel.set([vx + (Math.random() - 0.5) * spread, vy + Math.random() * spread * 0.6, vz + (Math.random() - 0.5) * spread], i * 3);
       life[i] = 1;
       speed[i] = fade;
-      size[i] = (0.6 + Math.random() * 0.8) * grow;
+      size[i] = (0.6 + Math.random() * 0.8) * grow * (air ? 1 : 0.45);
     },
-    update(dt: number, gravity: number) {
+    update(dt: number, wind = 0) {
       for (let i = 0; i < count; i++) {
         if (life[i] <= 0) {
           alpha[i] = 0;
@@ -173,14 +180,18 @@ export function dustSystem(color: string, count = 420) {
         }
         life[i] -= dt * speed[i];
         vel[i * 3 + 1] -= gravity * dt;
-        const drag = Math.max(0, 1 - dt * 0.6);
-        vel[i * 3] *= drag;
-        vel[i * 3 + 2] *= drag;
+        if (air) {
+          // Thin air: drag, a slow settle, and a drift downwind; puffs spread as they go.
+          const drag = Math.max(0, 1 - dt * 0.9);
+          vel[i * 3] = vel[i * 3] * drag + wind * dt * 0.8;
+          vel[i * 3 + 1] = Math.max(vel[i * 3 + 1] * drag, -0.9);
+          vel[i * 3 + 2] *= drag;
+          size[i] += dt * 0.9;
+        }
         pos[i * 3] += vel[i * 3] * dt;
         pos[i * 3 + 1] = Math.max(pos[i * 3 + 1] + vel[i * 3 + 1] * dt, -50);
         pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
-        size[i] += dt * 0.9;
-        alpha[i] = Math.max(0, life[i]) * 0.5;
+        alpha[i] = Math.max(0, life[i]) * (air ? 0.5 : 0.75);
       }
       geo.attributes.position.needsUpdate = true;
       geo.attributes.alpha.needsUpdate = true;
@@ -253,8 +264,8 @@ export function sparkSystem(count = 300) {
   };
 }
 
-/** A meteor streaking in and the flash when it hits. */
-export function impactSystem() {
+/** A meteor hit: on Mars a short bright streak through the air, then the flash; on the airless Moon just the impact flash. */
+export function impactSystem(planet: Planet) {
   const group = new THREE.Group();
   const flashMat = new THREE.SpriteMaterial({ map: softGlow(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
   flashMat.color.setRGB(6, 4.5, 3);
@@ -289,7 +300,7 @@ export function impactSystem() {
         trail.position.copy(head).add(tail).multiplyScalar(0.5);
         trail.scale.set(1, head.distanceTo(tail), 1);
         trail.quaternion.setFromUnitVectors(up, head.clone().sub(tail).normalize());
-        trailMat.opacity = 0.9;
+        trailMat.opacity = planet === "mars" ? 0.9 : 0;
         flashMat.opacity = 0;
         return false;
       }
