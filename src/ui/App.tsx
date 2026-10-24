@@ -7,7 +7,7 @@ import { useUI } from "../state/ui";
 import { World } from "../scene/World";
 import { play } from "../lib/sound";
 import { hush } from "../lib/speech";
-import { Atmosphere, Capcom, Crew, Dock, DrivePad, Goals, openPause, Toasts, TopBar, useAdvisorHints, WorldLabels } from "./hud";
+import { Atmosphere, Capcom, Crew, Dock, DrivePad, Goals, nextView, openPause, Toasts, TopBar, useAdvisorHints, ViewSwitcher, WorldLabels } from "./hud";
 import { Drawer, usePadGuard } from "./panels";
 import { AlertCard, Briefing, ChoiceCard, Debrief } from "./overlays";
 import { Coach } from "./Coach";
@@ -124,6 +124,10 @@ export default function App() {
         case "KeyF":
           ui.cam("rover");
           break;
+        case "KeyV":
+          ui.setView(nextView(ui.view));
+          play("toggle");
+          break;
         case "Escape":
           if (ui.placing) ui.place(null);
           else if (ui.selected) ui.select(null);
@@ -181,6 +185,7 @@ function Game() {
       <Toasts />
       <Capcom />
       <Dock />
+      <ViewSwitcher />
       <DrivePad />
       <Drawer />
       {reason === "hidden" && (

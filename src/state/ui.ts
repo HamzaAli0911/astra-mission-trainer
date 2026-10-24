@@ -4,6 +4,8 @@ import type { ModuleType } from "../sim/types";
 
 export type Screen = "title" | "map" | "game";
 export type Panel = "build" | "power" | "rover" | "crew";
+/** Camera: free look over the outpost, chase behind the rover, or the driver's seat. */
+export type View = "orbit" | "chase" | "cockpit";
 export type Modal = "pause" | "settings" | "guide" | "library" | "teachers" | "credits" | "reset";
 export type Selection =
   | { kind: "module"; id: number }
@@ -102,6 +104,7 @@ export interface UIStore {
   /** A module picked in the build menu, waiting for the player to choose a pad. */
   placing: ModuleType | null;
   camera: { cmd: "base" | "rover" | "reset" | "in" | "out" | "left" | "right" | "focus"; n: number };
+  view: View;
   /** Index of the active tutorial step, or null. */
   tutorial: number | null;
   /** How many times the player has moved the camera (the tutorial checks it). */
@@ -116,6 +119,7 @@ export interface UIStore {
   setFocus: (id: string) => void;
   place: (t: ModuleType | null) => void;
   cam: (cmd: UIStore["camera"]["cmd"]) => void;
+  setView: (v: View) => void;
   setTutorial: (step: number | null) => void;
   noteLook: () => void;
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
@@ -134,11 +138,12 @@ export const useUI = create<UIStore>((set, get) => ({
   focus: CAMPAIGN[0].id,
   placing: null,
   camera: { cmd: "reset", n: 0 },
+  view: "orbit",
   tutorial: null,
   looked: 0,
   settings: readSettings(),
   progress: readProgress(),
-  setScreen: (screen) => set({ screen, panel: null, selected: null, modal: null, placing: null }),
+  setScreen: (screen) => set({ screen, panel: null, selected: null, modal: null, placing: null, view: "orbit" }),
   openPanel: (panel) => set({ panel, placing: panel === "build" ? get().placing : null }),
   togglePanel: (p) => {
     const open = get().panel === p ? null : p;
@@ -149,6 +154,7 @@ export const useUI = create<UIStore>((set, get) => ({
   setFocus: (focus) => set({ focus }),
   place: (placing) => set({ placing }),
   cam: (cmd) => set({ camera: { cmd, n: get().camera.n + 1 } }),
+  setView: (view) => set({ view }),
   setTutorial: (tutorial) => set({ tutorial }),
   noteLook: () => set({ looked: get().looked + 1 }),
   setSetting: (key, value) => {

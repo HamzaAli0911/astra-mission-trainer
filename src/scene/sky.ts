@@ -180,7 +180,8 @@ function sunSprite(planet: Planet) {
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
   mat.color.setRGB(4, 3.8, 3.4);
   const s = new THREE.Sprite(mat);
-  const size = planet === "mars" ? 420 : 620;
+  // No air on the Moon to spread the glare: a smaller, sharper Sun.
+  const size = planet === "mars" ? 420 : 380;
   s.scale.set(size, size, 1);
   s.renderOrder = -8;
   return s;

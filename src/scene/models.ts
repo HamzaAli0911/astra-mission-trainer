@@ -587,7 +587,11 @@ export function scaffold(height: number) {
 
 export interface RoverView {
   group: THREE.Group;
+  /** The sprung body (everything but the wheels): it bobs a little over bumps. */
+  body: THREE.Object3D;
   wheels: THREE.Object3D[];
+  /** Window glass, hidden in the driver's view so the crew can see out. */
+  glass: THREE.Object3D[];
   heads: THREE.MeshStandardMaterial;
   tail: THREE.MeshStandardMaterial;
   beacon: THREE.MeshStandardMaterial;
@@ -596,39 +600,63 @@ export interface RoverView {
 /** A small pressurised rover: the crew drive in shirt-sleeves and step out through suitports at the back. */
 export function buildRover(): RoverView {
   const g = new THREE.Group();
+  const body = keep(new THREE.Group());
+  g.add(body);
   const white = paint(WHITE, 0.5, 0.1),
     dark = paint(DARK, 0.6, 0.35),
-    frame = metal("#9aa3b4", 0.4);
-  rbox(g, 2.2, 0.42, 4.0, 0.12, dark, 0, 0.86, 0);
-  rbox(g, 2.1, 1.38, 3.0, 0.45, white, 0, 1.7, 0.3);
-  rbox(g, 2.0, 0.85, 1.1, 0.32, white, 0, 1.42, -1.3);
-  const glassFront = rbox(g, 1.86, 0.6, 0.7, 0.2, visor(), 0, 1.98, -1.08);
-  glassFront.rotation.x = -0.38;
-  for (const x of [-1.06, 1.06]) rbox(g, 0.05, 0.42, 0.95, 0.04, visor(), x, 2.0, -0.2);
-  box(g, 2.13, 0.13, 3.0, paint(ORANGE, 0.5), 0, 1.32, 0.3);
-  box(g, 2.03, 0.08, 1.1, paint(ORANGE, 0.5), 0, 1.6, -1.3);
-  rbox(g, 1.7, 0.06, 1.6, 0.02, frame, 0, 2.4, 0.75);
-  box(g, 1.6, 0.04, 1.5, cellsMaterial(), 0, 2.44, 0.75);
+    frame = metal("#9aa3b4", 0.4),
+    orange = paint(ORANGE, 0.5);
+  rbox(body, 2.2, 0.42, 4.0, 0.12, dark, 0, 0.86, 0);
+  rbox(body, 2.1, 1.38, 3.0, 0.45, white, 0, 1.7, 0.3);
+  rbox(body, 2.0, 0.6, 1.1, 0.26, white, 0, 1.3, -1.3);
+  // Window glass stays separate so the driver's view can hide it.
+  const glass: THREE.Object3D[] = [];
+  const front = keep(rbox(body, 1.86, 0.6, 0.7, 0.2, visor(), 0, 1.98, -1.08));
+  front.rotation.x = -0.38;
+  glass.push(front);
+  for (const x of [-1.06, 1.06]) glass.push(keep(rbox(body, 0.05, 0.42, 0.95, 0.04, visor(), x, 2.0, -0.2)));
+  for (const x of [-1.06, 1.06]) box(body, 0.03, 0.13, 3.0, orange, x, 1.32, 0.3);
+  box(body, 2.03, 0.07, 1.1, orange, 0, 1.42, -1.3);
+  // Roof: solar panel, light bar, antenna and dish.
+  rbox(body, 1.7, 0.06, 1.6, 0.02, frame, 0, 2.4, 0.75);
+  box(body, 1.6, 0.04, 1.5, cellsMaterial(), 0, 2.44, 0.75);
+  for (const x of [-0.9, 0.9]) box(body, 0.05, 0.05, 1.9, frame, x, 2.45, 0.55);
   const heads = light("#fff3d6", 2.5);
   for (const x of [-0.62, 0.62]) {
-    rbox(g, 0.46, 0.2, 0.08, 0.04, paint(DARK, 0.4), x, 1.12, -1.97);
-    box(g, 0.38, 0.13, 0.04, heads, x, 1.12, -2.02);
+    rbox(body, 0.46, 0.2, 0.08, 0.04, paint(DARK, 0.4), x, 1.12, -1.97);
+    box(body, 0.38, 0.13, 0.04, heads, x, 1.12, -2.02);
   }
-  rbox(g, 1.3, 0.12, 0.16, 0.04, paint(DARK, 0.4), 0, 2.44, -0.55);
-  box(g, 1.2, 0.07, 0.04, heads, 0, 2.44, -0.64);
+  rbox(body, 1.3, 0.12, 0.16, 0.04, paint(DARK, 0.4), 0, 2.44, -0.55);
+  box(body, 1.2, 0.07, 0.04, heads, 0, 2.44, -0.64);
   const tail = light("#ff5a3d", 1.8);
-  for (const x of [-0.8, 0.8]) box(g, 0.28, 0.12, 0.05, tail, x, 1.0, 2.01);
-  // Suitports on the back wall.
+  for (const x of [-0.8, 0.8]) box(body, 0.28, 0.12, 0.05, tail, x, 1.0, 2.01);
+  const marker = light("#ffb020", 1.6);
+  for (const x of [-1.11, 1.11]) for (const z of [-1.6, 1.7]) box(body, 0.03, 0.06, 0.12, marker, x, 1.0, z);
+  // Suitports on the back wall, with a step below.
   for (const x of [-0.48, 0.48]) {
-    torus(g, 0.33, 0.06, frame, x, 1.75, 1.82);
-    cyl(g, 0.3, 0.3, 0.06, paint(OFF, 0.5), x, 1.75, 1.82, 20).rotation.x = Math.PI / 2;
+    torus(body, 0.33, 0.06, frame, x, 1.75, 1.82);
+    cyl(body, 0.3, 0.3, 0.06, paint(OFF, 0.5), x, 1.75, 1.82, 20).rotation.x = Math.PI / 2;
+    box(body, 0.06, 0.06, 0.3, frame, x + 0.36, 2.0, 1.92);
   }
-  cyl(g, 0.03, 0.03, 1.0, frame, -0.75, 2.9, 1.3, 6);
+  rbox(body, 1.6, 0.06, 0.3, 0.02, frame, 0, 1.08, 2.1);
+  // Side lockers and handrails.
+  for (const x of [-1, 1]) {
+    rbox(body, 0.14, 0.42, 1.1, 0.04, paint(GREY, 0.5, 0.3), x * 1.12, 1.62, 0.95);
+    for (const z of [0.6, 1.3]) box(body, 0.02, 0.36, 0.02, paint(DARK, 0.5), x * 1.195, 1.62, z);
+    box(body, 0.04, 0.04, 1.4, frame, x * 1.13, 2.18, 1.0);
+  }
+  cyl(body, 0.03, 0.03, 1.0, frame, -0.75, 2.9, 1.3, 6);
   const beacon = light("#ff4d5e", 3);
-  ball(g, 0.07, beacon, -0.75, 3.42, 1.3, 8);
-  const dish = cyl(g, 0.3, 0.06, 0.1, paint(WHITE, 0.4), 0.7, 2.62, 1.45, 16);
+  ball(body, 0.07, beacon, -0.75, 3.42, 1.3, 8);
+  const dish = cyl(body, 0.3, 0.06, 0.1, paint(WHITE, 0.4), 0.7, 2.62, 1.45, 16);
   dish.rotation.x = 0.6;
-  for (const z of [-1.3, 0, 1.3]) for (const x of [-1.16, 1.16]) rbox(g, 0.5, 0.07, 1.0, 0.03, dark, x, 1.0, z);
+  // Fenders, and suspension arms reaching down to each wheel.
+  for (const z of [-1.3, 0, 1.3])
+    for (const x of [-1, 1]) {
+      rbox(body, 0.5, 0.07, 1.0, 0.03, dark, x * 1.16, 1.0, z);
+      strut(body, x * 0.95, 0.8, z - 0.25, x * 1.05, 0.5, z, 0.04, frame);
+      strut(body, x * 0.95, 0.8, z + 0.25, x * 1.05, 0.5, z, 0.04, frame);
+    }
   const tyre = paint("#232832", 0.95),
     tread = paint("#3a4150", 0.9),
     hub = metal("#b8c0cc", 0.35);
@@ -638,11 +666,12 @@ export function buildRover(): RoverView {
       const w = keep(new THREE.Group());
       w.position.set(x, 0.47, z);
       g.add(w);
-      cyl(w, 0.47, 0.47, 0.36, tyre, 0, 0, 0, 20).rotation.z = Math.PI / 2;
-      cyl(w, 0.25, 0.25, 0.38, hub, 0, 0, 0, 12).rotation.z = Math.PI / 2;
-      for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * Math.PI * 2;
-        const t = box(w, 0.38, 0.05, 0.13, tread, 0, Math.cos(a) * 0.47, Math.sin(a) * 0.47);
+      cyl(w, 0.47, 0.47, 0.36, tyre, 0, 0, 0, 24).rotation.z = Math.PI / 2;
+      cyl(w, 0.25, 0.25, 0.38, hub, 0, 0, 0, 14).rotation.z = Math.PI / 2;
+      torus(w, 0.36, 0.03, hub, Math.sign(x) * 0.19, 0, 0).rotation.y = Math.PI / 2;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const t = box(w, 0.38, 0.06, 0.12, tread, 0, Math.cos(a) * 0.47, Math.sin(a) * 0.47);
         t.rotation.x = -a;
       }
       for (let i = 0; i < 5; i++) box(w, 0.4, 0.05, 0.42, hub, 0, 0, 0).rotation.x = (i / 5) * Math.PI;
@@ -650,12 +679,12 @@ export function buildRover(): RoverView {
     }
   const arm = keep(new THREE.Group());
   arm.position.set(0.85, 1.2, -1.75);
-  g.add(arm);
+  body.add(arm);
   strut(arm, 0, 0, 0, 0, 0.35, -0.45, 0.06, frame);
   strut(arm, 0, 0.35, -0.45, 0, -0.15, -0.75, 0.05, frame);
   ball(arm, 0.12, dark, 0, -0.18, -0.77, 10);
   finalize(g);
-  return { group: g, wheels, heads, tail, beacon, arm };
+  return { group: g, body, wheels, glass, heads, tail, beacon, arm };
 }
 const cellsMaterial = () => cells(1.5, 1.4);
 

@@ -17,6 +17,18 @@ export const PALETTE = {
   mars: { ground: "#b46b45", dark: "#6b3322", light: "#d69a6a", crater: "#5d3a33", rim: "#d8a275", rock: "#8a4c35", track: "#5a2c1c" },
 };
 
+const details = new Map<Planet, { map: THREE.Texture; nmap: THREE.Texture }>();
+/** The detail maps, made once per planet and shared by the ground and the rocks. */
+function detailFor(planet: Planet) {
+  let d = details.get(planet);
+  if (!d) {
+    d = detailMaps(planet);
+    d.map.userData.shared = d.nmap.userData.shared = true;
+    details.set(planet, d);
+  }
+  return d;
+}
+
 /** Tileable detail: small craters, grit and pebbles, as a colour map and a normal map. */
 function detailMaps(planet: Planet) {
   const N = 512;
@@ -161,7 +173,7 @@ export function buildTerrain(planet: Planet) {
     colors[i * 3 + 2] = c.b;
   }
   geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const { map, nmap } = detailMaps(planet);
+  const { map, nmap } = detailFor(planet);
   map.repeat.set(size / 16, size / 16);
   nmap.repeat.copy(map.repeat);
   const mat = new THREE.MeshStandardMaterial({
@@ -248,14 +260,20 @@ function rockGeometry(seed: number, detail: number, squash: number) {
   const r = rng(seed);
   const bumps = Array.from({ length: 6 }, () => new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).normalize());
   const v = new THREE.Vector3();
+  const shade = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
     v.set(p.getX(i), p.getY(i), p.getZ(i));
     let k = 0.85;
     for (const b of bumps) k += Math.max(0, v.dot(b)) ** 3 * 0.22;
-    k += (noise(v.x * 3 + seed, v.z * 3 + v.y * 2) - 0.5) * 0.25;
+    const n = noise(v.x * 3 + seed, v.z * 3 + v.y * 2);
+    k += (n - 0.5) * 0.25 + (noise(v.x * 9 - seed, v.y * 9 + v.z * 5) - 0.5) * 0.06;
     v.multiplyScalar(k);
     p.setXYZ(i, v.x, v.y * squash, v.z);
+    // Hollows are darker, bulges and the top catch more dust (lighter).
+    const c = THREE.MathUtils.clamp(0.62 + (k - 0.85) * 1.4 + Math.max(0, v.y) * 0.18 + (n - 0.5) * 0.25, 0.45, 1.15);
+    shade.set([c, c, c], i * 3);
   }
+  g.setAttribute("color", new THREE.BufferAttribute(shade, 3));
   g.computeVertexNormals();
   return g;
 }
@@ -263,7 +281,16 @@ function rockGeometry(seed: number, detail: number, squash: number) {
 /** Boulders (three shapes, instanced) and thousands of scattered pebbles. */
 export function buildRocks(planet: Planet, pebbles = true) {
   const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.92, flatShading: true });
+  // Rocks reuse the ground's grit as a fine rough surface, at a smaller scale.
+  const d = detailFor(planet);
+  const grit = d.map.clone(),
+    bumps = d.nmap.clone();
+  for (const t of [grit, bumps]) {
+    t.repeat.set(3, 3);
+    t.needsUpdate = true;
+  }
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: grit, normalMap: bumps, normalScale: new THREE.Vector2(1.4, 1.4), roughness: 0.93, flatShading: true });
+  const plain = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.92, flatShading: true });
   // Small rocks share two simple shapes; big boulders get two detailed ones.
   const shapes = [rockGeometry(3, 1, 0.75), rockGeometry(8, 1, 0.6), rockGeometry(15, 2, 0.85), rockGeometry(27, 2, 0.7)];
   const m = new THREE.Matrix4(),
@@ -284,7 +311,7 @@ export function buildRocks(planet: Planet, pebbles = true) {
       v.set(rock.x, terrainHeight(rock.x, rock.z, planet) + rock.r * 0.15, rock.z);
       m.compose(v, q, s);
       inst.setMatrixAt(i, m);
-      color.copy(base).multiplyScalar(0.75 + r() * 0.45);
+      color.copy(base).multiplyScalar(1.15 + r() * 0.45);
       inst.setColorAt(i, color);
     });
     inst.castShadow = inst.receiveShadow = true;
@@ -292,7 +319,7 @@ export function buildRocks(planet: Planet, pebbles = true) {
   });
   if (pebbles) {
     const count = 3600;
-    const pebble = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), mat, count);
+    const pebble = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), plain, count);
     let n = 0;
     for (let i = 0; i < count * 3 && n < count; i++) {
       const x = (r() * 2 - 1) * (WORLD + 40),

@@ -134,9 +134,10 @@ export function dustSystem(color: string, count = 420) {
     vertexShader: /* glsl */ `
       attribute float alpha; attribute float size; varying float vA; uniform float scale;
       void main() {
-        vA = alpha;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = min(size * scale * 300.0 / -mv.z, 90.0);
+        // Puffs right in front of the lens fade out instead of filling the screen.
+        vA = alpha * smoothstep(1.5, 7.0, -mv.z);
+        gl_PointSize = min(size * scale * 220.0 / -mv.z, 64.0);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `

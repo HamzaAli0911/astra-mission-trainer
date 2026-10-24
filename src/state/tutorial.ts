@@ -210,7 +210,7 @@ const ICE_HUNTERS: Step[] = [
     hold: false,
     speed: 2,
     target: "3d:rover-body",
-    say: "Heading home. The rover recharges on the dock, using the outpost's power.",
+    say: "Heading home. The rover recharges on the dock, using the outpost's power. Tip: press Cockpit (bottom right, or V) to ride in the driver's seat.",
     done: (c) => c.game.stats.trips.ice > 0,
   },
   {

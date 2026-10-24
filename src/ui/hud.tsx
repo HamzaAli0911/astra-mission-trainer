@@ -10,16 +10,19 @@ import {
   ChevronUp,
   Circle,
   CircleAlert,
+  Gauge,
   Hammer,
   Info,
   Lightbulb,
   Menu,
   Moon,
+  Orbit,
   Pause,
   Play,
   Radio,
   Sun,
   TriangleAlert,
+  Video,
   Volume2,
   VolumeX,
   Wrench,
@@ -35,7 +38,7 @@ import { MODULES, spec } from "../sim/modules";
 import { clockOf, dayOf, hoursToSunChange, isDaytime, PLANETS } from "../sim/planets";
 import { SITES } from "../sim/world";
 import { useGame, SPEEDS } from "../state/game";
-import { useUI } from "../state/ui";
+import { useUI, type View } from "../state/ui";
 import { follow } from "../scene/anchors";
 import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
@@ -795,4 +798,41 @@ export function SoundToggle() {
 export function moduleIconFor(type: keyof typeof MODULE_ICON, size = 22) {
   const I = MODULE_ICON[type];
   return <I size={size} />;
+}
+
+const VIEWS: { id: View; label: string; title: string; icon: React.ReactNode }[] = [
+  { id: "orbit", label: "Overview", title: "Look over the whole outpost", icon: <Orbit size={20} /> },
+  { id: "chase", label: "Follow", title: "Ride behind the rover. Drag to look from any side.", icon: <Video size={20} /> },
+  { id: "cockpit", label: "Cockpit", title: "Sit in the driver's seat. Drag to look around.", icon: <Gauge size={20} /> },
+];
+/** Next camera view, for the V key. */
+export function nextView(v: View): View {
+  return VIEWS[(VIEWS.findIndex((x) => x.id === v) + 1) % VIEWS.length].id;
+}
+
+/** Switch between the overview, the follow camera and the driver's seat. */
+export function ViewSwitcher() {
+  const view = useUI((s) => s.view);
+  return (
+    <div className="view-switch" role="group" aria-label="Camera view" data-tut="views">
+      <span className="view-label">
+        View <kbd className="kbd">V</kbd>
+      </span>
+      {VIEWS.map((v) => (
+        <button
+          key={v.id}
+          className={view === v.id ? "on" : ""}
+          aria-pressed={view === v.id}
+          title={v.title}
+          onClick={() => {
+            useUI.getState().setView(v.id);
+            play("toggle");
+          }}
+        >
+          {v.icon}
+          <span>{v.label}</span>
+        </button>
+      ))}
+    </div>
+  );
 }

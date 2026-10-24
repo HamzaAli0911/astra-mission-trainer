@@ -7,15 +7,16 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { activeHazard, capacity, flows, isBuilt, isWorking, shieldDone } from "../sim/core";
 import { MODULES, SHIELD_TIME } from "../sim/modules";
-import { daylight, PLANETS } from "../sim/planets";
-import { modulePos } from "../sim/rover";
+import { clockOf, dayOf, daylight, isDaytime, PLANETS } from "../sim/planets";
+import { modulePos, ROVER } from "../sim/rover";
 import type { GameState, Module, Planet } from "../sim/types";
-import { CRATER, DOCK, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
+import { CRATER, DOCK, FOOTPRINT, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
 import { useGame } from "../state/game";
-import { useUI } from "../state/ui";
+import { useUI, type View } from "../state/ui";
 import { tick } from "../lib/sound";
 import { anchors, followers, scene3d } from "./anchors";
-import { buildSiteMarker, dustSystem, impactSystem, sparkSystem, stormStreaks } from "./effects";
+import { buildCockpit, EYE, type CockpitData } from "./cockpit";
+import { buildSiteMarker, dustSystem, impactSystem, SITE_COLOR, sparkSystem, stormStreaks } from "./effects";
 import { dispose, light, paint } from "./kit";
 import { buildAstronaut, buildDock, buildFlag, buildLander, buildModule, buildPad, buildRover, scaffold, type ModuleView } from "./models";
 import { buildSky, environmentMap } from "./sky";
@@ -142,6 +143,15 @@ export function World() {
     scene.background = new THREE.Color("#000000");
     const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 6000);
     camera.position.copy(HOME).add(OFFSET);
+    // Camera view: free look over the outpost, chase behind the rover, or the driver's seat.
+    let view: View = "orbit";
+    useUI.getState().setView("orbit");
+    const fovFor = (v: View) => {
+      // Keep the same width of world in view on tall phone screens.
+      const half = THREE.MathUtils.degToRad(21);
+      const base = camera.aspect >= 1.2 ? 42 : Math.min(78, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(half) * 1.2) / camera.aspect)));
+      return v === "cockpit" ? Math.max(base, 62) : v === "chase" ? Math.max(base, 50) : base;
+    };
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(HOME);
     controls.enableDamping = !reduced;
@@ -249,6 +259,8 @@ export function World() {
     headlight.position.set(0, 1.4, -2.0);
     headlight.target.position.set(0, 0, -14);
     rover.group.add(headlight, headlight.target);
+    const cockpit = buildCockpit();
+    rover.body.add(cockpit.group);
     const walkers = [buildAstronaut("#ff4d5e"), buildAstronaut("#5ee0ff")];
     for (const w of walkers) {
       w.visible = false;
@@ -264,9 +276,7 @@ export function World() {
       renderer.setSize(w, h, false);
       composer.setSize(w, h);
       camera.aspect = w / Math.max(1, h);
-      // Keep the same width of world in view on tall phone screens.
-      const half = THREE.MathUtils.degToRad(21);
-      camera.fov = camera.aspect >= 1.2 ? 42 : Math.min(78, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(half) * 1.2) / camera.aspect)));
+      camera.fov = fovFor(view);
       camera.updateProjectionMatrix();
     }
     const ro = new ResizeObserver(size);
@@ -350,60 +360,267 @@ export function World() {
     renderer.domElement.addEventListener("pointerup", onUp);
     renderer.domElement.addEventListener("pointermove", onMove);
 
-    // Camera rig: follow the rover while it is out, smooth moves on command.
+    // Camera rig. "orbit" is free look over the outpost; "chase" rides behind the rover and turns
+    // with it (drag to look from any side, it keeps that angle); "cockpit" is the driver's seat.
+    // Switching views glides between them.
     const goal = HOME.clone();
     let follow = false,
       lastCam = useUI.getState().camera.n,
-      wasDocked = useGame.getState().game.rover.docked;
+      wasDocked = useGame.getState().game.rover.docked,
+      blend = 1,
+      fromFov = camera.fov,
+      interacting = false,
+      touchedAt = -10,
+      lookAt = -10;
+    const orbitOffset = OFFSET.clone();
+    const chase = { yaw: 0, polar: 1.2, dist: 13 };
+    const look = { yaw: 0, pitch: -0.06 };
+    const fromPos = new THREE.Vector3(),
+      fromQuat = new THREE.Quaternion(),
+      toPos = new THREE.Vector3(),
+      toTarget = new THREE.Vector3(),
+      toQuat = new THREE.Quaternion(),
+      roverTarget = new THREE.Vector3(),
+      offset = new THREE.Vector3(),
+      sph = new THREE.Spherical(),
+      lookMatrix = new THREE.Matrix4(),
+      lookQuat = new THREE.Quaternion(),
+      lookEuler = new THREE.Euler(0, 0, 0, "YXZ");
+    const UP = new THREE.Vector3(0, 1, 0);
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
     controls.addEventListener("start", () => {
-      if (!follow) goal.copy(controls.target);
+      interacting = true;
+      if (view === "orbit" && !follow) goal.copy(controls.target);
       useUI.getState().noteLook();
     });
+    controls.addEventListener("end", () => {
+      interacting = false;
+      touchedAt = clock;
+    });
     scene3d.lookAt = (x, z) => {
+      setView("orbit");
       follow = false;
       goal.set(x, 0, z);
     };
-    const runCamera = (g: GameState) => {
-      const c = useUI.getState().camera;
+    function setView(next: View) {
+      if (useUI.getState().view !== next) useUI.getState().setView(next);
+      if (next === view) return;
+      if (view === "orbit" && blend >= 1) orbitOffset.copy(camera.position).sub(controls.target);
+      fromPos.copy(camera.position);
+      fromQuat.copy(camera.quaternion);
+      fromFov = camera.fov;
+      blend = 0;
+      view = next;
+      controls.enabled = false;
+      if (next === "chase") Object.assign(chase, { yaw: 0, polar: 1.2, dist: 13 });
+      if (next === "cockpit") Object.assign(look, { yaw: 0, pitch: -0.06 });
+      if (next === "orbit") follow = reduced && !useGame.getState().game.rover.docked;
+      controls.minDistance = next === "chase" ? 5 : 10;
+      controls.maxDistance = next === "chase" ? 70 : 260;
+      camera.near = next === "cockpit" ? 0.04 : 0.5;
+      camera.far = next === "cockpit" ? 3400 : 6000;
+    }
+    // Looking around from the driver's seat.
+    let lookFrom: { x: number; y: number } | null = null;
+    const onLookDown = (e: PointerEvent) => {
+      if (view === "cockpit") lookFrom = { x: e.clientX, y: e.clientY };
+    };
+    const onLookMove = (e: PointerEvent) => {
+      if (view !== "cockpit" || !lookFrom || !e.buttons) return;
+      look.yaw = THREE.MathUtils.clamp(look.yaw - (e.clientX - lookFrom.x) * 0.005, -2.6, 2.6);
+      look.pitch = THREE.MathUtils.clamp(look.pitch - (e.clientY - lookFrom.y) * 0.005, -0.9, 0.7);
+      lookFrom = { x: e.clientX, y: e.clientY };
+      lookAt = clock;
+      useUI.getState().noteLook();
+    };
+    const onLookUp = () => {
+      lookFrom = null;
+    };
+    renderer.domElement.addEventListener("pointerdown", onLookDown);
+    window.addEventListener("pointermove", onLookMove);
+    window.addEventListener("pointerup", onLookUp);
+
+    const runCamera = (g: GameState, dt: number) => {
+      const ui = useUI.getState();
+      if (ui.view !== view) setView(ui.view);
+      const rv = g.rover;
+      const c = ui.camera;
       if (c.n !== lastCam) {
         lastCam = c.n;
         const off = camera.position.clone().sub(controls.target);
         if (c.cmd === "base" || c.cmd === "reset") {
+          setView("orbit");
           follow = false;
           goal.copy(HOME);
-          if (c.cmd === "reset") camera.position.copy(controls.target).add(OFFSET);
-        } else if (c.cmd === "rover") follow = true;
+          if (c.cmd === "reset") {
+            orbitOffset.copy(OFFSET);
+            if (blend >= 1) camera.position.copy(controls.target).add(OFFSET);
+          }
+        } else if (c.cmd === "rover") setView("chase");
         else if (c.cmd === "in" || c.cmd === "out") {
-          off.multiplyScalar(c.cmd === "in" ? 0.75 : 1.33);
-          const len = THREE.MathUtils.clamp(off.length(), controls.minDistance, controls.maxDistance);
-          camera.position.copy(controls.target).add(off.setLength(len));
+          if (view === "chase") chase.dist = THREE.MathUtils.clamp(chase.dist * (c.cmd === "in" ? 0.75 : 1.33), 5, 70);
+          else if (view === "orbit") {
+            off.multiplyScalar(c.cmd === "in" ? 0.75 : 1.33);
+            const len = THREE.MathUtils.clamp(off.length(), controls.minDistance, controls.maxDistance);
+            camera.position.copy(controls.target).add(off.setLength(len));
+          }
         } else if (c.cmd === "left" || c.cmd === "right") {
-          off.applyAxisAngle(new THREE.Vector3(0, 1, 0), c.cmd === "left" ? -Math.PI / 5 : Math.PI / 5);
-          camera.position.copy(controls.target).add(off);
+          const turn = c.cmd === "left" ? -Math.PI / 5 : Math.PI / 5;
+          if (view === "chase") chase.yaw = wrap(chase.yaw + turn);
+          else if (view === "cockpit") look.yaw = THREE.MathUtils.clamp(look.yaw - turn, -2.6, 2.6);
+          else {
+            off.applyAxisAngle(UP, turn);
+            camera.position.copy(controls.target).add(off);
+          }
         } else if (c.cmd === "focus") {
-          const sel = useUI.getState().selected;
+          const sel = ui.selected;
           const m = sel?.kind === "module" ? g.modules.find((x) => x.id === sel.id) : null;
           if (m) {
+            setView("orbit");
             follow = false;
             const p = modulePos(m);
             goal.set(p.x, 0, p.z);
           }
         }
       }
-      if (g.rover.docked !== wasDocked) {
-        wasDocked = g.rover.docked;
-        follow = !g.rover.docked;
-        if (g.rover.docked) goal.copy(HOME);
+      // Leaving the dock: ride behind the rover. Back home: look over the outpost again.
+      if (rv.docked !== wasDocked) {
+        wasDocked = rv.docked;
+        if (!rv.docked && view === "orbit") {
+          if (reduced) follow = true;
+          else setView("chase");
+        } else if (rv.docked && view !== "cockpit") {
+          setView("orbit");
+          follow = false;
+          goal.copy(HOME);
+        }
       }
-      if (follow) goal.set(g.rover.x, 0, g.rover.z);
-      const before = controls.target.clone();
-      const k = reduced ? 1 : 0.08;
-      controls.target.lerp(goal, k);
-      controls.target.y = 0;
-      camera.position.add(controls.target.clone().sub(before));
-      // Keep the camera above the ground.
-      const floor = terrainHeight(camera.position.x, camera.position.z, planet) + 2.5;
-      if (camera.position.y < floor) camera.position.y = floor;
+      roverTarget.copy(rover.group.position);
+      roverTarget.y += 1.8;
+      const moving = Math.abs(rv.speed) > 3;
+
+      // Where the current view wants the camera.
+      if (view === "orbit") {
+        if (follow) goal.set(rv.x, 0, rv.z);
+        toTarget.copy(goal);
+        toPos.copy(goal).add(orbitOffset);
+      } else if (view === "chase") {
+        toTarget.copy(roverTarget);
+        sph.set(chase.dist, chase.polar, rv.heading + chase.yaw);
+        toPos.copy(roverTarget).add(offset.setFromSpherical(sph));
+      } else {
+        // The driver's view turns back to the road while driving, unless you are looking around.
+        if (moving && !lookFrom && clock - lookAt > 2.5 && !reduced) {
+          const k = 1 - Math.exp(-dt * 1.2);
+          look.yaw += (0 - look.yaw) * k;
+          look.pitch += (-0.06 - look.pitch) * k;
+        }
+        rover.group.updateMatrixWorld(true);
+        toPos.copy(EYE).applyMatrix4(rover.body.matrixWorld);
+        rover.body.getWorldQuaternion(toQuat);
+        lookEuler.set(look.pitch, look.yaw, 0);
+        toQuat.multiply(lookQuat.setFromEuler(lookEuler));
+        toTarget.copy(roverTarget);
+      }
+
+      // Gliding from the last view to this one.
+      if (blend < 1) {
+        blend = Math.min(1, blend + dt / (reduced ? 0.05 : 0.9));
+        const e = blend * blend * (3 - 2 * blend);
+        if (view !== "cockpit") toQuat.setFromRotationMatrix(lookMatrix.lookAt(toPos, toTarget, UP));
+        camera.position.lerpVectors(fromPos, toPos, e);
+        camera.quaternion.slerpQuaternions(fromQuat, toQuat, e);
+        camera.fov = fromFov + (fovFor(view) - fromFov) * e;
+        camera.updateProjectionMatrix();
+        if (blend >= 1) {
+          controls.target.copy(toTarget);
+          if (view !== "cockpit") {
+            camera.position.copy(toPos);
+            controls.enabled = true;
+            controls.update();
+          }
+        }
+        return;
+      }
+
+      if (view === "orbit") {
+        const before = controls.target.clone();
+        controls.target.lerp(goal, reduced ? 1 : 1 - Math.exp(-dt * 5));
+        controls.target.y = 0;
+        camera.position.add(controls.target.clone().sub(before));
+        controls.update();
+      } else if (view === "chase") {
+        camera.position.add(offset.copy(roverTarget).sub(controls.target));
+        controls.target.copy(roverTarget);
+        const busy = interacting || clock - touchedAt < 0.8;
+        if (!busy) {
+          // Swing round behind the rover as it turns (and drift back behind it after a while).
+          if (moving && clock - touchedAt > 3) chase.yaw *= Math.max(0, 1 - dt * 0.7);
+          sph.setFromVector3(offset.copy(camera.position).sub(roverTarget));
+          const k = reduced ? 1 : 1 - Math.exp(-dt * 4);
+          sph.theta += wrap(rv.heading + chase.yaw - sph.theta) * k;
+          sph.phi += (chase.polar - sph.phi) * k;
+          sph.radius += (chase.dist - sph.radius) * k;
+          camera.position.copy(roverTarget).add(offset.setFromSpherical(sph));
+        }
+        controls.update();
+        if (busy) {
+          sph.setFromVector3(offset.copy(camera.position).sub(roverTarget));
+          chase.yaw = wrap(sph.theta - rv.heading);
+          chase.polar = sph.phi;
+          chase.dist = sph.radius;
+        }
+      } else {
+        camera.position.copy(toPos);
+        camera.quaternion.copy(toQuat);
+        controls.target.copy(roverTarget);
+      }
+      // Keep the camera above the ground, and lift it over buildings instead of passing through them.
+      if (view !== "cockpit") {
+        let floor = terrainHeight(camera.position.x, camera.position.z, planet) + (view === "chase" ? 1.2 : 2.5);
+        if (view === "chase")
+          for (const e of entries.values()) {
+            const p = e.view.group.position;
+            const d = Math.hypot(camera.position.x - p.x, camera.position.z - p.z);
+            const r = FOOTPRINT[e.type] + 1.2;
+            if (d < r) floor = Math.max(floor, p.y + e.view.top + 1.2 * (1 - d / r) + 0.6);
+          }
+        if (camera.position.y < floor) {
+          camera.position.y += (floor - camera.position.y) * (blend < 1 ? 1 : Math.min(1, dt * 10));
+          camera.lookAt(controls.target);
+        }
+      }
+    };
+
+    /** What the dashboard screens show. */
+    const cockpitData = (st: ReturnType<typeof useGame.getState>, storm: boolean, dust: boolean, dark: boolean): CockpitData => {
+      const g = st.game,
+        rv = g.rover;
+      const end = st.route[st.route.length - 1];
+      const site = st.target && st.target !== "dock" && st.target !== "point" ? SITES.find((s) => s.id === st.target) : null;
+      const dest = st.target === "dock" ? { name: "Home dock", x: DOCK.x, z: DOCK.z } : site ? { name: site.name[planet], x: site.x, z: site.z } : end ? { name: "Marked spot", x: end.x, z: end.z } : null;
+      return {
+        planet,
+        battery: rv.battery,
+        speed: rv.speed / ROVER.maxSpeed,
+        heading: rv.heading,
+        mode: rv.task ? "working" : rv.docked ? "parked" : st.route.length ? "auto" : Math.abs(rv.speed) > 0.5 ? "manual" : "parked",
+        target: dest ? { name: dest.name, dx: dest.x - rv.x, dz: dest.z - rv.z } : null,
+        sites: SITES.map((s) => ({
+          dx: s.x - rv.x,
+          dz: s.z - rv.z,
+          color: SITE_COLOR[s.kind],
+          done: s.kind === "science" && (g.stats.sites.includes(s.id) || rv.cargo.samples.includes(s.id)),
+        })),
+        dock: { dx: DOCK.x - rv.x, dz: DOCK.z - rv.z },
+        cargo: { water: rv.cargo.water, materials: rv.cargo.materials, samples: rv.cargo.samples.length },
+        clock: `${planet === "mars" ? "Sol" : "Day"} ${dayOf(g.t)} · ${clockOf(g.t)}`,
+        day: isDaytime(planet, g.t),
+        storm,
+        dust,
+        crater: inShadow(rv.x, rv.z),
+        lights: dark,
+      };
     };
 
     const v = new THREE.Vector3();
@@ -713,7 +930,9 @@ export function World() {
         mk.beam.visible = !done;
         const hot = selSite === mk.site.id || targetSite === mk.site.id;
         mk.ringMat.opacity = done ? 0.2 : hot ? 0.85 + Math.sin(clock * 5) * 0.15 : 0.55;
-        mk.beamMat.opacity = hot ? 0.95 : 0.5;
+        // Beams fade as you drive up to them, so they never block the view.
+        const near = THREE.MathUtils.smoothstep(camera.position.distanceTo(mk.group.position), 10, 45);
+        mk.beamMat.opacity = (hot ? 0.95 : 0.5) * near;
         mk.pool.opacity = done ? 0.1 : hot ? 0.55 : 0.3;
         mk.lamp.emissiveIntensity = done ? 0.5 : (clock * 0.7 + mk.site.x) % 1 < 0.15 ? 6 : 1.5;
         mk.ring.rotation.z += dt * (hot ? 0.8 : 0.25);
@@ -732,12 +951,21 @@ export function World() {
         }
       }
 
-      runCamera(g);
-      controls.update();
-      const look = controls.target.clone().sub(camera.position);
+      // The rover's body rocks a little over the ground as it drives.
+      const bump = reduced ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);
+      rover.body.position.y = (Math.sin(clock * 11) * 0.018 + Math.sin(clock * 4.3 + 1) * 0.012) * bump;
+      rover.body.rotation.z = Math.sin(clock * 6.1) * 0.008 * bump;
+      rover.body.rotation.x = Math.sin(clock * 3.7) * 0.006 * bump;
+
+      runCamera(g, dt);
+      const inside = view === "cockpit" && blend > 0.55;
+      cockpit.group.visible = view === "cockpit" && blend > 0.3;
+      for (const pane of rover.glass) pane.visible = !inside;
+      if (cockpit.group.visible) cockpit.update(cockpitData(st, !!storm, !!dustStorm, dark), clock);
+      const facing = camera.getWorldDirection(v);
       scene3d.view.x = controls.target.x;
       scene3d.view.z = controls.target.z;
-      scene3d.view.heading = Math.atan2(look.x, -look.z);
+      scene3d.view.heading = Math.atan2(facing.x, -facing.z);
       scene3d.view.distance = reach;
       scene3d.view.fov = THREE.MathUtils.degToRad(camera.fov) * camera.aspect;
 
@@ -748,8 +976,17 @@ export function World() {
         project(`module:${e.id}`, p.x, p.y + e.view.top + 0.9, p.z);
       }
       for (const p of PADS) project(`pad:${p.id}`, p.x, terrainHeight(p.x, p.z, planet) + 0.6, p.z);
-      project("rover", rv.x, ground + 3.6, rv.z);
-      project("rover-body", rv.x, ground + 1.4, rv.z);
+      if (inside) {
+        for (const k of ["rover", "rover-body"]) {
+          const a = anchors.get(k);
+          if (a) a.visible = false;
+          const f = followers.get(k);
+          if (f) f.dataset.visible = "0";
+        }
+      } else {
+        project("rover", rv.x, ground + 3.6, rv.z);
+        project("rover-body", rv.x, ground + 1.4, rv.z);
+      }
       project("dock", DOCK.x, terrainHeight(DOCK.x, DOCK.z, planet) + 0.5, DOCK.z);
       project("habitat", 0, 2.4, 0);
       project("crater", CRATER.x, terrainHeight(CRATER.x, CRATER.z, planet) + 2, CRATER.z);
@@ -765,6 +1002,9 @@ export function World() {
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onMove);
+      renderer.domElement.removeEventListener("pointerdown", onLookDown);
+      window.removeEventListener("pointermove", onLookMove);
+      window.removeEventListener("pointerup", onLookUp);
       controls.dispose();
       scene3d.pick = null;
       scene3d.lookAt = null;

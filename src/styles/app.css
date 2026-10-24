@@ -1263,6 +1263,95 @@ ul.check-list:not(:has(svg)) li::before {
   transition: right 0.25s var(--ease);
 }
 
+/* Camera views */
+.view-switch {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  transition: right 0.25s var(--ease);
+}
+.view-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.view-switch button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 62px;
+  padding: 6px 8px 5px;
+  border-radius: 12px;
+  color: var(--text-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.view-switch button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+.view-switch button.on {
+  background: rgba(255, 138, 61, 0.18);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(255, 138, 61, 0.45);
+}
+.drawer-open .view-switch {
+  right: 430px;
+}
+@media (max-width: 1180px) {
+  .view-switch {
+    flex-direction: column;
+    bottom: 100px;
+    padding: 5px;
+  }
+  .view-label {
+    padding: 2px 0 4px;
+  }
+  .view-label .kbd {
+    display: none;
+  }
+  .view-switch button {
+    min-width: 0;
+    width: 54px;
+  }
+}
+@media (max-width: 1100px) {
+  .drawer-open .view-switch {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .view-switch {
+    right: 6px;
+    bottom: 84px;
+  }
+  .view-switch button span {
+    display: none;
+  }
+  .view-switch button {
+    width: 44px;
+    padding: 8px 0;
+  }
+}
+
 /* Minimap */
 .minimap {
   padding: 6px;

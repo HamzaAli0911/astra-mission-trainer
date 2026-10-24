@@ -531,7 +531,7 @@ function RoverPanel() {
         <Navigation size={14} /> Drive it yourself with <kbd className="kbd">W</kbd>
         <kbd className="kbd">A</kbd>
         <kbd className="kbd">S</kbd>
-        <kbd className="kbd">D</kbd> or the arrow keys, or click the ground while this panel is open.
+        <kbd className="kbd">D</kbd> or the arrow keys, or click the ground while this panel is open. Press <kbd className="kbd">V</kbd> to switch between the overview, follow and cockpit views.
       </p>
     </div>
   );

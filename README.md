@@ -41,6 +41,7 @@ Everything is drawn in real time in the browser, with no image or model files: e
 - A **300 m × 300 m** area around the outpost on each world, ringed by distant hills: an icy crater that never sees the Sun, boulder fields, smaller craters, a lava-tube skylight (Moon), dunes and a layered mesa (Mars), and the lander that brought the crew.
 - **Moon**: a black sky with the Milky Way, a low Sun that casts long shadows, and Earth hanging over the horizon. **Mars**: a butterscotch sky, blue sunsets, Phobos and Deimos at night, and dust storms that dim the Sun.
 - Detailed modules (an inflatable habitat with a cupola and airlock, tall Sun-tracking solar arrays on the Moon, a fission reactor with a cone of radiators, an ice-drill derrick…), a pressurised rover that leaves tyre tracks, astronauts in suits, welding sparks while things are built, glowing lights and power cables that pulse in the direction energy flows.
+- Three camera views. **Overview** looks over the outpost. **Follow** rides behind the rover and turns with it (drag to watch from any side). **Cockpit** puts you in the driver's seat, with live screens for speed, battery, a radar of nearby sites and your cargo. Leaving the dock switches to Follow by itself.
 - A **map** in the corner shows the whole area. Click a site on it to plan a rover trip, or anywhere else to look there.
 - **Settings → Graphics**: *Auto* adapts to the device (it lowers detail if the game runs slowly), *High* adds glow and soft shadows, *Low* is for older computers.
 
@@ -70,6 +71,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Pause · speed | top-right buttons | Space · 1 2 3 |
 | Camera on base · rover | Camera button in the Rover panel | C · F |
 | Look somewhere else · plan a trip | click the map (top right) | |
+| Camera view: Overview · Follow · Cockpit | View buttons (bottom right); drag to look around | V |
 | Close · menu | | Esc |
 
 ## For teachers and judges
