@@ -5,6 +5,8 @@ import "./styles/app.css";
 import App from "./ui/App";
 import { useGame } from "./state/game";
 import { useUI } from "./state/ui";
+import { warmUp } from "./scene/prebake";
+import { startAutosave } from "./state/save";
 
 // Test hook for automated browser checks: add ?debug to the URL.
 if (import.meta.env.DEV || new URLSearchParams(location.search).has("debug"))
@@ -35,3 +37,7 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </Boundary>,
 );
+
+// Bake the Moon and Mars in the background while the title screen is up.
+warmUp();
+startAutosave();

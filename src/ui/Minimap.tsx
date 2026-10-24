@@ -3,52 +3,29 @@ import { ChevronDown, ChevronUp, Map as MapIcon } from "lucide-react";
 import { MODULES } from "../sim/modules";
 import { modulePos } from "../sim/rover";
 import type { Planet } from "../sim/types";
-import { CRATER, DOCK, LANDER, SITES, terrainHeight, WORLD } from "../sim/world";
+import { DOCK, LANDER, SITES } from "../sim/world";
+import { MAP_SPAN, RELIEF_SIZE } from "../scene/bake";
+import { bakedNow } from "../scene/prebake";
 import { scene3d } from "../scene/anchors";
 import { SITE_COLOR } from "../scene/effects";
-import { PALETTE } from "../scene/terrain";
 import { useGame } from "../state/game";
 import { useUI } from "../state/ui";
 import { play } from "../lib/sound";
 
-const SPAN = WORLD + 10; // metres from the centre to the map edge
+const SPAN = MAP_SPAN;
 const CSS = 196; // map size on screen, CSS pixels
 
-/** A shaded relief map of the area, drawn once per planet. */
+/** The shaded relief of the area (baked with the planet), as a canvas. */
 const reliefs = new Map<Planet, HTMLCanvasElement>();
 function relief(planet: Planet) {
   const cached = reliefs.get(planet);
   if (cached) return cached;
-  const N = 200;
+  const baked = bakedNow(planet);
+  if (!baked) return null;
   const c = document.createElement("canvas");
-  c.width = c.height = N;
-  const ctx = c.getContext("2d")!;
-  const img = ctx.createImageData(N, N);
-  const P = PALETTE[planet];
-  const hex = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  const base = hex(P.ground),
-    dark = hex(P.crater);
-  const step = (SPAN * 2) / N;
-  for (let y = 0; y < N; y++)
-    for (let x = 0; x < N; x++) {
-      const wx = -SPAN + (x + 0.5) * step,
-        wz = -SPAN + (y + 0.5) * step;
-      const h = terrainHeight(wx, wz, planet);
-      // Light from the north-west, like a printed relief map.
-      const shade = (terrainHeight(wx - step, wz - step, planet) - terrainHeight(wx + step, wz + step, planet)) / step;
-      let k = 0.62 + shade * 0.55 + h * 0.012;
-      const inCrater = Math.hypot(wx - CRATER.x, wz - CRATER.z) < CRATER.r * 0.85;
-      const edge = Math.max(Math.abs(wx), Math.abs(wz)) > WORLD - 4;
-      if (edge) k *= 0.55;
-      k = Math.max(0.2, Math.min(1.25, k));
-      const col = inCrater ? dark : base;
-      const i = (y * N + x) * 4;
-      img.data[i] = col[0] * k;
-      img.data[i + 1] = col[1] * k;
-      img.data[i + 2] = col[2] * k;
-      img.data[i + 3] = 255;
-    }
-  ctx.putImageData(img, 0, 0);
+  c.width = c.height = RELIEF_SIZE;
+  const img = new ImageData(new Uint8ClampedArray(baked.relief), RELIEF_SIZE, RELIEF_SIZE);
+  c.getContext("2d")!.putImageData(img, 0, 0);
   reliefs.set(planet, c);
   return c;
 }
@@ -79,7 +56,12 @@ export function Minimap() {
         ui = useUI.getState();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(relief(g.planet), 0, 0, CSS, CSS);
+      const map = relief(g.planet);
+      if (map) ctx.drawImage(map, 0, 0, CSS, CSS);
+      else {
+        ctx.fillStyle = "#0b1226";
+        ctx.fillRect(0, 0, CSS, CSS);
+      }
       // Range rings every 50 m around the outpost.
       ctx.strokeStyle = "rgba(255,255,255,0.12)";
       ctx.lineWidth = 1;

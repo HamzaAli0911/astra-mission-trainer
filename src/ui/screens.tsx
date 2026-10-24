@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   ArrowLeft,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 import { CAMPAIGN, mission, MISSIONS, type Mission } from "../sim/missions";
 import { unlocked, useUI } from "../state/ui";
+import { readSave, resumeSave } from "../state/save";
+import { clockOf, dayOf } from "../sim/planets";
 import { Globe } from "../scene/Globe";
 import { play } from "../lib/sound";
 import { Stars } from "./common";
@@ -29,6 +32,7 @@ export function Title() {
   const earned = Object.values(progress.stars).reduce((a, b) => a + b, 0);
   const next = CAMPAIGN.find((m) => !progress.stars[m.id]) ?? CAMPAIGN[CAMPAIGN.length - 1];
   const started = earned > 0;
+  const [save] = useState(readSave);
   return (
     <main className="title-screen">
       <div className="starfield" aria-hidden="true" />
@@ -56,17 +60,37 @@ export function Title() {
           Run an outpost on the Moon, then Mars. Balance power, air, water, food and radiation shielding, and learn the choices that make a mission succeed or fail.
         </p>
         <div className="title-actions">
-          <button
-            className="btn primary big"
-            autoFocus
-            onClick={() => {
-              play("open");
-              if (!started) launch(CAMPAIGN[0].id);
-              else useUI.setState({ screen: "map", focus: next.id });
-            }}
-          >
-            {started ? "Continue training" : "Start training"} <ArrowRight size={20} />
-          </button>
+          {save && (
+            <button
+              className="btn primary big resume"
+              autoFocus
+              onClick={() => {
+                play("open");
+                resumeSave(save);
+              }}
+            >
+              <Play size={20} />
+              <span>
+                Resume {mission(save.game.missionId).title}
+                <small>
+                  {save.game.planet === "mars" ? "Sol" : "Day"} {dayOf(save.game.t)} · {clockOf(save.game.t)}
+                </small>
+              </span>
+            </button>
+          )}
+          {!save && (
+            <button
+              className="btn primary big"
+              autoFocus
+              onClick={() => {
+                play("open");
+                if (!started) launch(CAMPAIGN[0].id);
+                else useUI.setState({ screen: "map", focus: next.id });
+              }}
+            >
+              {started ? "Continue training" : "Start training"} <ArrowRight size={20} />
+            </button>
+          )}
           <button
             className="btn secondary big"
             onClick={() => {

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Planet } from "../sim/types";
 import { noise } from "../sim/world";
+import type { Baked } from "./bake";
 import { canvasTexture, rng } from "./kit";
 
 export const SKY_RADIUS = 2600;
@@ -187,39 +188,16 @@ function sunSprite(planet: Planet) {
   return s;
 }
 
-/** A small procedural Earth: oceans, continents, ice caps and clouds. */
-function earthTexture() {
-  const W = 512,
-    H = 256;
-  return canvasTexture(W, H, (c) => {
-    const img = c.createImageData(W, H);
-    const land = new THREE.Color(),
-      sea = new THREE.Color("#163f7a"),
-      deep = new THREE.Color("#0c2650"),
-      green = new THREE.Color("#3d7a3a"),
-      desert = new THREE.Color("#b49a64"),
-      ice = new THREE.Color("#f2f6fb");
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
-        const lon = (x / W) * Math.PI * 2,
-          lat = (y / H - 0.5) * Math.PI;
-        const px = Math.cos(lat) * Math.cos(lon),
-          py = Math.sin(lat),
-          pz = Math.cos(lat) * Math.sin(lon);
-        const n = noise(px * 2.2 + 5, pz * 2.2 + py * 1.3) * 0.55 + noise(py * 4 + px * 3, pz * 4 - 2) * 0.3 + noise(px * 9, py * 9 + pz * 7) * 0.15;
-        const cloud = noise(px * 5 + pz * 2, py * 7 + 11) * 0.6 + noise(px * 13, pz * 13 + py * 5) * 0.4;
-        if (n > 0.53) land.copy(Math.abs(lat) < 0.45 && noise(px * 6, pz * 6) > 0.5 ? desert : green).lerp(desert, Math.max(0, n - 0.65) * 2);
-        else land.copy(deep).lerp(sea, Math.min(1, (n / 0.53) ** 3));
-        if (Math.abs(lat) > 1.2 + noise(lon * 3, 1) * 0.15) land.copy(ice);
-        if (cloud > 0.58) land.lerp(ice, Math.min(0.85, (cloud - 0.58) * 4));
-        const i = (y * W + x) * 4;
-        img.data[i] = land.r * 255;
-        img.data[i + 1] = land.g * 255;
-        img.data[i + 2] = land.b * 255;
-        img.data[i + 3] = 255;
-      }
-    c.putImageData(img, 0, 0);
-  });
+/** Earth's surface, from the baked pixels. */
+function earthTexture(pixels: Uint8ClampedArray) {
+  const t = new THREE.DataTexture(new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength), 512, 256, THREE.RGBAFormat);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.flipY = true;
+  t.needsUpdate = true;
+  return t;
 }
 
 /** A body lit by the Sun, with an optional glowing atmosphere rim. */
@@ -284,7 +262,8 @@ export interface Sky {
 }
 
 /** Everything beyond the horizon: sky, stars, the Sun, Earth over the Moon or Phobos and Deimos over Mars. */
-export function buildSky(planet: Planet): Sky {
+export function buildSky(baked: Baked): Sky {
+  const planet = baked.planet;
   const group = new THREE.Group();
   const sky = dome(planet);
   group.add(sky.mesh);
@@ -295,7 +274,7 @@ export function buildSky(planet: Planet): Sky {
   const bodies: { mesh: THREE.Mesh; uniforms: { sunDir: { value: THREE.Vector3 }; fade: { value: number } }; dir: THREE.Vector3; dist: number; drift: number }[] = [];
   if (planet === "moon") {
     // From the lunar south pole Earth hangs low over the horizon and never sets.
-    const earth = litBody(new THREE.SphereGeometry(1, 48, 32), earthTexture(), "#ffffff", "#5aa0ff");
+    const earth = litBody(new THREE.SphereGeometry(1, 48, 32), baked.earth ? earthTexture(baked.earth) : null, "#2a62b8", "#5aa0ff");
     earth.mesh.scale.setScalar(70);
     earth.mesh.rotation.set(0.4, 2.2, 0.1);
     bodies.push({ ...earth, dir: new THREE.Vector3(-0.42, 0.21, -0.9).normalize(), dist: SKY_RADIUS * 0.85, drift: 0.01 });

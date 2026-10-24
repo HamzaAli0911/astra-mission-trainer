@@ -34,6 +34,8 @@ The core loop:
 
 Every supply shows how long it will last ("▼ 2.1 days"), so cause and effect is visible before it becomes an emergency. Time pauses for emergencies and decisions, so players always have time to think.
 
+Missions **save themselves** every few seconds and when the tab is closed. After a refresh, the title screen offers **Resume** to carry on where you left off.
+
 ## What you see
 
 Everything is drawn in real time in the browser, with no image or model files: every model, texture and sky is made by code.

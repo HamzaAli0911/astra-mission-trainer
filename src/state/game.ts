@@ -63,6 +63,8 @@ export interface GameStore {
   toasts: Toast[];
   capcom: Capcom[];
   start: (id: string, seed?: number) => void;
+  /** Continue a saved mission, paused. */
+  load: (game: GameState, route: Point[], target: string | null, speed: Speed) => void;
   restart: () => void;
   act: (a: Action) => boolean;
   frame: (dt: number, keys: DriveInput) => void;
@@ -161,6 +163,23 @@ export const useGame = create<GameStore>((set, get) => {
         capcom: [],
       });
     },
+    load: (game, route, target, speed) =>
+      set({
+        game,
+        speed,
+        paused: true,
+        reason: "manual",
+        route,
+        target,
+        pad: { ...STOP },
+        manual: false,
+        acc: 0,
+        held: false,
+        seen: game.feed[game.feed.length - 1]?.id ?? 0,
+        alert: null,
+        toasts: [],
+        capcom: [],
+      }),
     restart: () => get().start(get().game.missionId, get().game.seed),
 
     act: (a) => {

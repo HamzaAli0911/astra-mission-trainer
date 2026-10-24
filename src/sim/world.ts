@@ -220,6 +220,23 @@ export const CRATERS: Crater[] = (() => {
   return out;
 })();
 
+/** Craters in 32 m buckets, so each height lookup only checks the craters that can reach it. */
+const CRATER_BUCKET = 32;
+const craterGrid = new Map<string, Crater[]>();
+for (const c of CRATERS) {
+  const reach = c.r * 2.2;
+  for (let bx = Math.floor((c.x - reach) / CRATER_BUCKET); bx <= Math.floor((c.x + reach) / CRATER_BUCKET); bx++)
+    for (let bz = Math.floor((c.z - reach) / CRATER_BUCKET); bz <= Math.floor((c.z + reach) / CRATER_BUCKET); bz++) {
+      const key = `${bx},${bz}`;
+      const list = craterGrid.get(key);
+      if (list) list.push(c);
+      else craterGrid.set(key, [c]);
+    }
+}
+const NO_CRATERS: Crater[] = [];
+/** The craters whose shape (out to 2.2 radii) can reach this point, in their usual order. */
+export const cratersNear = (x: number, z: number) => craterGrid.get(`${Math.floor(x / CRATER_BUCKET)},${Math.floor(z / CRATER_BUCKET)}`) ?? NO_CRATERS;
+
 function crater(y: number, x: number, z: number, c: Crater) {
   const d = Math.hypot(x - c.x, z - c.z) / c.r;
   if (d >= 2.2) return y;
@@ -252,7 +269,7 @@ export function terrainHeight(x: number, z: number, planet: Planet = "moon") {
   y *= smooth(FLAT - 6, FLAT + 16, r);
   // Level ground under the lander.
   y *= smooth(5, 13, Math.hypot(x - LANDER.x, z - LANDER.z));
-  for (const c of CRATERS) y = crater(y, x, z, c);
+  for (const c of cratersNear(x, z)) y = crater(y, x, z, c);
   // Skylight pit (Moon): a small steep hole beside the site.
   if (!mars) {
     const s = Math.hypot(x - 44, z - 121);

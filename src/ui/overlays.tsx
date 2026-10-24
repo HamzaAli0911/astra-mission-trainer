@@ -38,6 +38,7 @@ import { play } from "../lib/sound";
 import { hush, speak } from "../lib/speech";
 import { LineChart, Modal, Stars } from "./common";
 import { runFix } from "./fixes";
+import { clearSave } from "../state/save";
 import { IconCapcom, IconDose, RESOURCE_ICON } from "./icons";
 
 /* ---------- Briefing ---------- */
@@ -519,6 +520,7 @@ export function Debrief() {
 
 export function launch(id: string) {
   hush();
+  clearSave();
   useGame.getState().start(id);
   useUI.setState({ screen: "game", briefing: true, debrief: false, modal: null, panel: null, selected: null, placing: null, tutorial: null, focus: id });
   useUI.getState().cam("reset");
@@ -552,6 +554,7 @@ export function PauseMenu({ onClose }: { onClose: () => void }) {
           onClick={() => {
             onClose();
             useUI.setState({ debrief: false, briefing: true, tutorial: null });
+            clearSave();
             useGame.getState().restart();
           }}
         >

@@ -1,179 +1,52 @@
 import * as THREE from "three";
 import type { Planet } from "../sim/types";
-import { CRATER, CRATERS, FLAT, LANDER, noise, ROCKS, SITES, terrainHeight, WORLD } from "../sim/world";
+import { CRATER, FLAT, noise, ROCKS, terrainHeight, WORLD } from "../sim/world";
+import { DETAIL_SIZE, HORIZON, PALETTE, type Baked, type MeshArrays } from "./bake";
 import { rng } from "./kit";
 
-const smooth = (a: number, b: number, v: number) => {
-  const x = Math.min(1, Math.max(0, (v - a) / (b - a)));
-  return x * x * (3 - 2 * x);
-};
-const fbm = (x: number, y: number) => noise(x, y) * 0.5 + noise(x * 2.1, y * 2.1) * 0.27 + noise(x * 4.3, y * 4.3) * 0.15 + noise(x * 8.7, y * 8.7) * 0.08;
+export { PALETTE } from "./bake";
 
-/** Where the detailed ground ends and the distant hills begin. */
-const HORIZON = WORLD + 85;
-
-export const PALETTE = {
-  moon: { ground: "#9d9ea3", dark: "#55585f", light: "#c6c6c8", crater: "#2f3440", rim: "#d3d3d4", rock: "#80828a", track: "#3c3e44" },
-  mars: { ground: "#b46b45", dark: "#6b3322", light: "#d69a6a", crater: "#5d3a33", rim: "#d8a275", rock: "#8a4c35", track: "#5a2c1c" },
-};
+function dataTexture(pixels: Uint8ClampedArray, size: number, srgb: boolean) {
+  const t = new THREE.DataTexture(new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength), size, size, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.flipY = true;
+  t.anisotropy = 8;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
 
 const details = new Map<Planet, { map: THREE.Texture; nmap: THREE.Texture }>();
 /** The detail maps, made once per planet and shared by the ground and the rocks. */
-function detailFor(planet: Planet) {
-  let d = details.get(planet);
+function detailFor(baked: Baked) {
+  let d = details.get(baked.planet);
   if (!d) {
-    d = detailMaps(planet);
+    d = { map: dataTexture(baked.detail.color, DETAIL_SIZE, true), nmap: dataTexture(baked.detail.normal, DETAIL_SIZE, false) };
     d.map.userData.shared = d.nmap.userData.shared = true;
-    details.set(planet, d);
+    details.set(baked.planet, d);
   }
   return d;
 }
 
-/** Tileable detail: small craters, grit and pebbles, as a colour map and a normal map. */
-function detailMaps(planet: Planet) {
-  const N = 512;
-  const h = new Float32Array(N * N);
-  const r = rng(planet === "moon" ? 11 : 29);
-  const tile = (x: number, y: number) => ((y + N) % N) * N + ((x + N) % N);
-  for (let y = 0; y < N; y++)
-    for (let x = 0; x < N; x++) {
-      // Periodic noise so the texture tiles without seams.
-      const u = (x / N) * Math.PI * 2,
-        v = (y / N) * Math.PI * 2;
-      const nx = Math.cos(u) * 4 + 10,
-        ny = Math.sin(u) * 4 + 10,
-        nz = Math.cos(v) * 4 + 20,
-        nw = Math.sin(v) * 4 + 20;
-      h[y * N + x] = noise(nx + nz, ny + nw) * 0.5 + noise((nx - nw) * 2.3, (ny + nz) * 2.3) * 0.3 + r() * 0.12;
-    }
-  // Craterlets: a bowl with a raised rim.
-  for (let i = 0; i < 70; i++) {
-    const cx = r() * N,
-      cy = r() * N,
-      rad = 2 + r() ** 4 * 40;
-    const R = Math.ceil(rad * 1.6);
-    for (let dy = -R; dy <= R; dy++)
-      for (let dx = -R; dx <= R; dx++) {
-        const d = Math.hypot(dx, dy) / rad;
-        if (d > 1.6) continue;
-        const k = tile(Math.round(cx + dx), Math.round(cy + dy));
-        h[k] += d < 1 ? -(1 - d * d) * 0.35 * (rad / 40 + 0.25) : Math.exp(-(((d - 1) / 0.25) ** 2)) * 0.15 * (rad / 40 + 0.25);
-      }
-  }
-  // Pebbles: tiny bumps.
-  for (let i = 0; i < 2600; i++) {
-    const cx = Math.floor(r() * N),
-      cy = Math.floor(r() * N),
-      rad = 1 + r() * 2.2;
-    for (let dy = -3; dy <= 3; dy++)
-      for (let dx = -3; dx <= 3; dx++) {
-        const d = Math.hypot(dx, dy) / rad;
-        if (d < 1) h[tile(cx + dx, cy + dy)] += (1 - d * d) * 0.25;
-      }
-  }
-  const color = document.createElement("canvas"),
-    normal = document.createElement("canvas");
-  color.width = color.height = normal.width = normal.height = N;
-  const ci = color.getContext("2d")!.createImageData(N, N),
-    ni = normal.getContext("2d")!.createImageData(N, N);
-  const strength = 2.4;
-  for (let y = 0; y < N; y++)
-    for (let x = 0; x < N; x++) {
-      const i = y * N + x;
-      const dx = (h[tile(x + 1, y)] - h[tile(x - 1, y)]) * strength,
-        dy = (h[tile(x, y + 1)] - h[tile(x, y - 1)]) * strength;
-      const len = Math.hypot(dx, dy, 1);
-      ni.data[i * 4] = ((-dx / len) * 0.5 + 0.5) * 255;
-      ni.data[i * 4 + 1] = ((dy / len) * 0.5 + 0.5) * 255;
-      ni.data[i * 4 + 2] = ((1 / len) * 0.5 + 0.5) * 255;
-      ni.data[i * 4 + 3] = 255;
-      const v = 205 + (h[i] - 0.5) * 50 + (r() - 0.5) * 14;
-      ci.data[i * 4] = ci.data[i * 4 + 1] = ci.data[i * 4 + 2] = Math.max(120, Math.min(255, v));
-      ci.data[i * 4 + 3] = 255;
-    }
-  color.getContext("2d")!.putImageData(ci, 0, 0);
-  normal.getContext("2d")!.putImageData(ni, 0, 0);
-  const map = new THREE.CanvasTexture(color),
-    nmap = new THREE.CanvasTexture(normal);
-  for (const t of [map, nmap]) {
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
-  }
-  map.colorSpace = THREE.SRGBColorSpace;
-  return { map, nmap };
+function geometryOf(m: MeshArrays) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(m.position, 3));
+  geo.setAttribute("normal", new THREE.BufferAttribute(m.normal, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(m.color, 3));
+  if (m.uv) geo.setAttribute("uv", new THREE.BufferAttribute(m.uv, 2));
+  geo.setIndex(new THREE.BufferAttribute(m.index, 1));
+  geo.computeBoundingSphere();
+  return geo;
 }
 
-/** The playable ground, coloured by geology. */
-export function buildTerrain(planet: Planet) {
-  const size = HORIZON * 2,
-    seg = 340;
-  const geo = new THREE.PlaneGeometry(size, size, seg, seg);
-  geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position;
-  // The ground is round: past the horizon radius it sinks under the distant hills.
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i),
-      z = pos.getZ(i);
-    pos.setY(i, terrainHeight(x, z, planet) - 40 * smooth(HORIZON - 1, HORIZON + 2, Math.hypot(x, z)));
-  }
-  geo.computeVertexNormals();
-  const nrm = geo.attributes.normal;
-  const P = PALETTE[planet];
-  const base = new THREE.Color(P.ground),
-    dark = new THREE.Color(P.dark),
-    bright = new THREE.Color(P.light),
-    crater = new THREE.Color(P.crater),
-    rim = new THREE.Color(P.rim),
-    c = new THREE.Color(),
-    tmp = new THREE.Color();
-  const colors = new Float32Array(pos.count * 3);
-  const ray = SITES.find((s) => s.id === "ray")!;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i),
-      z = pos.getZ(i),
-      y = pos.getY(i);
-    const n = fbm(x * 0.03 + 10, z * 0.03 - 4);
-    c.copy(base).lerp(n > 0.5 ? bright : dark, Math.abs(n - 0.5) * (planet === "mars" ? 1.2 : 1));
-    // Steep ground shows darker, fresher rock.
-    const slope = 1 - nrm.getY(i);
-    c.lerp(dark, Math.min(0.55, slope * 2.2));
-    // The outpost area is trampled and a little brighter.
-    const r = Math.hypot(x, z);
-    c.lerp(bright, (1 - smooth(FLAT - 10, FLAT + 4, r)) * 0.22);
-    for (const k of CRATERS) {
-      const d = Math.hypot(x - k.x, z - k.z) / k.r;
-      if (d < 0.95) c.lerp(crater, (1 - smooth(0.5, 0.95, d)) * (k === CRATER ? 0.9 : 0.35));
-      else if (d < 1.35) c.lerp(rim, Math.exp(-(((d - 1.05) / 0.15) ** 2)) * 0.35);
-    }
-    if (planet === "moon") {
-      // Bright rays of fresh ejecta around the Bright Ray site.
-      const dx = x - ray.x,
-        dz = z - ray.z,
-        d = Math.hypot(dx, dz);
-      if (d < 46) {
-        const a = Math.atan2(dz, dx);
-        const rays = Math.max(0, Math.sin(a * 9 + Math.sin(a * 3) * 1.5)) ** 3;
-        c.lerp(tmp.set("#e6e6e8"), rays * (1 - d / 46) * 0.75 + (d < 7 ? 0.5 : 0));
-      }
-    } else {
-      // Dark dust devil tracks, and banded layers on the mesa.
-      const dd = Math.hypot(x - ray.x, z - ray.z);
-      if (dd < 50) {
-        const streak = Math.abs(Math.sin(x * 0.09 + Math.sin(z * 0.05) * 3 + z * 0.02));
-        if (streak < 0.12) c.lerp(dark, (1 - streak / 0.12) * (1 - dd / 50) * 0.7);
-      }
-      if (y > 1.5 && Math.hypot((x + 30) * 0.8, z + 132) < 32) c.lerp(tmp.set(Math.sin(y * 3.1) > 0 ? "#c98a62" : "#8a4a33"), 0.5);
-      c.lerp(tmp.set("#c4805a"), smooth(70, 25, Math.hypot(x - 40, z - 112)) * 0.4);
-    }
-    // Around the lander: a blast-scoured patch.
-    const ld = Math.hypot(x - LANDER.x, z - LANDER.z);
-    if (ld < 14) c.lerp(planet === "moon" ? bright : tmp.set("#c48a62"), (1 - ld / 14) * 0.35);
-    colors[i * 3] = c.r;
-    colors[i * 3 + 1] = c.g;
-    colors[i * 3 + 2] = c.b;
-  }
-  geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const { map, nmap } = detailFor(planet);
+/** The playable ground, coloured by geology (its shape and colours come from the bake). */
+export function buildTerrain(baked: Baked) {
+  const geo = geometryOf(baked.terrain);
+  const size = HORIZON * 2;
+  const { map, nmap } = detailFor(baked);
   map.repeat.set(size / 16, size / 16);
   nmap.repeat.copy(map.repeat);
   const mat = new THREE.MeshStandardMaterial({
@@ -206,50 +79,13 @@ export function buildTerrain(planet: Planet) {
 }
 
 /** Distant hills and mountains all around, beyond the drivable area. */
-export function buildHorizon(planet: Planet) {
-  const inner = HORIZON - 3,
-    outer = 1500,
-    radial = 384,
-    rings = 40;
-  const positions: number[] = [],
-    colors: number[] = [],
-    index: number[] = [];
-  const P = PALETTE[planet];
-  const near = new THREE.Color(P.ground),
-    far = new THREE.Color(planet === "moon" ? "#8d8e93" : "#b0704c"),
-    c = new THREE.Color();
-  const rise = planet === "moon" ? 42 : 36;
-  for (let j = 0; j <= rings; j++) {
-    const t = j / rings,
-      rad = inner + (outer - inner) * t ** 1.6;
-    for (let i = 0; i < radial; i++) {
-      const a = (i / radial) * Math.PI * 2;
-      const x = Math.cos(a) * rad,
-        z = Math.sin(a) * rad;
-      const n = noise(x * 0.005 + 50, z * 0.005 + 50) * 0.62 + noise(x * 0.014, z * 0.014) * 0.3 + noise(x * 0.035, z * 0.035) * 0.08;
-      const peaks = n ** 2.2 * rise * 2.2;
-      const envelope = smooth(0, 0.3, t) * (1 - smooth(0.55, 1, t) * 0.5);
-      const y = terrainHeight(x, z, planet) + peaks * envelope - smooth(0.88, 1, t) * 120 - (j === 0 ? 0.4 : 0);
-      positions.push(x, y, z);
-      c.copy(near).lerp(far, Math.min(1, t * 1.5)).multiplyScalar(0.85 + n * 0.3);
-      colors.push(c.r, c.g, c.b);
-    }
-  }
-  for (let j = 0; j < rings; j++)
-    for (let i = 0; i < radial; i++) {
-      const a = j * radial + i,
-        b = j * radial + ((i + 1) % radial),
-        d = (j + 1) * radial + i,
-        e = (j + 1) * radial + ((i + 1) % radial);
-      index.push(a, d, b, b, d, e);
-    }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  geo.setIndex(index);
-  geo.computeVertexNormals();
+export function buildHorizon(baked: Baked) {
+  const far = new THREE.Color(baked.planet === "moon" ? "#8d8e93" : "#b0704c");
   // A touch of glow so slopes facing away from the Sun don't turn into a black wall.
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, emissive: far, emissiveIntensity: planet === "moon" ? 0.06 : 0.1 }));
+  const mesh = new THREE.Mesh(
+    geometryOf(baked.horizon),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, emissive: far, emissiveIntensity: baked.planet === "moon" ? 0.06 : 0.1 }),
+  );
   mesh.receiveShadow = false;
   return mesh;
 }
@@ -279,10 +115,11 @@ function rockGeometry(seed: number, detail: number, squash: number) {
 }
 
 /** Boulders (three shapes, instanced) and thousands of scattered pebbles. */
-export function buildRocks(planet: Planet, pebbles = true) {
+export function buildRocks(baked: Baked, pebbles = true) {
+  const planet = baked.planet;
   const group = new THREE.Group();
   // Rocks reuse the ground's grit as a fine rough surface, at a smaller scale.
-  const d = detailFor(planet);
+  const d = detailFor(baked);
   const grit = d.map.clone(),
     bumps = d.nmap.clone();
   for (const t of [grit, bumps]) {
