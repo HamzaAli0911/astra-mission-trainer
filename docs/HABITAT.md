@@ -166,19 +166,22 @@ they don't walk between places (they appear at the next spot). You can pass thro
 
 ## Performance
 
-Measured on the development Mac (Apple Silicon) in the production build at 1280 × 720, the same session
-as the build before the walkable home. GPU frame time, median:
+Measured on the development Mac (Apple Silicon) in the production build at 1280 × 720, in the same session as
+the build from before the walkable home. GPU frame time, median of three:
 
 | Graphics | View | Before | Now |
 |---|---|---|---|
-| High | overview | 9.7 ms | 9.6 ms |
-| High | habitat close-up | 8.5 ms | 9.7 ms (camera further back for the bigger home) |
-| High | inside, galley | | 10.9 ms (556 draw calls with the depth pre-pass) |
-| High | inside, landing | | 11.3 ms (668 draw calls) |
-| Ultra | overview | 39.2 ms | 39.7 ms |
-| Ultra | habitat close-up | 37.2 ms | 38.0 ms |
-| Ultra | inside, galley | | 31.0 ms |
-| Ultra | inside, landing | | 32.7 ms |
+| High | overview | 7.5 ms | 7.7 ms |
+| High | habitat close-up | 7.1 ms | 7.3 ms (camera further back for the bigger home) |
+| High | inside, galley | | 8.5 ms (539 draw calls with the depth pre-pass) |
+| High | inside, landing | | 8.9 ms (639 draw calls) |
+| Ultra | overview | 30.1 ms | 30.3 ms |
+| Ultra | habitat close-up | 28.5 ms | 29.5 ms |
+| Ultra | inside, galley | | 23.3 ms |
+| Ultra | inside, landing | | 24.7 ms |
+
+Absolute times change from session to session on the same machine (an earlier pair of runs read about 2 ms
+higher on High: 9.7 ms before and 9.6 ms now for the overview), so compare numbers only within one session.
 
 - The inside is built in slices after the outpost appears, then its shaders compile in the background:
   no task during start-up blocks the page for 50 ms or more (it was 669 ms before the build was split).
