@@ -241,6 +241,8 @@ export interface Block {
   turn?: number;
   /** The piece this one tucks under (a chair under its table), the only one it may overlap. */
   tuck?: string;
+  /** Which way its front faces, turned from facing the habitat's centre (degrees; 90 is clockwise round the ring). */
+  face?: number;
 }
 const b = (id: string, room: Block["room"], level: Level, bearing: number, r: number, w: number, d: number, h: number, turn?: number): Block => ({ id, room, level, bearing, r, w, d, h, turn });
 /** Clearance between a piece of furniture and the wall it stands against. */
@@ -263,7 +265,7 @@ function byPartition(id: string, room: RoomId, level: Level, edge: number, side:
   const x = n.x * mid + t.x * off,
     z = n.z * mid + t.z * off;
   const bearing = bearingOf(x, z);
-  return b(id, room, level, bearing, Math.hypot(x, z), w, r1 - r0, h, edge - bearing);
+  return { ...b(id, room, level, bearing, Math.hypot(x, z), w, r1 - r0, h, edge - bearing), face: side * 90 };
 }
 /** A piece set square to another, du along it and dv out from its middle, tucked against it. */
 function beside(id: string, base: Block, du: number, dv: number, w: number, d: number, h: number): Block {
@@ -271,7 +273,8 @@ function beside(id: string, base: Block, du: number, dv: number, w: number, d: n
   const x = c.x + t.x * du + n.x * dv,
     z = c.z + t.z * du + n.z * dv;
   const bearing = bearingOf(x, z);
-  return { ...b(id, base.room, base.level, bearing, Math.hypot(x, z), w, d, h, base.bearing + (base.turn ?? 0) - bearing), tuck: base.id };
+  // It faces the piece it tucks under.
+  return { ...b(id, base.room, base.level, bearing, Math.hypot(x, z), w, d, h, base.bearing + (base.turn ?? 0) - bearing), tuck: base.id, face: dv < 0 ? 180 : 0 };
 }
 const table = b("galley-table", "galley", 0, 253, 3.85, 1.3, 0.75, 0.75);
 const bench = atWall("lab-bench", "lab", 0, 46, 1.6, 0.62, 0.92);
@@ -330,8 +333,8 @@ export const BLOCKS: Block[] = [
   atWall("garden-rack-2", "garden", 1, 186, 1.2, 0.55, 2.2),
   // Command: a console of three desks with screens, two chairs, and the ladder up to the cupola in the middle.
   ...[40, 80, 120].map((bearing, i) => atWall(`command-desk-${i + 1}`, "command", 1, bearing, 0.8, 0.5, 0.76, HOME.command)),
-  b("command-chair-1", "command", 1, 50, 0.85, 0.5, 0.5, 0.95),
-  b("command-chair-2", "command", 1, 110, 0.85, 0.5, 0.5, 0.95),
+  { ...b("command-chair-1", "command", 1, 50, 0.85, 0.5, 0.5, 0.95), face: 180 },
+  { ...b("command-chair-2", "command", 1, 110, 0.85, 0.5, 0.5, 0.95), face: 180 },
   b("command-ladder", "command", 1, 0, 0, 0.62, 0.62, 2.6),
 ];
 /** A piece's four corners, anticlockwise from its back-left as you face it. */

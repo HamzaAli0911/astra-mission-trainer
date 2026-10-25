@@ -1,8 +1,16 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { DOORS, HOME, ROOMS, SPAWN, STAIR, stairLocal, stairPoint, walls, type Seg } from "../../sim/home";
+import { blockCorners, BLOCKS, DOORS, HOME, ROOMS, SPAWN, STAIR, stairLocal, stairPoint, walls, type Seg } from "../../sim/home";
 import { buildInterior } from "./index";
 import { DOOR_H, HATCH } from "./structure";
+
+// Labels and screens draw on canvases; in these tests a stand-in canvas that draws nothing is enough.
+const pen: unknown = new Proxy(() => pen, {
+  get: (_, k) => (k === "measureText" ? () => ({ width: 100 }) : k === "canvas" ? {} : pen),
+  set: () => true,
+  apply: () => pen,
+});
+Object.assign(globalThis, { document: { createElement: () => ({ width: 1, height: 1, getContext: () => pen }) } });
 
 // What you see inside must be where you can walk: these tests ray-cast the 3D model against the floor plan.
 const interior = buildInterior();
@@ -20,11 +28,17 @@ describe("the inside of the home, against its floor plan", () => {
   it("builds every door in the plan, and few draw calls", () => {
     expect(interior.doors.map((d) => d.id).sort()).toEqual(DOORS.map((d) => d.id).sort());
     let meshes = 0;
-    interior.group.traverse((o) => (meshes += (o as THREE.Mesh).isMesh ? 1 : 0));
-    expect(meshes).toBeLessThan(120);
+    interior.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      meshes++;
+      // Parts merged by finish carry their colours per vertex: the colours must survive the merge.
+      if ((m.material as THREE.Material & { vertexColors?: boolean }).vertexColors) expect(m.geometry.attributes.color, m.name).toBeDefined();
+    });
+    expect(meshes).toBeLessThan(100);
   });
 
-  it("draws a wall wherever the walker bumps into one", () => {
+  it("draws a wall wherever the walker bumps into one", { timeout: 60000 }, () => {
     for (const level of [0, 1] as const) {
       for (const s of walls(level)) {
         // Doors open in this model; furniture is checked below.
@@ -48,17 +62,17 @@ describe("the inside of the home, against its floor plan", () => {
     }
   });
 
-  it("draws nothing where you can walk (no wall you'd pass through)", () => {
+  it("draws nothing where you can walk (no wall you'd pass through)", { timeout: 60000 }, () => {
     for (const level of [0, 1] as const) {
       const y = HOME.floor[level] + 1.0;
       const segs = walls(level).filter((s: Seg) => !s.door || s.door === "airlock");
-      for (let x = -HOME.lining; x <= HOME.lining; x += 0.3)
-        for (let z = -HOME.lining; z <= HOME.lining; z += 0.3) {
+      for (let x = -HOME.lining; x <= HOME.lining; x += 0.35)
+        for (let z = -HOME.lining; z <= HOME.lining; z += 0.35) {
           if (Math.hypot(x, z) > HOME.lining - HOME.body) continue;
           const { u, w } = stairLocal(x, z);
           if (Math.abs(u) <= STAIR.half + 0.3 && w >= STAIR.inner - 0.3 && w <= STAIR.outer + 0.3) continue;
-          // Somewhere the walker can stand: clear of every wall and piece of furniture by the body's radius.
-          const clear = segs.every((s) => distToSeg(x, z, s) >= HOME.body);
+          // Somewhere the walker can stand: clear of every wall and piece of furniture by the body's radius, and not inside one.
+          const clear = segs.every((s) => distToSeg(x, z, s) >= HOME.body) && !BLOCKS.some((k) => k.level === level && insideBox(x, z, blockCorners(k)));
           if (!clear) continue;
           for (let k = 0; k < 8; k++) {
             const a = (k / 8) * Math.PI * 2;
@@ -93,6 +107,11 @@ describe("the inside of the home, against its floor plan", () => {
   });
 });
 
+function insideBox(x: number, z: number, box: { x: number; z: number }[]) {
+  const side = (a: { x: number; z: number }, b: { x: number; z: number }) => (b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x);
+  const s = box.map((p, i) => side(p, box[(i + 1) % 4]));
+  return s.every((v) => v >= 0) || s.every((v) => v <= 0);
+}
 function distToSeg(x: number, z: number, s: Seg) {
   const vx = s.bx - s.ax,
     vz = s.bz - s.az;

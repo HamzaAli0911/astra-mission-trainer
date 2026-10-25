@@ -198,7 +198,7 @@ SHOTS.push(
   { id: "IC02-suit-room", planet: "mars", run: inside(185, 3.25, 0, 180, -6, [192, 4.25, 0, 20]) },
   { id: "IC03-galley-table", planet: "mars", run: inside(232, 3.15, 0, 272, -10, [266, 3.45, 0, 225]) },
   { id: "IC04-galley-counter-store", planet: "mars", run: inside(246, 3.55, 0, 212, -8, [222, 3.95, 0, 40]) },
-  { id: "IC05-life-support", planet: "mars", run: inside(2, 2.95, 0, 352, -8, [12, 3.7, 0, 220]) },
+  { id: "IC05-life-support", planet: "mars", run: inside(0, 2.6, 0, 0, -4, [14, 3.65, 0, 220]) },
   { id: "IC06-water-tanks", planet: "mars", run: inside(4, 3.55, 0, 28, -10) },
   { id: "IC07-lab-bench", planet: "mars", run: inside(40, 3.15, 0, 50, -14, [58, 3.3, 0, 300]) },
   { id: "IC08-printer-tool-wall", planet: "mars", run: inside(55, 3.75, 0, 8, -6) },

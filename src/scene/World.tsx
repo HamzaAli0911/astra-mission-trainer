@@ -26,7 +26,7 @@ import type { Baked } from "./bake";
 import { bakedNow, prebake } from "./prebake";
 import { buildSky, environmentMap } from "./sky";
 import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem } from "./terrain";
-import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure } from "./interior";
+import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData } from "./interior";
 import { HOME as HOME_PLAN } from "../sim/home";
 import { insideEnvironment } from "./interior/lighting";
 import { walkController } from "./walk";
@@ -375,7 +375,7 @@ export function World() {
       // The inside of the Mars home (shown only while you walk in it, or look in from close by).
       if (!(await slice())) return;
       const insideEnv = insideEnvironment(renderer);
-      const interior = buildInterior();
+      const interior = buildInterior(planet);
       interior.group.traverse((o) => {
         const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
         if (m?.isMeshStandardMaterial) m.envMap = insideEnv.texture;
@@ -387,7 +387,8 @@ export function World() {
       scene.add(interior.group);
       const walkCtl = walkController(renderer.domElement, planet, interior);
       const baseExposure = renderer.toneMappingExposure;
-      let exposure = baseExposure;
+      let exposure = baseExposure,
+        screensAt = -1;
 
       if (!(await slice())) return;
       const entries = new Map<number, Entry>();
@@ -1184,6 +1185,14 @@ export function World() {
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
         const near = view === "walk" || camera.position.distanceTo(homeOrigin) < 24;
         interior.group.visible = near;
+        if (near) {
+          // Screens inside redraw a few times a second; the life-support fans turn.
+          if (clock - screensAt > 0.33) {
+            screensAt = clock;
+            interior.redraw(screenData(g));
+          }
+          if (!reduced) for (const fan of interior.living.fans) fan.rotation.z += dt * 8;
+        }
         const home = g.modules.find((m) => m.type === "habitat");
         for (const w of (home && entries.get(home.id)?.view.windowGlow) || []) w.visible = !near;
         // Eyes adjust between the sunlit outdoors and the lit rooms inside (about half a second).

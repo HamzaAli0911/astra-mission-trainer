@@ -24,16 +24,18 @@ const norm = (b: number) => ((b % 360) + 360) % 360;
 
 /** The walls, floors, ceilings, stair, doors and light fittings of both floors. */
 export function buildStructure(g: THREE.Group) {
-  const lining = ifabric("#d4cfc5"),
+  const lining = ifabric("#d8d3c9", 0.95, "pad"),
     panels = ipaint("#bcc3cc", 0.72),
-    ceiling = ipaint("#d9dbde", 0.85),
-    floor = irubber("#3f4551"),
+    ceiling = ipaint("#d9dbde", 0.85, 0.05, "ceiling"),
+    floor = irubber("#454b57", "floor"),
     deckEdge = ipaint("#8b929c", 0.6),
     water = ipaint("#a9bfd3", 0.6),
     command = ipaint("#c4cad3", 0.65),
     trim = ipaint("#eef0f2", 0.5),
     rail = imetal("#b4bcc7", 0.32),
-    dark = imetal("#5d6573", 0.45);
+    dark = imetal("#5d6573", 0.45),
+    // Door hardware shares the doors' finish (so each door leaf is one mesh), just darker.
+    doorDark = ipaint("#3b414b", 0.5);
   const doors: Door[] = [];
 
   for (const level of [0, 1] as const) {
@@ -117,14 +119,14 @@ export function buildStructure(g: THREE.Group) {
       }
       ms.annulus(HOME.hall - HOME.wall / 2, HOME.hall + HOME.wall / 2, top, false, d0, d1, 0.1);
       mesh(ms.geometry(), panels, g);
-      doors.push(slidingDoor(g, m.id, level, m.door!, HOME.hall - HOME.wall / 2 - 0.035, trim, dark));
+      doors.push(slidingDoor(g, m.id, level, m.door!, HOME.hall - HOME.wall / 2 - 0.035, trim, doorDark));
     }
 
     // The core: the storm shelter's water walls downstairs, the command room upstairs.
     const coreRoom = ROOMS.find((m) => m.core && m.level === level)!;
     const inner = level === 0 ? HOME.shelter : HOME.command;
     mesh(coreGeometry(inner, coreRoom.door!, y0, y1), level === 0 ? water : command, g);
-    doors.push(slidingDoor(g, coreRoom.id, level, coreRoom.door!, HOME.core + 0.035, trim, dark));
+    doors.push(slidingDoor(g, coreRoom.id, level, coreRoom.door!, HOME.core + 0.035, trim, doorDark));
   }
 
   // The airlock's inner hatch: a deep frame through the wall, and the hatch itself.
@@ -132,7 +134,7 @@ export function buildStructure(g: THREE.Group) {
   const hp = polar(HATCH.bearing, HOME.lining - 0.02);
   hatchFrame.position.set(hp.x, HOME.floor[0], hp.z);
   hatchFrame.rotation.y = Math.PI - rad(HATCH.bearing);
-  doors.push(hatchDoor(g, panels, dark));
+  doors.push(hatchDoor(g, panels, ipaint("#3b414b", 0.72)));
 
   // The deck's edge round the stairwell.
   const edge = new Mesher();

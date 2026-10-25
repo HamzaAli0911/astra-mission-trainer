@@ -215,16 +215,71 @@ const VERT = /* glsl */ `
 #endif
 `;
 
-/** Make a material light itself the way the inside of the home is lit (see above). */
-export function inside<T extends THREE.MeshStandardMaterial>(mat: T): T {
+/**
+ * Surface patterns drawn from the floor plan instead of textures: the padded wall's quilted panels and stitched
+ * seams, the floor's plates, the ceiling's tiles.
+ */
+export type Pattern = "pad" | "floor" | "ceiling";
+const PATTERN = /* glsl */ `
+#if defined( HOME_PAD ) || defined( HOME_FLOOR ) || defined( HOME_CEILING )
+{
+  float lvlY = vHomePos.y > ${f(SPLIT)} ? ${f(HOME.floor[1])} : ${f(HOME.floor[0])};
+  float hy = vHomePos.y - lvlY;
+  #ifdef HOME_PAD
+    // Fifty panels round the wall, in rows; seams sunk between them, a stitch line beside each seam.
+    float a = fract( ( atan( vHomePos.x, -vHomePos.z ) / 6.2831853 + 1.0 ) * 50.0 );
+    float du = min( a, 1.0 - a ) * 0.622;
+    float rows[4] = float[4]( 0.14, 0.92, 1.78, 2.6 );
+    float dv = 9.0, below = 0.0, above = 2.6;
+    for ( int i = 0; i < 4; i ++ ) { dv = min( dv, abs( hy - rows[i] ) ); if ( rows[i] <= hy ) below = rows[i]; if ( rows[i] > hy && above == 2.6 ) above = rows[i]; }
+    float d = min( du, dv );
+    float seam = 1.0 - smoothstep( 0.003, 0.011, d );
+    float stitch = ( 1.0 - smoothstep( 0.0015, 0.004, abs( d - 0.03 ) ) ) * step( 0.5, fract( ( du < dv ? hy : a * 0.622 ) * 40.0 ) );
+    diffuseColor.rgb *= 1.0 - 0.38 * seam - 0.12 * stitch;
+    // The kick strip along the floor is a darker, harder-wearing fabric.
+    diffuseColor.rgb *= hy < 0.14 ? 0.62 : 1.0;
+    homePillow = sin( 3.14159 * clamp( a, 0.0, 1.0 ) ) * sin( 3.14159 * clamp( ( hy - below ) / max( 0.05, above - below ), 0.0, 1.0 ) );
+  #endif
+  #ifdef HOME_FLOOR
+    // Square floor plates 0.6 m across, with fine joints and a fastener at each corner.
+    vec2 g = vHomePos.xz / 0.6;
+    vec2 e = abs( fract( g ) - 0.5 );
+    float j = 1.0 - smoothstep( 0.49, 0.495, max( e.x, e.y ) );
+    float joint = 1.0 - j;
+    vec2 c = ( 0.5 - e ) * 0.6;
+    float bolt = 1.0 - smoothstep( 0.006, 0.01, length( c - 0.035 ) );
+    diffuseColor.rgb *= 1.0 - 0.45 * joint - 0.25 * bolt;
+  #endif
+  #ifdef HOME_CEILING
+    vec2 g = vHomePos.xz / 0.6;
+    vec2 e = abs( fract( g ) - 0.5 );
+    float joint = smoothstep( 0.488, 0.494, max( e.x, e.y ) );
+    diffuseColor.rgb *= 1.0 - 0.3 * joint;
+  #endif
+}
+#endif
+`;
+
+/** Make a material light itself the way the inside of the home is lit (see above), maybe with a surface pattern. */
+export function inside<T extends THREE.MeshStandardMaterial>(mat: T, pattern?: Pattern): T {
   const before = mat.onBeforeCompile.bind(mat);
   const key = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (shader, renderer) => {
     before(shader, renderer);
     Object.assign(shader.uniforms, insideLight);
     shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\n" + VERT_PARS).replace("#include <project_vertex>", VERT);
+    if (pattern) shader.fragmentShader = `#define HOME_${pattern.toUpperCase()}\n` + shader.fragmentShader;
+    if (mat.userData.detail) shader.fragmentShader = "#define DETAIL_PERTURB\n" + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + FRAG_PARS)
+      .replace("#include <common>", "#include <common>\n" + FRAG_PARS + "\nfloat homePillow = 0.0;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\n" + PATTERN)
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+        #if defined( HOME_PAD ) && defined( DETAIL_PERTURB )
+          normal = detailPerturb( -vViewPosition, normal, vec2( dFdx( homePillow ), dFdy( homePillow ) ) * 0.035, faceDirection );
+        #endif`,
+      )
       .replace("#include <lights_fragment_begin>", patchLights(THREE.ShaderChunk.lights_fragment_begin))
       .replace(
         "#include <aomap_fragment>",
@@ -233,7 +288,7 @@ export function inside<T extends THREE.MeshStandardMaterial>(mat: T): T {
         reflectedLight.indirectSpecular *= mix( 1.0, homeAo, 0.6 );`,
       );
   };
-  mat.customProgramCacheKey = () => "astra-inside|" + key();
+  mat.customProgramCacheKey = () => `astra-inside${pattern ?? ""}|` + key();
   mat.envMapIntensity = 0.12;
   return mat;
 }
@@ -258,21 +313,41 @@ function made<T extends THREE.Material>(key: string, make: () => T): T {
   }
   return m;
 }
-const std = (key: string, params: THREE.MeshStandardMaterialParameters, detail?: Detail) =>
-  made(key, () => {
+/**
+ * Every material is also filed under its finish (what it's made of, how rough, its pattern), without its colour:
+ * when the inside is merged, parts of the same finish become one mesh, their colours carried per vertex.
+ */
+const std = (key: string, params: THREE.MeshStandardMaterialParameters, detail?: Detail, pattern?: Pattern) =>
+  made(key + (pattern ?? ""), () => {
     const m = new THREE.MeshStandardMaterial(params);
-    return inside(detail ? addDetail(m, detail) : m);
+    const out = inside(detail ? addDetail(m, detail) : m, pattern);
+    const { color: _, ...rest } = params;
+    out.userData.finish = JSON.stringify([rest, detail ?? null, pattern ?? null]);
+    return out;
   });
+const finishes = new Map<string, THREE.MeshStandardMaterial>();
+/** The one material for a finish, coloured per vertex. */
+export function finishMaterial(finish: string) {
+  let m = finishes.get(finish);
+  if (!m) {
+    const [rest, detail, pattern] = JSON.parse(finish) as [THREE.MeshStandardMaterialParameters, Detail | null, Pattern | null];
+    const base = new THREE.MeshStandardMaterial({ ...rest, color: "#ffffff", vertexColors: true });
+    m = inside(detail ? addDetail(base, detail) : base, pattern ?? undefined);
+    m.userData.shared = true;
+    finishes.set(finish, m);
+  }
+  return m;
+}
 /** Painted panels and furniture. */
-export const ipaint = (color: string, rough = 0.6, metalness = 0.05) => std(`ip:${color}:${rough}:${metalness}`, { color, roughness: rough, metalness }, FINE.panel);
+export const ipaint = (color: string, rough = 0.6, metalness = 0.05, pattern?: Pattern) => std(`ip:${color}:${rough}:${metalness}`, { color, roughness: rough, metalness }, FINE.panel, pattern);
 /** Padded fabric: the wall lining, cushions, bags. Never shiny. */
-export const ifabric = (color: string, rough = 0.92) => std(`if:${color}:${rough}`, { color, roughness: rough, metalness: 0 }, FINE.pad);
+export const ifabric = (color: string, rough = 0.92, pattern?: Pattern) => std(`if:${color}:${rough}`, { color, roughness: rough, metalness: 0 }, FINE.pad, pattern);
 /** Brushed metal: rails, frames, fittings. */
 export const imetal = (color = "#9aa3b4", rough = 0.38) => std(`im:${color}:${rough}`, { color, roughness: rough, metalness: 0.75 }, FINE.metal);
 /** Satin plastic: screens' bezels, handles, trim. */
 export const iplastic = (color: string, rough = 0.45) => std(`ipl:${color}:${rough}`, { color, roughness: rough, metalness: 0 });
 /** Rubber floors, seals and grips. */
-export const irubber = (color = "#2a2e36") => std(`ir:${color}`, { color, roughness: 0.9, metalness: 0 }, FINE.rubber);
+export const irubber = (color = "#2a2e36", pattern?: Pattern) => std(`ir:${color}`, { color, roughness: 0.9, metalness: 0 }, FINE.rubber, pattern);
 
 /** The lit face of a lamp, owned by one model so it can dim with the power. */
 export function lampFace() {
