@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RATES } from "../../sim/modules";
 import type { Planet } from "../../sim/types";
 import { addDetail, DETAIL } from "../surface";
 import { bolts, box, contactShadow, cyl, keep, lathe, light, metal, paint, pipe, rbox, rubber, shared, soil, strut, torus } from "../kit";
@@ -117,7 +118,7 @@ export function buildBattery(view: ModuleView) {
     view.bars.push(m);
     box(g, 0.08, 0.1, 0.015, m, -0.75 + i * 0.1, deck + 1.05, 0.765);
   }
-  label(g, "Li-ION 40 kWh", 0.7, 0.45, deck + 1.1, 0.735);
+  label(g, `Li-ION ${RATES.batteryKwh} kWh`, 0.7, 0.45, deck + 1.1, 0.735);
   label(g, "HIGH VOLTAGE", 0.6, 0.45, deck + 0.9, 0.735, "#b8860b");
   // Roof: two fans in shrouds behind grilles.
   for (const x of [-0.55, 0.55]) {

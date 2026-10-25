@@ -277,11 +277,14 @@ describe("goals and results", () => {
 });
 
 describe("random events", () => {
-  it("are seeded, spaced out and within the mission", () => {
+  it("are seeded, few, spaced out and within the mission", () => {
     for (const seed of [1, 2, 3, 77, 2026]) {
       const s = createState("mars-colony", seed);
       const times = [...s.hazards.map((h) => h.startAt), ...s.script.map((e) => e.at)].sort((a, b) => a - b);
-      for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThan(8);
+      // A storm, a dust storm, a meteor shower and three decision cards over eight days, at least 16 hours apart
+      // (less up to an hour of rounding to the half hour or hour).
+      expect(times.length).toBe(6);
+      for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThan(15);
       expect(times[0]).toBeGreaterThanOrEqual(s.startT + 12);
       expect(times.at(-1)!).toBeLessThanOrEqual(mission("mars-colony").endT - 8);
       expect(createState("mars-colony", seed)).toEqual(s);

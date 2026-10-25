@@ -24,7 +24,7 @@ describe("things to look at inside the home", () => {
     g.res.water = 207;
     g.res.food = 42;
     const row = (id: string, label: string) => INSPECTS.find((p) => p.id === id)!.live(g).find((r) => r[0] === label)![1];
-    expect(row("o2", "Oxygen stored")).toBe("12.3 of 30 kg");
+    expect(row("o2", "Oxygen stored")).toBe("12.3 of 90 kg");
     expect(row("tanks", "Water stored")).toBe("207 of 400 L");
     expect(row("food", "Meals on the shelves")).toBe("42 of 150");
     g.crew[0].dose = 7.25;

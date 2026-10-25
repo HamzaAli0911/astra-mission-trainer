@@ -16,8 +16,8 @@ export const EVA_O2 = 0.04;
 
 export const RATES = {
   solarKw: 6, // per array in full lunar sunlight
-  batteryKwh: 40, // per battery bank
-  habitatKwh: 20, // the habitat's own battery
+  batteryKwh: 120, // per battery bank
+  habitatKwh: 60, // the habitat's own battery
   oxygenKgPerHour: 0.2, // per oxygen maker
   recyclerRecovery: 0.85, // fraction of the crew's used water recovered
   recyclerKw: 0.8,
@@ -36,7 +36,7 @@ export const RATES = {
 };
 
 export const STORAGE = {
-  o2: 30,
+  o2: 90,
   water: 400,
   food: 150,
 };
@@ -73,7 +73,7 @@ export const MODULES: Record<ModuleType, ModuleSpec> = {
     color: "#e9eef8",
     cost: 0,
     time: 0,
-    does: "Home for 4 crew: air, warmth and a 20 kWh battery.",
+    does: `Home for 4 crew: air, warmth and a ${RATES.habitatKwh} kWh battery.`,
     catch: "Its heaters need twice as much power at night.",
     real: "The Moon's surface can drop below −170 °C at night, so habitats need heating.",
     mars: { catch: "Mars nights reach −80 °C, so its heaters need extra power at night." },
@@ -98,7 +98,7 @@ export const MODULES: Record<ModuleType, ModuleSpec> = {
     color: "#ffad3b",
     cost: 15,
     time: 2,
-    does: "Stores 40 kWh so daytime power lasts through the night.",
+    does: `Stores ${RATES.batteryKwh} kWh so daytime power lasts through the night.`,
     catch: "Stores power but never makes any.",
     real: "Batteries and fuel cells carry spacecraft and rovers through the dark.",
   },

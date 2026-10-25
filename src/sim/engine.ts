@@ -141,7 +141,7 @@ export function createState(id: string, seed = 2026): GameState {
   return s;
 }
 
-/** Seeded random hazards and decision cards, spread out so they never pile up. */
+/** Seeded random hazards and decision cards, spread out (at least 16 training hours apart) so they never pile up. */
 function addRandomEvents(s: GameState, m: Mission) {
   const r = m.random!;
   let seed = s.seed;
@@ -152,7 +152,7 @@ function addRandomEvents(s: GameState, m: Mission) {
   const slot = () => {
     for (let tries = 0; tries < 40; tries++) {
       const t = from + rand() * (to - from);
-      if (slots.every((x) => Math.abs(x - t) > 9)) {
+      if (slots.every((x) => Math.abs(x - t) > 16)) {
         slots.push(t);
         return t;
       }
@@ -190,7 +190,8 @@ function addRandomEvents(s: GameState, m: Mission) {
     s.script.push({ id: `meteor-${i}`, at: Math.round(slot() * 2) / 2, meteor: "any" });
   const days = (m.endT - m.startT) / 24;
   const cards = r.cards.filter((c) => !CARDS[c].planets || CARDS[c].planets!.includes(s.planet));
-  const n = Math.min(cards.length, Math.max(2, Math.round(days * 0.7)));
+  // About one decision card every three days.
+  const n = Math.min(cards.length, Math.max(2, Math.round(days * 0.35)));
   for (let i = 0; i < n; i++) {
     const k = Math.floor(rand() * cards.length);
     const [card] = cards.splice(k, 1);
