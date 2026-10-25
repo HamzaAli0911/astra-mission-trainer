@@ -56,4 +56,5 @@ The outpost's habitat is a two-storey home you can walk through, and every machi
 - Pure, deterministic simulation (`src/sim`) separated from rendering, covered by unit tests, including scripted wins and losses for every mission.
 - Single source of truth for resource flows (`core.ts: flows`), used by the engine, the HUD, the forecast and the advisor.
 - Procedural 3D (no downloaded assets), adaptive quality on slow machines, responsive layout from phones to desktops.
+- Two rovers with real suspension: wheels climb the rocks drawn under them, the crew rover's tyres squash, and the robotic science rover's rocker-bogie keeps six wheels on the ground. The science rover shows what robots do better (no air, no shelter, nuclear power) and worse (slower, no cargo) than a crew.
 - One floor plan (`src/sim/home.ts`) drives the walkable home's 3D model, its collision and its tests, so what you see is where you can walk; the inside reads the mission through one pure function (`interiorState`), tested for every situation.

@@ -28,6 +28,7 @@ The core loop:
 - **Build** modules on pads around the habitat: solar arrays, batteries, an oxygen maker, a water recycler, greenhouses, an ice drill, a storm shelter, a lab and a fission reactor. Every card says what the module does and **its catch**.
 - **Power** panel: what you make vs. what you use, a battery forecast ("at this rate the battery runs out at 03:40"), and a switch for every machine. Turning things off saves power, but they stop working.
 - **Rover**: send it to sites (or drive with WASD/arrows or the on-screen pad) to bring back ice, regolith for building, and science samples. It drains its battery (faster in the cold, dark crater) and recharges on the dock from the outpost's power.
+- **Science rover**: a robotic explorer with rocker-bogie suspension and nuclear power. Pick it in the Rover panel, drive it or send it to a science site, and it studies the rocks and radios the results home. It never needs charging and keeps working through solar storms, but it is slower than the crew rover and can't carry ice or regolith.
 - **Shelter**: during solar storms, move the crew into the shelter. Research and building pause while they hide.
 - **Decisions**: event cards in the middle of every mission where every option costs something (cargo lander, leaks, a sick crew member, meteor showers, dust devils, an overheating battery, a damaged solar array). Some choices come back later: a battery or array left running may fail and need repairs before nightfall. A card shows what you have, and an option you can't afford is greyed out.
 - **CAPCOM** (Jo, at Mission Control) explains, warns before trouble and offers one button that helps. Messages can be read aloud.
@@ -46,6 +47,7 @@ Everything is drawn in real time in the browser, with no image or model files: e
 - **Moon**: a black sky with the Milky Way, a low Sun that casts long shadows, Earth hanging over the horizon, no air (so no haze and no blowing dust), and a crater floor that never sees the Sun, with frost on its rocks. **Mars**: a butterscotch sky, blue sunsets, Phobos and Deimos at night, rippled dunes, a layered mesa and dust storms that dim the Sun. Solar storms don't tint the sky (radiation is invisible); the screen edge pulses instead.
 - Detailed, physically shaded modules: an inflatable habitat (quilted shell, cupola, airlock with a pressure door, radiators, a dish) that gets buried under regolith sandbags as you build its shield; tall Sun-tracking solar masts on the Moon and dusty tilting tables on Mars; a battery bank with cooling fans; ice-water electrolysis on the Moon and a MOXIE-style CO₂ unit on Mars; a water recycler; a greenhouse with lettuce and staked tomato vines under LED bars; an ice drill with a turning auger; a sandbagged storm shelter; a lab with a dish and weather mast; and a fission reactor buried in a berm under a mast of radiator panels (nothing nuclear glows). A six-wheeled pressurised rover with a wraparound canopy, suspension that follows the ground, chevron tyres, suitports and an arm; jointed astronauts who lope on the Moon and walk on Mars; welding sparks while things are built; power cables that pulse in the direction energy flows.
 - A **walkable home**: a two-storey inflatable habitat about 10 m across with 14 rooms, furnished from real analogs (NASA's Mars Dune Alpha, HI-SEAS, the Mars Desert Research Station, the ISS). Lamps light each room on its own, sunlight comes in through the windows, and longer, slower steps match the lower gravity. See [docs/HABITAT.md](docs/HABITAT.md).
+- Two rovers that ride over rocks: each wheel climbs what's under it and the body tilts with them. The crew rover's rubber tyres flatten where they press on the ground and wrap round small rocks; the science rover's six aluminium wheels (with chevron grousers and curved spokes) ride on a rocker-bogie that keeps all six on the ground, steer at the corners, and leave chevron tracks. Its mast camera pans about, and its arm unfolds onto the rocks while it studies a site.
 - Four camera views. **Overview** looks over the outpost. **Follow** rides behind the rover and turns with it (drag to watch from any side). **Cockpit** puts you in the driver's seat, with live screens for speed, battery, a radar of nearby sites and your cargo. Leaving the dock switches to Follow by itself. **Walk** puts you inside the home.
 - A **map** in the corner shows the whole area. Click a site on it to plan a rover trip, or anywhere else to look there.
 - **Settings → Graphics**: *Auto* adapts to the device (it lowers detail if the game runs slowly), *High* adds glow and soft shadows, *Ultra* adds ambient occlusion, sharper shadows, a finer ground mesh and more pebbles and never steps down on its own (for fast computers), *Low* is for older computers. On a fast desktop, *Auto* also tries Ultra's ambient occlusion and edge smoothing after a few smooth seconds, and steps back if frames start to slip.
@@ -75,6 +77,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Look around | drag; scroll or pinch to zoom; right-drag to slide | |
 | Build · Power · Rover · Shelter | dock buttons | B · P · R · H |
 | Drive the rover | pick a site and press Go, click the ground, or the on-screen pad | W A S D / arrows |
+| Choose which rover you drive | **Crew rover / Science rover** at the top of the Rover panel, or click a rover | |
 | Pause · speed | top-right buttons | Space · 1 2 3 |
 | Camera on base · rover | Camera button in the Rover panel | C · F |
 | Look somewhere else · plan a trip | click the map (top right) | |
@@ -104,7 +107,7 @@ src/sim/      pure, deterministic simulation (no React, no DOM), with tests
   core.ts       power allocation and resource flows (single source of truth)
   missions.ts   the campaign: goals, stars, hazards, scripts, debriefs, quizzes
   advisor.ts    plain-language advice and forecasts
-  rover.ts      driving, collisions, A* autopilot
+  rover.ts      driving, collisions, A* autopilot (both rovers)
   world.ts      map: terrain, pads, sites, crater, rocks
   home.ts       the walkable home's floor plan, walking and collision
   interior.ts   what the inside shows for the mission's state; the crew's routine

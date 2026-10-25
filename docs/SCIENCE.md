@@ -27,6 +27,9 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 | Martian dust | a sealed suit room keeps dust out of the living space | Mars dust contains toxic perchlorates ([NASA JPL](https://www.jpl.nasa.gov/news/how-nasas-perseverance-is-helping-prepare-astronauts-for-mars/)) |
 | Storm shelter in the core | water walls 0.4 m thick round the middle of the home | Mass between you and space blocks radiation; water is one of the best shields ([NASA Orion plan](https://www.nasa.gov/missions/artemis/orion/scientists-and-engineers-evaluate-orion-radiation-protection-plan/)) |
 | Parts printer | spares printed in the lab | The ISS printed its first part in 2014 ([NASA](https://www.nasa.gov/missions/station/open-for-business-3-d-printer-creates-first-object-in-space-on-international-space-station/)) |
+| Science rover power | a nuclear generator (RTG): works day and night, never needs charging | Curiosity and Perseverance run on an MMRTG, which turns the heat of decaying plutonium-238 into about 110 W ([NASA fact sheet](https://www.nasa.gov/wp-content/uploads/2015/04/mmrtg.pdf)) |
+| Rocker-bogie suspension | six wheels stay on the ground over rocks; the body tilts only a little | The design used on every NASA Mars rover; Curiosity's wheels are 50 cm across and each has its own motor ([NASA JPL](https://www.jpl.nasa.gov/images/pia13236-new-wheels/), [Perseverance's wheels](https://mars.nasa.gov/mars2020/spacecraft/rover/wheels/)) |
+| Rovers on rocks | wheels climb rocks up to about 0.4 m; bigger boulders block the way | A rocker-bogie can roll over obstacles about as tall as its wheels' diameter ([NASA](https://mars.nasa.gov/mars2020/spacecraft/rover/wheels/)) |
 
 ## Deliberate simplifications
 
@@ -37,6 +40,8 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 - **Radiation limit.** The trainer uses a 50 mSv limit per mission so storms matter within a short game. Real NASA limits are set over a whole career (about 600 mSv).
 - **Health.** Crew health falls with missing oxygen (fast), water, food or heat; radiation is tracked as dose, not health.
 - **The home.** The CO₂ scrubber and its screen are shown, but CO₂ levels aren't simulated (the scrubber goes on backup when power is short). The crew keep a routine (meals, work, exercise, sleep) but don't walk between rooms.
+- **The science rover is fast.** Real Mars rovers creep along at a few centimetres a second; this one drives at more than half the crew rover's speed so a trip fits into a game. It studies each science site once, for 2 training hours, and radios home 8 science points (a crew sample brought back to the dock gives 15).
+- **Tyres.** The crew rover's tyres are rubber and flatten a few centimetres where they press on the ground or a rock; real lunar and Martian wheels are usually metal mesh or aluminium, which flex much less.
 - **Walking outside.** Only one crew member, Alex, goes out on foot, and the airlock plays an 8-second cycle instead of a real one (which takes much longer). Suit time counts training hours, so a walk outside uses up suit time quickly.
 - **Nothing you can't see is drawn.** Radiation and CO₂ are invisible: storms show only through alarms, beacons, the dosimeter and the screen edge, never a glow. On the Moon there is no outdoor sound, only your breathing and the suit's fans.
 - **Not modelled:** CO₂ levels, air pressure and leaks (except as an event card), thermal design, plant growth cycles, crew psychology.
