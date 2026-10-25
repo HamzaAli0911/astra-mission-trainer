@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { DoorOpen, ExternalLink, Hand, X } from "lucide-react";
+import { DoorOpen, ExternalLink, Hand, Map as MapIcon, X } from "lucide-react";
+import { HOME_TOUR } from "../state/tutorial";
 import { INSPECTS } from "../sim/inspect";
 import { activeHazard } from "../sim/core";
 import { SUIT_HOURS, WALKER } from "../sim/engine";
@@ -41,7 +42,9 @@ function WalkOverlay() {
         <button className="btn walk-exit" onClick={leaveWalk} title="Stop walking and look over the outpost again (V switches views)">
           <DoorOpen size={17} /> Overview
         </button>
+        <TourButton />
       </div>
+      <Tour />
       {(locked || touch) && <div className="walk-cross" aria-hidden="true" />}
       {prompt && (
         <div className="walk-prompt">
@@ -97,6 +100,41 @@ function WalkOverlay() {
         </>
       )}
     </div>
+  );
+}
+
+function TourButton() {
+  const tour = useWalk((s) => s.tour);
+  if (tour !== null) return null;
+  return (
+    <button className="btn walk-exit" onClick={() => useWalk.getState().set({ tour: 0 })} title="Six stops: where the air, water, food and power come from, the storm shelter and the cupola">
+      <MapIcon size={17} /> Take a tour
+    </button>
+  );
+}
+
+/** The tour: one stop at a time; looking closely at the right thing (E) moves it on. */
+function Tour() {
+  const tour = useWalk((s) => s.tour);
+  const card = useWalk((s) => s.card);
+  useEffect(() => {
+    if (tour === null || card !== HOME_TOUR[tour]?.inspect) return;
+    const next = tour + 1;
+    useWalk.getState().set({ tour: next < HOME_TOUR.length ? next : null });
+    if (next >= HOME_TOUR.length) useGame.getState().toast("Tour done! You've seen where the air, water, food and power come from.", "good");
+  }, [tour, card]);
+  if (tour === null) return null;
+  const s = HOME_TOUR[tour];
+  return (
+    <aside className="tour-card" aria-live="polite">
+      <span className="eyebrow">
+        Tour {tour + 1} of {HOME_TOUR.length} · {s.title}
+      </span>
+      <p>{s.text}</p>
+      <button className="btn ghost small" onClick={() => useWalk.getState().set({ tour: null })}>
+        End the tour
+      </button>
+    </aside>
   );
 }
 

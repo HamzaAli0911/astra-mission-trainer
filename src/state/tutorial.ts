@@ -287,3 +287,13 @@ export function tutorialFor(id: string, stars: Record<string, number>): Step[] |
   if (id === "red-planet" && !stars["first-light"]) return [...MARS_BASICS, ...RED_PLANET];
   return TUTORIALS[id];
 }
+
+/** "Take a tour" inside the home: six things to find, each finished by looking at it closely (E). */
+export const HOME_TOUR: { inspect: string; title: string; text: string }[] = [
+  { inspect: "o2", title: "Oxygen", text: "Find the life-support room (north, off the hall) and look at the oxygen supply." },
+  { inspect: "water", title: "Water", text: "Next to it: the water recovery rack. Almost every drop comes back." },
+  { inspect: "garden", title: "Food", text: "Climb the stair (by the medical bay) and look at the food wall in the garden." },
+  { inspect: "power", title: "Power", text: "In the command room (the core, upstairs), check the power console." },
+  { inspect: "dosimeter", title: "Storm shelter", text: "Down in the core, behind the door by the galley: the storm shelter and its dosimeter." },
+  { inspect: "cupola", title: "Cupola", text: "Last one: the ladder up to the cupola, in the middle of the command room." },
+];

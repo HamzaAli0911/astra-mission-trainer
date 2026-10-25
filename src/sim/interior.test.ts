@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createState } from "./engine";
-import { dayPhase, interiorState } from "./interior";
+import { crewSpots, dayPhase, interiorState } from "./interior";
 import { STORAGE } from "./modules";
 import type { GameState } from "./types";
 
@@ -114,5 +114,36 @@ describe("what the inside of the home shows", () => {
     const bare = interiorState(g).plants;
     g.modules.push({ id: 91, type: "greenhouse", pad: 6, built: 99, on: true, light: 2, health: 100, repair: 0 });
     expect(interiorState(g).plants).toBeGreaterThan(bare);
+  });
+});
+
+describe("the crew's day in the home", () => {
+  const at = (g: GameState) => Object.fromEntries(crewSpots(g).map((c) => [c.id, c.spot]));
+  it("eats together, works at their stations, takes turns exercising, and sleeps in their quarters", () => {
+    const g = home();
+    g.t = 24 + 7.5;
+    expect(Object.values(at(g)).every((s) => s?.startsWith("galley"))).toBe(true);
+    g.t = 24 + 10;
+    expect(at(g)).toEqual({ maya: "command", alex: "eclss", sam: "garden", noor: "lab" });
+    g.t = 24 + 23;
+    expect(Object.values(at(g)).every((s) => s === "bed")).toBe(true);
+    const exercising = new Set<string>();
+    for (let t = 13; t < 17; t += 0.5) {
+      g.t = 24 + t;
+      for (const [id, s] of Object.entries(at(g))) if (s === "treadmill" || s === "cycle") exercising.add(id);
+    }
+    expect(exercising.size).toBe(4);
+  });
+  it("shelters in the core in a storm, and isn't home while out in the rover or on foot outside", () => {
+    const g = home();
+    g.t = 10;
+    g.sheltering = true;
+    for (const c of g.crew) c.place = "shelter";
+    expect(Object.values(at(g)).every((s) => s?.startsWith("shelter"))).toBe(true);
+    g.sheltering = false;
+    g.crew[0].place = "rover";
+    g.crew[1].place = "eva";
+    expect(at(g).maya).toBeNull();
+    expect(at(g).alex).toBeNull();
   });
 });

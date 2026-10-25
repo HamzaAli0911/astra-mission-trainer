@@ -149,9 +149,11 @@ function burst(len: number, from: number, to: number, q: number, gain: number) {
 export function doorSound(open: boolean, near = 1) {
   burst(0.55, open ? 700 : 1500, open ? 1500 : 650, 1.1, 0.07 * near);
 }
-/** One footstep on the padded floor: a soft, low thud (softer still in low gravity). */
-export function footstep(weight = 1) {
-  burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
+/** One footstep: a soft thud on the padded floor, a ring on the stair's metal treads, a crunch of regolith outside. */
+export function footstep(weight = 1, surface: "floor" | "stair" | "ground" = "floor") {
+  if (surface === "stair") burst(0.09, 900 + Math.random() * 200, 420, 3, 0.03 * weight);
+  else if (surface === "ground") burst(0.14, 520 + Math.random() * 120, 240, 0.8, 0.03 * weight);
+  else burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
 }
 
 /** The airlock cycling: a long hiss as the air is pumped out (going out) or let back in (coming home). */
@@ -284,7 +286,7 @@ function startAmbience(a: AudioContext, out: GainNode): Ambience {
  * Keep the background sound in step with the scene (call a few times a second): life support always,
  * wind on Mars that rises in a dust storm, and the rover's motors while it drives (0 to 1).
  */
-export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number; drive: number; time: number; inside?: boolean; suit?: boolean }) {
+export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number; drive: number; time: number; inside?: boolean; suit?: boolean; machines?: number }) {
   const want = s.on && !document.hidden && useUI.getState().settings.sound;
   if (!want) {
     if (amb && ctx) for (const g of [amb.hum, amb.wind, amb.motor, amb.breath]) g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
@@ -297,7 +299,7 @@ export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number
   // Inside the home the machines are close and the wind is behind the shell; in a suit on the Moon there's no air
   // to carry any sound at all, only your own breathing and the suit's fans.
   const vacuum = s.suit && s.planet === "moon";
-  amb.hum.gain.setTargetAtTime(s.suit ? 0.012 : s.inside ? 0.05 : 0.03, t, 0.5);
+  amb.hum.gain.setTargetAtTime(s.suit ? 0.012 : s.inside ? 0.05 * (1 + (s.machines ?? 0)) : 0.03, t, 0.5);
   const gust = 0.5 + 0.5 * Math.sin(s.time * 0.7) * Math.sin(s.time * 0.23 + 1);
   amb.wind.gain.setTargetAtTime(s.planet === "mars" ? (0.012 + s.dust * 0.08 + gust * 0.01) * (s.inside ? 0.3 : s.suit ? 0.6 : 1) : 0, t, 0.4);
   amb.windTone.frequency.setTargetAtTime(300 + s.dust * 450 + gust * 160, t, 0.4);

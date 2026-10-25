@@ -192,6 +192,16 @@ export const INSPECTS: Inspect[] = [
     fact: () => fact("Printing spare parts in space"),
   },
   {
+    id: "cupola",
+    title: "Cupola ladder",
+    ...at("command-ladder"),
+    live: (g) => [
+      ["Up the ladder", "the cupola: a ring of windows on the roof"],
+      ["The view", g.planet === "mars" ? "a butterscotch sky; Phobos and Deimos at night" : "Earth, hanging in a black sky"],
+    ],
+    fact: (g) => fact(g.planet === "mars" ? "A conversation with a long pause" : "Long days, long nights"),
+  },
+  {
     id: "exercise",
     title: "Treadmill",
     ...at("exercise-treadmill"),

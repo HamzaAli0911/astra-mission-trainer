@@ -31,11 +31,14 @@ describe("the inside of the home, against its floor plan", () => {
     interior.group.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
-      meshes++;
+      // Each crew member is built in four poses and only one shows at a time: count one.
+      let posed = false;
+      for (let a: THREE.Object3D | null = m; a; a = a.parent) if (/^crew-.*-(sit|ride|lie)$/.test(a.name)) posed = true;
+      if (!posed) meshes++;
       // Parts merged by finish carry their colours per vertex: the colours must survive the merge.
       if ((m.material as THREE.Material & { vertexColors?: boolean }).vertexColors) expect(m.geometry.attributes.color, m.name).toBeDefined();
     });
-    expect(meshes).toBeLessThan(115);
+    expect(meshes).toBeLessThan(125);
   });
 
   it("draws a wall wherever the walker bumps into one", { timeout: 60000 }, () => {

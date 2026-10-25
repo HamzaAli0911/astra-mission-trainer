@@ -44,9 +44,11 @@ export interface WalkStore {
   card: string | null;
   /** The airlock cycling (out to the surface, or back in), and when it started (seconds). */
   airlock: { dir: "out" | "in"; t0: number } | null;
+  /** The home tour's step (0–5), or null. */
+  tour: number | null;
   /** The view and sim speed to go back to when you stop walking. */
   back: { view: Exclude<View, "walk">; speed: Speed } | null;
-  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock">>) => void;
+  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock" | "tour">>) => void;
 }
 export const useWalk = create<WalkStore>((set) => ({
   room: "",
@@ -54,6 +56,7 @@ export const useWalk = create<WalkStore>((set) => ({
   locked: false,
   card: null,
   airlock: null,
+  tour: null,
   back: null,
   set: (p) => set(p),
 }));
@@ -101,7 +104,7 @@ useUI.subscribe((s, prev) => {
   } else if (prev.view === "walk") {
     const back = useWalk.getState().back;
     if (back && useGame.getState().speed === 1) useGame.setState({ speed: back.speed });
-    useWalk.setState({ back: null, prompt: null, locked: false, card: null, airlock: null });
+    useWalk.setState({ back: null, prompt: null, locked: false, card: null, airlock: null, tour: null });
     // Stepping out of walk mode mid-walk outside brings Alex back in.
     if (useGame.getState().game.eva) useGame.getState().act({ type: "eva", on: false });
     clearWalkInput();

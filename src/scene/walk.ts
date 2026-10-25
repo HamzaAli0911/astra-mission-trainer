@@ -214,7 +214,9 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
           speed = Math.hypot(next.vx, next.vz);
           Object.assign(walker, { x: next.x, z: next.z, where: next.where, vx: next.vx, vz: next.vz, stride: walker.stride + (speed * dt) / step });
         }
-        if (Math.floor(walker.stride) !== Math.floor(before) && speed > 0.4) footstep(Math.min(1, 0.55 + gravity / 9.81) * (walker.outside ? 0.6 : 1));
+        if (Math.floor(walker.stride) !== Math.floor(before) && speed > 0.4)
+          // (Outside on the Moon, only through your own suit.)
+          footstep(Math.min(1, 0.55 + gravity / 9.81) * (walker.outside && planet === "moon" ? 0.5 : 1), walker.outside ? "ground" : walker.where === "stair" ? "stair" : "floor");
       } else {
         walker.vx = walker.vz = 0;
       }

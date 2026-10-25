@@ -6,6 +6,7 @@ import { activeHazard, capacity, flows } from "../../sim/core";
 import { clockOf, dayOf, PLANETS } from "../../sim/planets";
 import type { GameState, Planet } from "../../sim/types";
 import type { InteriorState } from "../../sim/interior";
+import { buildCrew } from "./crew";
 import { dress } from "./dressing";
 import { buildPiece, living, placeInstances, resetLiving } from "./furniture";
 import { finishMaterial, insideLight, ipaint } from "./lighting";
@@ -68,6 +69,7 @@ export function buildInterior(planet: Planet = "mars"): Interior {
   const { doors, lit } = buildStructure(group);
   for (const k of BLOCKS) furniture(group, k);
   dress(group, planet);
+  const crew = buildCrew(group);
   placeInstances(group);
   finishLabels();
   bake(group);
@@ -136,6 +138,7 @@ export function buildInterior(planet: Planet = "mars"): Interior {
       if (live.tomatoes) live.tomatoes.count = st.plants > 0.7 ? tomatoTotal : 0;
     }
     for (const gl of live.growLights) gl.emissiveIntensity = st.lights === "emergency" ? 0.15 : 0.4 + 1.2 * st.plants;
+    crew.place(st.crew);
   };
   return {
     apply,

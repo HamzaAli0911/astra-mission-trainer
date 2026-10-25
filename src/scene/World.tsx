@@ -1174,7 +1174,9 @@ export function World() {
         if (clock - ambienceAt > 0.2) {
           ambienceAt = clock;
           const walking = view === "walk";
-          ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva });
+          // Inside, the life-support room's machines are loud; the rest of the home is quieter.
+          const machines = walking && !walker.outside && walker.where === 0 && Math.hypot(walker.x, walker.z) > HOME_PLAN.hall && (Math.atan2(walker.x, -walker.z) * 180) / Math.PI > -30 && (Math.atan2(walker.x, -walker.z) * 180) / Math.PI < 30 ? 1.5 : 0;
+          ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva, machines });
         }
         // The rover's body rocks a little over the ground as it drives.
         const bump = reduced ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);

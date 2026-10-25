@@ -4518,6 +4518,35 @@ table.keys .kbd {
     width: 220px;
   }
 }
+.tour-card {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 146px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--glass);
+  border: 1px solid rgba(255, 138, 61, 0.5);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+.tour-card .eyebrow {
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tour-card p {
+  margin: 6px 0 8px;
+  font-size: 0.88rem;
+}
+@media (max-width: 640px) {
+  .tour-card {
+    top: 196px;
+  }
+}
 /* While walking: no labels floating over the outpost, no dust haze indoors, no rover pad. */
 .walking .world-labels,
 .walking .fx-dust,

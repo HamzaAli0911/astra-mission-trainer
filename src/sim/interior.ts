@@ -41,6 +41,8 @@ export interface InteriorState {
   faults: Partial<Record<ModuleType, boolean>>;
   /** How well the food wall is growing, 0–1 (needs the greenhouse working and lit). */
   plants: number;
+  /** Where each crew member is in the home (their daily routine). */
+  crew: { id: string; spot: CrewSpot | null }[];
 }
 
 const PHASE_COLOR: Record<DayPhase, [number, number, number]> = {
@@ -98,5 +100,44 @@ export function interiorState(g: GameState): InteriorState {
     waterFill: Math.max(0, Math.min(1, g.res.water / STORAGE.water)),
     faults,
     plants,
+    crew: crewSpots(g),
   };
+}
+
+/** Where a crew member is in the home right now (a named place the 3D view knows), or null if they're out. */
+export type CrewSpot =
+  | "galley-1"
+  | "galley-2"
+  | "galley-3"
+  | "galley-4"
+  | "command"
+  | "eclss"
+  | "garden"
+  | "lab"
+  | "treadmill"
+  | "cycle"
+  | "bed"
+  | "desk"
+  | "shelter-1"
+  | "shelter-2"
+  | "shelter-3"
+  | "shelter-4";
+/** Each crew member's usual work place. */
+const WORK: Record<string, CrewSpot> = { maya: "command", alex: "eclss", sam: "garden", noor: "lab" };
+/** The daily routine: breakfast, work, lunch, work (and a turn on the exercise machines), dinner, evening, sleep. */
+export function crewSpots(g: GameState): { id: string; spot: CrewSpot | null }[] {
+  const h = ((g.t % 24) + 24) % 24;
+  const day = Math.floor(g.t / 24);
+  return g.crew.map((c, i) => {
+    if (c.place === "rover" || c.place === "eva") return { id: c.id, spot: null };
+    if (c.place === "shelter") return { id: c.id, spot: `shelter-${i + 1}` as CrewSpot };
+    const meal = (h >= 7 && h < 8) || (h >= 12 && h < 13) || (h >= 19 && h < 20);
+    if (meal) return { id: c.id, spot: `galley-${i + 1}` as CrewSpot };
+    if (h >= 22 || h < 6.5) return { id: c.id, spot: "bed" };
+    if (h >= 20) return { id: c.id, spot: "desk" };
+    // Two hours of exercise a day each: two at a time (treadmill and cycle) through the afternoon, taking turns.
+    const start = 13 + 2 * (((i >> 1) + day) % 2);
+    if (h >= start && h < start + 2) return { id: c.id, spot: i % 2 ? "cycle" : "treadmill" };
+    return { id: c.id, spot: WORK[c.id] ?? "lab" };
+  });
 }
