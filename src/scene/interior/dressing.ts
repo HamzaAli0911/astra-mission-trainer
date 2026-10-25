@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { HOME, polar, rad, ROOMS, STAIR, stairPoint, type Level } from "../../sim/home";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { HOME, polar, rad, ROOMS, STAIR, stairPoint, WINDOWS, windowY, type Level } from "../../sim/home";
 import { box, cyl, keep, mesh, rbox, strut, torus } from "../kit";
 import { living } from "./furniture";
 import { ifabric, imetal, ipaint, iplastic } from "./lighting";
@@ -149,10 +150,11 @@ export function dress(g: THREE.Group, planet: "moon" | "mars") {
   ilabel(board, "TONIGHT: CURRY + FRESH SALAD", 0.44, 0, 0.08, 0.022, "#f3f6ff", null);
   ilabel(board, "FROM THE FOOD WALL", 0.36, 0, -0.06, 0.022, "#7fd36e", null);
 
-  // Life support: ducts along the ceiling, the oxygen line coming in from outside, a live panel.
+  // Life support: an exhaust duct from the top of each rack up into the ceiling, the oxygen line coming in from
+  // outside, a live panel.
   for (const b of [339, 352.5, 6]) {
-    const d = onWall(g, b, HOME.lining - 0.25, HOME.floor[0] + 2.45);
-    box(d, 0.28, 0.2, 0.36, imetal("#b9c0ca", 0.4), 0, 0, 0);
+    const d = onWall(g, b, HOME.lining - 0.25, HOME.floor[0] + 2.35);
+    box(d, 0.28, 0.5, 0.36, imetal("#b9c0ca", 0.4), 0, 0, 0);
   }
   const line = onWall(g, 330, HOME.lining - 0.08, HOME.floor[0] + 2.05);
   strut(line, 0, 0, 0, 0.9, 0, 0.0, 0.03, ipaint("#2f6fb0", 0.35, 0.3), 8);
@@ -209,8 +211,12 @@ export function dress(g: THREE.Group, planet: "moon" | "mars") {
   // Command: the big screen with the outpost's summary and the signal delay to Earth.
   screen(onWall(g, 80, HOME.command - 0.005, HOME.floor[1] + 1.55), 1.0, 0.56, 0, 0, 0.01, drawSummary, 512);
   ilabel(onWall(g, 30, HOME.command - 0.005, HOME.floor[1] + 1.95), "COMMS · CAPCOM LINK", 0.44, 0, 0, 0.01, "#1d222b");
-  // The hatch up to the cupola, in the ceiling over the ladder.
-  cyl(g, 0.46, 0.46, 0.06, imetal("#5d6573", 0.45), 0, HOME.ceiling[1] - 0.03, 0, 32);
+  // The hatch up to the cupola, in the ceiling over the ladder (its rim is on the ladder): a pale panel with a hand wheel.
+  const top = HOME.ceiling[1];
+  cyl(g, 0.44, 0.44, 0.05, ipaint("#c9ced6", 0.45, 0.2), 0, top - 0.025, 0, 32);
+  torus(g, 0.13, 0.014, imetal("#8d96a3", 0.35), 0, top - 0.1, 0).rotation.x = Math.PI / 2;
+  for (const turn of [0, Math.PI / 2]) box(g, 0.26, 0.012, 0.012, imetal("#8d96a3", 0.35), 0, top - 0.1, 0).rotation.y = turn;
+  cyl(g, 0.012, 0.012, 0.07, imetal("#8d96a3", 0.35), 0, top - 0.065, 0, 8);
 
   // Exercise: a poster and the session board.
   ilabel(onWall(g, 30, HOME.lining - 0.01, HOME.floor[1] + 1.7), "2 HOURS A DAY KEEPS BONES STRONG", 0.6, 0, 0, 0.004, "#1d222b", "#f2e6d0");
@@ -240,6 +246,17 @@ export function dress(g: THREE.Group, planet: "moon" | "mars") {
     mesh(new THREE.BoxGeometry(0.11, 0.08, 0.012), imetal("#d9dde2", 0.2), head, 0, 0, 0.015);
     living.beacons.push(head);
   }
+
+  // Dust on the windows: a haze in the reveal, just inside the glass, that thickens in a Martian dust storm (one mesh,
+  // drawn only while there's dust).
+  living.dustFilm = new THREE.MeshBasicMaterial({ color: "#b86a3c", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, visible: false });
+  const panes = WINDOWS.map((w) => {
+    const p = polar(w.bearing, HOME.lining + 0.1);
+    return new THREE.PlaneGeometry(w.w + 0.1, w.h + 0.1).applyMatrix4(new THREE.Matrix4().makeRotationY(-rad(w.bearing)).setPosition(p.x, windowY(w), p.z));
+  });
+  const haze = new THREE.Mesh(mergeGeometries(panes), living.dustFilm);
+  haze.renderOrder = 2;
+  g.add(haze);
 
   // Signs for hard times: water rationing at the galley and the hygiene room, food running out, oxygen low.
   const warn = (list: THREE.Object3D[], text: string, bearing: number, r: number, y: number, w: number, outward = false) => {

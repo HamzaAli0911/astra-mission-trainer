@@ -37,7 +37,8 @@ async function post(name: string, body: string) {
 /** Wait until the world has been built and drawn. */
 async function ready() {
   await wait(400);
-  for (let i = 0; i < 600 && (!hooks().snap || document.querySelector(".world-loading")); i++) await wait(100);
+  // (The inside of the home is built in the background after the outpost appears: wait for that too.)
+  for (let i = 0; i < 600 && (!hooks().snap || document.querySelector(".world-loading") || !(hooks() as { interior?: unknown }).interior); i++) await wait(100);
   await wait(300);
 }
 async function settle(n = 25) {
@@ -65,6 +66,7 @@ async function setup(planet: Planet, t = 10.5) {
   delete h.snap;
   delete h.place;
   delete h.view;
+  delete (h as { interior?: unknown }).interior;
   useGame.getState().start(planet === "moon" ? "free-moon" : "free-mars");
   useUI.setState({ screen: "game", briefing: false, tutorial: null, panel: null, debrief: false, modal: null, view: "orbit" });
   await ready();
@@ -228,6 +230,7 @@ const fresh = () => {
   const g = useGame.getState().game;
   Object.assign(g.res, { power: 60, o2: 25, water: 350, food: 130 });
   g.sheltering = false;
+  for (const c of g.crew) c.place = "habitat";
   g.hazards = g.hazards.filter((x) => x.id !== 991 && x.id !== 992);
   for (const m of g.modules) {
     m.health = 100;
@@ -256,7 +259,8 @@ SHOTS.push(
     id: "IS04-storm-warned-core",
     planet: "mars",
     frames: 40,
-    run: state(212, 2.55, 0, 334, 4, (g) => g.hazards.push({ id: 991, kind: "storm", warnAt: 10, startAt: 12, endAt: 20, strength: 1, phase: "warned" })),
+    // The hall by the shelter's door: open, with the red beacon turning over it.
+    run: state(225, 2.7, 0, 6, 9, (g) => g.hazards.push({ id: 991, kind: "storm", warnAt: 10, startAt: 12, endAt: 20, strength: 1, phase: "warned" })),
   },
   {
     id: "IS05-sheltering",
@@ -265,12 +269,15 @@ SHOTS.push(
     run: state(250, 1.05, 0, 75, -8, (g) => {
       g.hazards.push({ id: 991, kind: "storm", warnAt: 8, startAt: 10, endAt: 20, strength: 1, phase: "active" });
       g.sheltering = true;
+      // (The engine moves the crew in on its next step; the clock is paused here.)
+      for (const c of g.crew) c.place = "shelter";
     }),
   },
   {
     id: "IS06-dust-storm-window",
     planet: "mars",
-    frames: 40,
+    // (The haze and the sky thicken over a few seconds.)
+    frames: 160,
     run: state(255, 3.6, 0, 268, -2, (g) => g.hazards.push({ id: 992, kind: "dust", warnAt: 9, startAt: 10, endAt: 30, strength: 0.35, phase: "active" })),
   },
   { id: "IS07-food-low-galley", planet: "mars", frames: 40, run: state(240, 3.3, 0, 205, -8, (g) => (g.res.food = 9)) },
@@ -345,6 +352,9 @@ async function perf(tiers: ("low" | "high" | "ultra" | "auto")[] = ["low", "high
     const cams: [string, (h: Hooks) => void][] = [
       ["overview", (h) => h.place([30, 24, 40], [0, 0, 2])],
       ["habitat", (h) => h.place(hab([8.5, 4.2, 11]), hab([0, 0, 1.5]))],
+      // Inside: the galley looking across the hall (the busiest view), and upstairs over the stairwell.
+      ["inside-galley", (h) => inside(232, 3.15, 0, 300, -6)(h)],
+      ["inside-landing", (h) => inside(160, 3.4, 1, 40, -12)(h)],
     ];
     for (const [name, cam] of cams) {
       const h = hooks() as Hooks;
@@ -368,6 +378,7 @@ async function perf(tiers: ("low" | "high" | "ultra" | "auto")[] = ["low", "high
       }
       res[name] = { ms, calls, tris, programs: r.info.programs?.length, geometries: r.info.memory.geometries, textures: r.info.memory.textures, px: r.getPixelRatio() };
     }
+    if (useUI.getState().view === "walk") useUI.getState().setView("orbit");
     out[tier] = res;
   }
   return out;
@@ -497,7 +508,7 @@ async function walkAll(planet: Planet = "mars") {
 
 /** Panels that overlap each other at the current window size (ignoring one fully inside another). */
 function overlaps() {
-  const sel = [".topbar", ".quick-actions", ".goals", ".hud-right", ".dock", ".view-switch", ".capcom", ".coach", ".drawer", ".paused-chip", ".speed-note", ".resource-bar", ".toasts", ".walk-bar", ".walk-hints", ".walk-stick", ".walk-use", ".inspect-card"];
+  const sel = [".topbar", ".quick-actions", ".goals", ".hud-right", ".dock", ".view-switch", ".capcom", ".coach", ".drawer", ".paused-chip", ".speed-note", ".resource-bar", ".toasts", ".walk-bar", ".walk-hints", ".walk-stick", ".walk-use", ".inspect-card", ".suit-hud", ".compass", ".airlock"];
   const els: [string, DOMRect][] = [];
   for (const s of sel)
     document.querySelectorAll(s).forEach((e) => {

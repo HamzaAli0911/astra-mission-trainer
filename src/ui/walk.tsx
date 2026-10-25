@@ -7,7 +7,7 @@ import { activeHazard } from "../sim/core";
 import { SUIT_HOURS, WALKER } from "../sim/engine";
 import { PLANETS } from "../sim/planets";
 import { AIRLOCK_SECONDS } from "../scene/walk";
-import { useGame } from "../state/game";
+import { HOUR_SECONDS, useGame } from "../state/game";
 import { useUI } from "../state/ui";
 import { leaveWalk, useWalk, walker, walkInput } from "../state/walk";
 
@@ -21,7 +21,7 @@ export function WalkHud() {
 }
 
 function WalkOverlay() {
-  const { room, prompt, locked } = useWalk(useShallow((s) => ({ room: s.room, prompt: s.prompt, locked: s.locked })));
+  const { room, prompt, locked, ready } = useWalk(useShallow((s) => ({ room: s.room, prompt: s.prompt, locked: s.locked, ready: s.ready })));
   const touch = useMemo(isTouch, []);
   // The hints fade once you've started looking around, and come back if you let go of the mouse.
   const [hints, setHints] = useState(true);
@@ -33,6 +33,11 @@ function WalkOverlay() {
   return (
     <div className={`walk-hud ${touch ? "touch" : ""}`}>
       <div className="walk-fade" aria-hidden="true" />
+      {!ready && (
+        <div className="walk-preparing" role="status">
+          Preparing the home…
+        </div>
+      )}
       <div className="walk-bar">
         {room && (
           <div className="walk-room" role="status">
@@ -207,6 +212,12 @@ function Airlock() {
       <p>
         {kpa} kPa {lock.dir === "out" ? "→ 0 (the outside)" : "→ 101 (like home)"}
       </p>
+      {lock.dir === "out" && (
+        <p className="airlock-note">
+          The suit's {SUIT_HOURS} hours run on the mission clock (about {Math.round((SUIT_HOURS * HOUR_SECONDS) / 5) * 5} seconds at 1×). Pause the clock
+          {isTouch() ? "" : " (Space)"} to take your time: you can still walk.
+        </p>
+      )}
       <button
         className="btn small"
         onClick={() => {

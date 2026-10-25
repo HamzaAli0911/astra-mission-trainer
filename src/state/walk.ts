@@ -46,9 +46,11 @@ export interface WalkStore {
   airlock: { dir: "out" | "in"; t0: number } | null;
   /** The home tour's step (0–5), or null. */
   tour: number | null;
+  /** The inside has been built (it's put together in the background once the mission is on screen). */
+  ready: boolean;
   /** The view and sim speed to go back to when you stop walking. */
   back: { view: Exclude<View, "walk">; speed: Speed } | null;
-  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock" | "tour">>) => void;
+  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock" | "tour" | "ready">>) => void;
 }
 export const useWalk = create<WalkStore>((set) => ({
   room: "",
@@ -57,6 +59,7 @@ export const useWalk = create<WalkStore>((set) => ({
   card: null,
   airlock: null,
   tour: null,
+  ready: false,
   back: null,
   set: (p) => set(p),
 }));

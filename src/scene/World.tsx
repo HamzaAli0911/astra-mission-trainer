@@ -26,11 +26,11 @@ import type { Baked } from "./bake";
 import { bakedNow, prebake } from "./prebake";
 import { buildSky, environmentMap } from "./sky";
 import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem } from "./terrain";
-import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData } from "./interior";
+import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData, type Interior } from "./interior";
 import { HOME as HOME_PLAN } from "../sim/home";
 import { insideEnvironment } from "./interior/lighting";
 import { walkController } from "./walk";
-import { walker } from "../state/walk";
+import { useWalk, walker } from "../state/walk";
 import { interiorState } from "../sim/interior";
 
 const HOME = new THREE.Vector3(0, 0, 3);
@@ -373,20 +373,14 @@ export function World() {
         scene.add(w);
       }
 
-      // The inside of the Mars home (shown only while you walk in it, or look in from close by).
-      if (!(await slice())) return;
-      const insideEnv = insideEnvironment(renderer);
-      const interior = buildInterior(planet);
-      interior.group.traverse((o) => {
-        const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-        if (m?.isMeshStandardMaterial) m.envMap = insideEnv.texture;
-      });
+      // The inside of the Mars home (shown only while you walk in it, or look in from close by). It's built in the
+      // background once the outpost is on screen (see below), so starting a mission is no slower.
+      let interior: Interior | null = null,
+        insideEnv: THREE.WebGLRenderTarget | null = null;
+      useWalk.getState().set({ ready: false });
       const homeAt = modulePos({ pad: -1 });
       const homeOrigin = new THREE.Vector3(homeAt.x, terrainHeight(homeAt.x, homeAt.z, planet), homeAt.z);
-      placeInterior(interior, homeOrigin.x, homeOrigin.y, homeOrigin.z);
-      interior.group.visible = false;
-      scene.add(interior.group);
-      const walkCtl = walkController(renderer.domElement, planet, interior);
+      const walkCtl = walkController(renderer.domElement, planet, () => interior);
       const baseExposure = renderer.toneMappingExposure;
       let exposure = baseExposure,
         screensAt = -1;
@@ -1185,13 +1179,13 @@ export function World() {
         rover.body.rotation.x = Math.sin(clock * 3.7) * 0.006 * bump;
 
         // What the inside shows (lights, alarms, shelves) follows the mission, while you're in or near it.
-        const homeState = view === "walk" || interior.group.visible ? interiorState(g) : null;
+        const homeState = view === "walk" || interior?.group.visible ? interiorState(g) : null;
         walkCtl.update(dt, view === "walk", !!(ui.modal || ui.briefing || ui.debrief || st.alert || g.choice), homeState);
         runCamera(g, dt);
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
-        const near = view === "walk" || camera.position.distanceTo(homeOrigin) < 24;
-        interior.group.visible = near;
-        if (near && homeState) {
+        const near = !!interior && (view === "walk" || camera.position.distanceTo(homeOrigin) < 24);
+        if (interior) interior.group.visible = near;
+        if (interior && near && homeState) {
           interior.apply(homeState, dt, clock, reduced);
           // Screens inside redraw a few times a second (in a blackout only life support's stay on).
           if (clock - screensAt > 0.33) {
@@ -1201,6 +1195,12 @@ export function World() {
         }
         const home = g.modules.find((m) => m.type === "habitat");
         for (const w of (home && entries.get(home.id)?.view.windowGlow) || []) w.visible = !near;
+        // Indoors on Ultra the screen-space occlusion pass would redraw the whole outpost hidden behind the walls (about
+        // 13 ms); the home's own corner shading (worked out from the floor plan) stands in for it there.
+        if (gtao && warmStage === 3) {
+          const want = level === 3 && !(view === "walk" && !walker.outside);
+          if (gtao.enabled !== want) gtao.enabled = want;
+        }
         // Eyes adjust between the sunlit outdoors and the lit rooms inside (about half a second).
         const wantExposure = baseExposure * (view === "walk" ? 1.0 : 1);
         exposure += (wantExposure - exposure) * (1 - Math.exp(-dt / 0.5));
@@ -1274,12 +1274,12 @@ export function World() {
           setView("walk");
           Object.assign(walker, { x, z, where: level, yaw: THREE.MathUtils.degToRad(yaw), pitch: THREE.MathUtils.degToRad(pitch), vx: 0, vz: 0 });
         };
-        debug.interior = interior;
         debug.camera = camera;
         debug.walker = walker;
         // A 1.75 m figure for judging scale in review shots (habitat-local, a floor, facing a bearing); null hides it.
         let figure: THREE.Object3D | null = null;
         debug.figure = (x: number | null, z = 0, level: 0 | 1 = 0, yaw = 0) => {
+          if (!interior) return;
           if (!figure) {
             figure = scaleFigure();
             interior.group.add(figure);
@@ -1295,6 +1295,7 @@ export function World() {
           const r = new THREE.Raycaster();
           r.layers.enableAll();
           r.setFromCamera(new THREE.Vector2(sx, sy), camera);
+          if (!interior) return null;
           const hit = r.intersectObjects([interior.group], true)[0];
           if (!hit) return null;
           const p = hit.point.clone().sub(homeOrigin);
@@ -1346,6 +1347,29 @@ export function World() {
           warmStage = 3;
           raf = requestAnimationFrame(loop);
           setWarming(false);
+          // Now build the inside of the home, a slice at a time, and compile its shaders off to the side.
+          const breathe = () => new Promise<boolean>((r) => window.setTimeout(() => r(alive), 0));
+          const built = await buildInterior(planet, breathe);
+          if (!built || !alive) {
+            built?.dispose();
+            return;
+          }
+          insideEnv = insideEnvironment(renderer);
+          built.group.traverse((o) => {
+            const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+            if (m?.isMeshStandardMaterial) m.envMap = insideEnv!.texture;
+          });
+          placeInterior(built, homeOrigin.x, homeOrigin.y, homeOrigin.z);
+          built.group.visible = false;
+          scene.add(built.group);
+          renderer.setRenderTarget(level > 0 ? target : null);
+          const ready = renderer.compileAsync(built.group, camera, scene);
+          renderer.setRenderTarget(null);
+          await ready.catch(() => undefined);
+          if (!alive) return;
+          interior = built;
+          if (debug) debug.interior = built;
+          useWalk.getState().set({ ready: true });
         });
 
       teardown = () => {
@@ -1360,8 +1384,8 @@ export function World() {
         window.removeEventListener("pointerup", onLookUp);
         controls.dispose();
         walkCtl.dispose();
-        interior.dispose();
-        insideEnv.dispose();
+        interior?.dispose();
+        insideEnv?.dispose();
         scene3d.pick = null;
         scene3d.lookAt = null;
         anchors.clear();

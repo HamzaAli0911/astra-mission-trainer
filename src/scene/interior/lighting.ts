@@ -53,7 +53,9 @@ export const LAMPS: Lamp[] = [
   lamp("exercise", 1, 80, 3.9),
   lamp("command", 1, 90, 0.95, 0.8),
   lamp("command", 1, 270, 0.95, 0.8),
-];
+  // Downstairs first, then upstairs, so each fragment only loops over its own floor's lamps.
+].sort((a, b) => zoneLevel(a.zone) - zoneLevel(b.zone));
+const UPSTAIRS = LAMPS.findIndex((l) => zoneLevel(l.zone) === 1);
 
 /** Shared by every material inside the home: change a value once and all of them follow. */
 export const insideLight = {
@@ -159,19 +161,24 @@ float homeAo = 1.0;
   homeAo = homeAO( vHomePos, wN );
   bool open = HOME_ZONE_OPEN[ zone ];
   int level = HOME_ZONE_LEVEL[ zone ];
-  for ( int i = 0; i < ${LAMPS.length}; i ++ ) {
+  int from = level == 1 ? ${UPSTAIRS} : 0, to = level == 1 ? ${LAMPS.length} : ${UPSTAIRS};
+  for ( int i = from; i < to; i ++ ) {
     int lz = int( uLampZone[ i ] );
     bool lit = lz == zone || ( zone < 2 && lz != zone && HOME_ZONE_OPEN[ lz ] && HOME_ZONE_LEVEL[ lz ] == zone ) || ( lz < 2 && open && lz == level );
     if ( !lit ) continue;
     vec3 toLamp = uLamp[ i ].xyz - vHomePos;
     float d2 = dot( toLamp, toLamp );
+    // Too far to matter, or above the panel's face: nothing to add.
+    if ( d2 > 40.0 || toLamp.y <= 0.0 ) continue;
     vec3 L = toLamp * inversesqrt( d2 );
     // Panels shine downwards; the light falls off with distance and fades out across a big room.
     float k = uLamp[ i ].w * pow( saturate( L.y ), 0.65 ) / ( d2 + 0.35 ) * ( 1.0 - smoothstep( 16.0, 40.0, d2 ) );
     directLight.color = uLampColor * k * mix( 1.0, homeAo, 0.55 );
     directLight.direction = normalize( ( viewMatrix * vec4( L, 0.0 ) ).xyz );
     directLight.visible = true;
-    RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+    // Highlights only from lamps close by (where you'd see them); further ones just light the surface.
+    if ( d2 < 6.25 ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+    else reflectedLight.directDiffuse += saturate( dot( geometryNormal, directLight.direction ) ) * directLight.color * BRDF_Lambert( material.diffuseColor );
   }
 }
 #endif
@@ -272,7 +279,8 @@ export function inside<T extends THREE.MeshStandardMaterial>(mat: T, pattern?: P
     Object.assign(shader.uniforms, insideLight);
     shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\n" + VERT_PARS).replace("#include <project_vertex>", VERT);
     if (pattern) shader.fragmentShader = `#define HOME_${pattern.toUpperCase()}\n` + shader.fragmentShader;
-    if (mat.userData.detail) shader.fragmentShader = "#define DETAIL_PERTURB\n" + shader.fragmentShader;
+    // (Indoors, close up, the large-scale grime pattern isn't worth a second set of texture reads.)
+    if (mat.userData.detail) shader.fragmentShader = "#define DETAIL_PERTURB\n#define DETAIL_NO_GRIME\n#define DETAIL_ONE_PLANE\n" + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\n" + FRAG_PARS + "\nfloat homePillow = 0.0;")
       .replace("#include <color_fragment>", "#include <color_fragment>\n" + PATTERN)

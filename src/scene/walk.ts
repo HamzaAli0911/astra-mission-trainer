@@ -39,7 +39,7 @@ interface Usable {
  * dragging if the browser won't), move with the keys or the touch stick, and doors slide open as you come near.
  * Movement is in real seconds, whatever the mission's speed.
  */
-export function walkController(canvas: HTMLCanvasElement, planet: Planet, interior: Interior) {
+export function walkController(canvas: HTMLCanvasElement, planet: Planet, home: () => Interior | null) {
   const gravity = PLANETS[planet].gravity;
   const step = stepLength(gravity);
   const open = new Map<string, number>();
@@ -172,7 +172,8 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
         const p = polar(180, HOME.lining - 0.55);
         Object.assign(walker, { outside: false, x: p.x, z: p.z, yaw: 0, where: 0 });
       }
-      if (interior.living.mySuit) interior.living.mySuit.visible = !suited();
+      const interior = home();
+      if (interior?.living.mySuit) interior.living.mySuit.visible = !suited();
       if (walking && !blocked && !useWalk.getState().airlock) {
         const s = useUI.getState().settings;
         const k = (walkInput.look.touch ? 0.0045 : 0.0022) * s.look;
@@ -224,7 +225,7 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
 
       // Doors slide open as you come near (the airlock's hatch stays shut until walks outside arrive).
       const level = walker.outside ? -1 : walker.where === "stair" ? null : walker.where;
-      for (const d of interior.doors) {
+      for (const d of interior?.doors ?? []) {
         // (The shelter's hatch stands open while a storm is coming or on.)
         const near = (walking && d.id !== "airlock" && level === d.level && Math.hypot(walker.x - d.x, walker.z - d.z) < DOOR_REACH) || (d.id === "shelter" && !!st?.shelterOpen);
         const was = open.get(d.id) ?? 0;

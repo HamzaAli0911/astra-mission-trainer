@@ -59,21 +59,31 @@ export function screenData(g: GameState): ScreenData {
 /** Which layer the inside lives on: the 3D view draws it, but clicks on the outpost never test it. */
 export const INSIDE_LAYER = 1;
 
-/** The inside of the Mars home: built once, shown while you are in or near it. */
-export function buildInterior(planet: Planet = "mars"): Interior {
+/**
+ * The inside of the Mars home: built once, in short slices (`pause` lets the page breathe between them and says
+ * whether to carry on), then shown while you are in or near it. Null if the build was called off.
+ */
+export async function buildInterior(planet: Planet = "mars", pause: () => Promise<boolean> = async () => true): Promise<Interior | null> {
   const group = new THREE.Group();
   group.name = "interior";
   screens.length = 0;
   resetLiving();
   beginLabels();
   const { doors, lit } = buildStructure(group);
-  for (const k of BLOCKS) furniture(group, k);
+  if (!(await pause())) return null;
+  for (let i = 0; i < BLOCKS.length; i++) {
+    furniture(group, BLOCKS[i]);
+    if (i % 10 === 9 && !(await pause())) return null;
+  }
   dress(group, planet);
+  if (!(await pause())) return null;
   const crew = buildCrew(group);
   placeInstances(group);
   finishLabels();
-  bake(group);
+  if (!(await pause())) return null;
+  if (!(await bake(group, pause))) return null;
   finalize(group);
+  prepass(group);
   group.traverse((o) => o.layers.set(INSIDE_LAYER));
   const own = [...screens];
   const live = { ...living, signs: { ...living.signs } };
@@ -137,6 +147,12 @@ export function buildInterior(planet: Planet = "mars"): Interior {
       live.plants.instanceMatrix.needsUpdate = true;
       if (live.tomatoes) live.tomatoes.count = st.plants > 0.7 ? tomatoTotal : 0;
     }
+    // Dust storms: the haze over the windows thickens and clears slowly.
+    if (live.dustFilm) {
+      const f = live.dustFilm;
+      f.opacity += ((st.dust ? 0.6 : 0) - f.opacity) * Math.min(1, dt * 0.6);
+      f.visible = f.opacity > 0.01;
+    }
     for (const gl of live.growLights) gl.emissiveIntensity = st.lights === "emergency" ? 0.15 : 0.4 + 1.2 * st.plants;
     crew.place(st.crew);
   };
@@ -183,7 +199,7 @@ const TONE: Record<string, string> = {
  * vertex: a few dozen draw calls for the whole home instead of one per colour. Moving parts (kept) merge within
  * themselves. Anything else (labels, glass, lamps, screens) is left for finalize().
  */
-function bake(root: THREE.Object3D) {
+async function bake(root: THREE.Object3D, pause: () => Promise<boolean>) {
   const kept: THREE.Object3D[] = [];
   root.traverse((o) => {
     if (o !== root && o.userData.keep && !(o as THREE.Mesh).isMesh) kept.push(o);
@@ -216,6 +232,7 @@ function bake(root: THREE.Object3D) {
       drop.push(m);
     });
     for (const m of drop) m.parent?.remove(m);
+    if (r === root && !(await pause())) return false;
     for (const [key, list] of groups) {
       const merged = mergeGeometries(list, false);
       for (const g of list) g.dispose();
@@ -227,6 +244,30 @@ function bake(root: THREE.Object3D) {
       out.userData.keep = true;
       r.add(out);
     }
+  }
+  return true;
+}
+
+/**
+ * Draw the inside's depth first, cheaply, then its colour: the costly lighting then runs once per pixel instead of
+ * once for every wall and cupboard stacked up behind it.
+ */
+function prepass(root: THREE.Object3D) {
+  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+  const meshes: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !(m as THREE.InstancedMesh).isInstancedMesh && !(m.material as THREE.Material).transparent) meshes.push(m);
+  });
+  for (const m of meshes) {
+    const d = new THREE.Mesh(m.geometry, depthOnly);
+    d.matrixAutoUpdate = false;
+    d.matrix = m.matrix;
+    d.renderOrder = -20;
+    d.castShadow = d.receiveShadow = false;
+    d.userData.prepass = true;
+    m.parent!.add(d);
+    m.renderOrder = -10;
   }
 }
 

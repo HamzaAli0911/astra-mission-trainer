@@ -37,11 +37,13 @@ export const living = {
   path: null as THREE.MeshStandardMaterial | null,
   beacons: [] as THREE.Object3D[],
   beaconLight: null as THREE.MeshStandardMaterial | null,
+  /** An orange haze over every window, thick in a Martian dust storm. */
+  dustFilm: null as THREE.MeshBasicMaterial | null,
   /** Signs that only show in some situations. */
   signs: { water: [] as THREE.Object3D[], food: [] as THREE.Object3D[], o2: [] as THREE.Object3D[] },
 };
 export function resetLiving() {
-  Object.assign(living, { food: null, plants: null, tomatoes: null, plantBase: [], levels: [], status: [], fans: [], mySuit: null, growLights: [], path: null, beacons: [], beaconLight: null, signs: { water: [], food: [], o2: [] } });
+  Object.assign(living, { food: null, plants: null, tomatoes: null, plantBase: [], levels: [], status: [], fans: [], mySuit: null, growLights: [], path: null, beacons: [], beaconLight: null, dustFilm: null, signs: { water: [], food: [], o2: [] } });
   for (const v of Object.values(spots)) v.length = 0;
 }
 const spot = (g: THREE.Object3D, list: Spot[], color: string, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) => {

@@ -156,9 +156,15 @@ uniform float coatAmount;
 varying vec3 vDetailPos;
 varying vec3 vDetailNormal;
 vec4 detailTriplanar(vec3 p, vec3 n, float scale) {
+#ifdef DETAIL_ONE_PLANE
+  // One read, from whichever plane the surface faces most (cheaper; fine for walls and furniture seen up close).
+  vec3 a = abs(n);
+  return a.x > a.y && a.x > a.z ? texture2D(detailMap, p.zy * scale) : a.y > a.z ? texture2D(detailMap, p.xz * scale) : texture2D(detailMap, p.xy * scale);
+#else
   vec3 w = pow(abs(n), vec3(4.0));
   w /= max(w.x + w.y + w.z, 1e-4);
   return texture2D(detailMap, p.zy * scale) * w.x + texture2D(detailMap, p.xz * scale) * w.y + texture2D(detailMap, p.xy * scale) * w.z;
+#endif
 }
 vec3 detailPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
   vec3 sx = dFdx(surfPos), sy = dFdy(surfPos);
@@ -194,7 +200,11 @@ export function addDetail<T extends THREE.MeshStandardMaterial>(mat: T, d: Detai
         /* glsl */ `#include <color_fragment>
         vec3 dN = normalize(vDetailNormal);
         vec4 dtl = detailTriplanar(vDetailPos, dN, detailScale);
-        float dtlGrime = detailTriplanar(vDetailPos, dN, detailScale * 0.07).b;
+        #ifdef DETAIL_NO_GRIME
+          float dtlGrime = 0.45;
+        #else
+          float dtlGrime = detailTriplanar(vDetailPos, dN, detailScale * 0.07).b;
+        #endif
         float dtlFade = 1.0 - smoothstep(6.0, 40.0, length(vViewPosition));
         diffuseColor.rgb *= 1.0 - detailGrime * (dtlGrime - 0.45) * 0.55 - (dtl.b - 0.5) * 0.08;
         #ifdef DETAIL_COAT

@@ -5,6 +5,8 @@ from PIL import Image, ImageDraw
 prefix, out = sys.argv[1], sys.argv[2]
 folder = os.path.expanduser(sys.argv[3] if len(sys.argv) > 3 else "~/Downloads/ASTRA-HOME-QC/shots")
 files = sorted(glob.glob(os.path.join(folder, f"{prefix}-*.jpg")))
+# (A prefix can also end part-way through a name: "final-high-IC" picks IC01, IC02 and so on.)
+files = files or sorted(glob.glob(os.path.join(folder, f"{prefix}*.jpg")))
 tw, th, cols = 640, 360, 3
 rows = max(1, (len(files) + cols - 1) // cols)
 sheet = Image.new("RGB", (cols * tw, rows * th), (10, 10, 16))

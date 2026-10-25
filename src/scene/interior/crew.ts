@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { blockAxes, BLOCKS, HOME, polar, rad, type Block, type Level } from "../../sim/home";
 import type { CrewSpot } from "../../sim/interior";
-import { ball, box, capsule, keep, rbox } from "../kit";
+import { ball, box, capsule, cyl, geo, keep, mesh, rbox } from "../kit";
 import { ifabric, ipaint } from "./lighting";
 import { CREW_COLOR } from "./parts";
 
@@ -100,9 +100,12 @@ function figure(color: string, hair: string, skin: string): Figure {
   root.add(hips);
   rbox(hips, 0.36, 0.56, 0.22, 0.08, suit, 0, 0.3, 0);
   box(hips, 0.1, 0.05, 0.015, stripe, -0.1, 0.48, 0.115);
-  ball(hips, 0.105, face, 0, 0.74, 0.01, 14);
-  const cap = ball(hips, 0.11, hairM, 0, 0.77, -0.012, 14);
-  cap.scale.set(1, 0.75, 1);
+  // A neck and collar under the head; hair as two shells round it (the top and the back), so the hairline is clean.
+  cyl(hips, 0.05, 0.055, 0.1, face, 0, 0.61, 0.005, 12);
+  cyl(hips, 0.075, 0.085, 0.045, suit, 0, 0.585, 0, 14);
+  ball(hips, 0.105, face, 0, 0.725, 0.01, 18);
+  mesh(geo("hair-top", () => new THREE.SphereGeometry(0.112, 20, 8, 0, Math.PI * 2, 0, 0.38 * Math.PI)), hairM, hips, 0, 0.725, 0.01);
+  mesh(geo("hair-back", () => new THREE.SphereGeometry(0.112, 12, 10, Math.PI, Math.PI, 0, 0.72 * Math.PI)), hairM, hips, 0, 0.725, 0.01);
   const legs = [-1, 1].map((s) => {
     const leg = new THREE.Group();
     leg.position.set(s * 0.09, 0, 0);
@@ -122,7 +125,7 @@ function figure(color: string, hair: string, skin: string): Figure {
     arm.position.set(s * 0.23, 0.53, 0);
     hips.add(arm);
     capsule(arm, 0.055, 0.42, suit, 0, -0.25, 0);
-    box(arm, 0.12, 0.05, 0.12, stripe, 0, -0.04, 0);
+    cyl(arm, 0.062, 0.062, 0.05, stripe, 0, -0.1, 0, 14);
     ball(arm, 0.045, face, 0, -0.52, 0, 10);
     return arm;
   });

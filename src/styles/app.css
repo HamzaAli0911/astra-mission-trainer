@@ -4216,6 +4216,15 @@ table.keys .kbd {
     visibility: visible;
   }
 }
+.walk-preparing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #05070c;
+  color: var(--text-2);
+  font-weight: 600;
+}
 .walk-bar {
   position: absolute;
   top: 96px;
@@ -4506,6 +4515,11 @@ table.keys .kbd {
   color: var(--text-2);
   margin: 0 0 10px;
 }
+.airlock .airlock-note {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  font-variant-numeric: normal;
+}
 @media (max-width: 640px) {
   .suit-hud {
     bottom: 290px;
@@ -4586,5 +4600,42 @@ table.keys .kbd {
 @media (prefers-reduced-motion: reduce) {
   .walk-fade {
     animation-duration: 0.15s;
+  }
+}
+
+/* Walking on tablets and small laptops: the room bar drops below the two-row top bar; cards drop below it. Indoors the
+   crew strip and the outpost map step aside (you can see the crew), and the view buttons sit above the dock. */
+.walking .hud-right {
+  display: none;
+}
+@media (max-width: 1100px) and (min-width: 641px) {
+  .walk-bar {
+    top: 150px;
+    left: auto;
+    right: 10px;
+    transform: none;
+  }
+  .inspect-card {
+    top: 200px;
+    right: 10px;
+  }
+  .tour-card {
+    top: auto;
+    bottom: 256px;
+    left: auto;
+    right: 10px;
+    transform: none;
+  }
+  .walk-hints {
+    bottom: 170px;
+  }
+}
+@media (max-width: 900px) and (min-width: 641px) {
+  .speed-note {
+    display: none;
+  }
+  .view-switch {
+    right: 10px;
+    bottom: 100px;
   }
 }

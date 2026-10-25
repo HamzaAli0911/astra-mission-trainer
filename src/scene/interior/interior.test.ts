@@ -13,15 +13,22 @@ const pen: unknown = new Proxy(() => pen, {
 Object.assign(globalThis, { document: { createElement: () => ({ width: 1, height: 1, getContext: () => pen }) } });
 
 // What you see inside must be where you can walk: these tests ray-cast the 3D model against the floor plan.
-const interior = buildInterior();
+const interior = (await buildInterior())!;
 for (const d of interior.doors) d.set(1);
 interior.group.updateMatrixWorld(true);
 const ray = new THREE.Raycaster();
 ray.layers.enableAll();
+// Everything solid you can see: not the depth-only copies, not the crew (they stand in their own places).
+const solid: THREE.Object3D[] = [];
+interior.group.traverse((o) => {
+  let crew = false;
+  for (let a: THREE.Object3D | null = o; a; a = a.parent) if (a.name.startsWith("crew-")) crew = true;
+  if ((o as THREE.Mesh).isMesh && !o.userData.prepass && !crew) solid.push(o);
+});
 const hit = (x: number, y: number, z: number, dx: number, dz: number, far: number) => {
   ray.set(new THREE.Vector3(x, y, z), new THREE.Vector3(dx, 0, dz).normalize());
   ray.far = far;
-  return ray.intersectObject(interior.group, true)[0]?.distance ?? Infinity;
+  return ray.intersectObjects(solid, false)[0]?.distance ?? Infinity;
 };
 
 describe("the inside of the home, against its floor plan", () => {
@@ -34,7 +41,8 @@ describe("the inside of the home, against its floor plan", () => {
       // Each crew member is built in four poses and only one shows at a time: count one.
       let posed = false;
       for (let a: THREE.Object3D | null = m; a; a = a.parent) if (/^crew-.*-(sit|ride|lie)$/.test(a.name)) posed = true;
-      if (!posed) meshes++;
+      // (Depth-only copies for the pre-pass are cheap: count the meshes that shade.)
+      if (!posed && !m.userData.prepass) meshes++;
       // Parts merged by finish carry their colours per vertex: the colours must survive the merge.
       if ((m.material as THREE.Material & { vertexColors?: boolean }).vertexColors) expect(m.geometry.attributes.color, m.name).toBeDefined();
     });

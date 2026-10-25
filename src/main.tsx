@@ -5,12 +5,13 @@ import "./styles/app.css";
 import App from "./ui/App";
 import { useGame } from "./state/game";
 import { useUI } from "./state/ui";
+import { useWalk } from "./state/walk";
 import { warmUp } from "./scene/prebake";
 import { startAutosave } from "./state/save";
 
 // Test hook for automated browser checks: add ?debug to the URL.
 const debug = new URLSearchParams(location.search).has("debug");
-if (import.meta.env.DEV || debug) Object.assign(window, { __astra: { useGame, useUI } });
+if (import.meta.env.DEV || debug) Object.assign(window, { __astra: { useGame, useUI, useWalk } });
 // The quality-control harness (review shots, timing, overlap and memory checks) loads only with ?debug.
 if (debug) void import("./dev/qc");
 
