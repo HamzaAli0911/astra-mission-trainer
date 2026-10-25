@@ -8,9 +8,10 @@ import type { ModuleType, Planet } from "./types";
 export const WORLD = 150; // drivable half-width (a 300 m square)
 export const FLAT = 27; // radius of the levelled outpost area
 
-export const DOCK = { x: 0, z: 12 };
+export const DOCK = { x: 0, z: 14 };
 export const DOCK_RADIUS = 2.6;
-export const HABITAT_RADIUS = 3.4;
+/** The two-storey home's footprint: its shell (5.2 m) plus the regolith shield. See home.ts. */
+export const HABITAT_RADIUS = 5.8;
 
 export type PadKind = "base" | "ice" | "far";
 export interface Pad {
@@ -34,9 +35,9 @@ const ring = (r: number, degrees: number[], from: number): Pad[] =>
  * A pad's id is its index.
  */
 export const PADS: Pad[] = [
-  ...ring(8.5, [30, 90, 150, 210, 270, 330], 0),
-  ...ring(15, [0, 60, 120, 240, 300], 6),
-  ...ring(21.5, [35, 95, 265, 325], 11),
+  ...ring(10.5, [30, 90, 150, 210, 270, 330], 0),
+  ...ring(17, [0, 60, 120, 240, 300], 6),
+  ...ring(22.5, [35, 95, 265, 325], 11),
   { id: 15, x: -45.5, z: -30.5, kind: "ice" },
   { id: 16, x: 36, z: 27, kind: "far" },
 ];
@@ -280,7 +281,8 @@ export function terrainHeight(x: number, z: number, planet: Planet = "moon") {
     y += (steps + smooth(0.45, 1, frac)) * layer * 0.8 + strata * 0.2;
   }
   const r = Math.hypot(x, z);
-  y *= smooth(FLAT - 6, FLAT + 16, r);
+  // Level out past the outer ring of pads, so every pad sits flat.
+  y *= smooth(FLAT - 0.5, FLAT + 18, r);
   // Level ground under the lander.
   y *= smooth(5, 13, Math.hypot(x - LANDER.x, z - LANDER.z));
   for (const c of cratersNear(x, z)) y = crater(y, x, z, c);

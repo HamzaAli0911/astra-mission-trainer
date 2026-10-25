@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createState, updateDock } from "./engine";
 import { approachPoint, canOccupy, clearLine, drive, followRoute, forwardOf, planRoute, ROVER, STOP, tripCost } from "./rover";
 import type { Rover } from "./types";
-import { DOCK, SITES, SITE_REACH } from "./world";
+import { DOCK, HABITAT_RADIUS, SITES, SITE_REACH } from "./world";
 
 const fwd = { ...STOP, forward: true };
 const rover = (x = 0, z = 30, heading = 0): Rover => ({ ...createState("free-moon").rover, x, z, heading, docked: false });
@@ -30,7 +30,7 @@ describe("driving", () => {
     const s = createState("free-moon");
     let r = rover(0, 8, 0);
     for (let i = 0; i < 40; i++) r = drive(r, fwd, 0.05, s.modules, "moon");
-    expect(Math.hypot(r.x, r.z)).toBeGreaterThan(3.4 + ROVER.radius - 0.01);
+    expect(Math.hypot(r.x, r.z)).toBeGreaterThan(HABITAT_RADIUS + ROVER.radius - 0.01);
   });
   it("crawls with a flat battery", () => {
     const out = drive({ ...rover(), battery: 0 }, fwd, 1, [], "moon");

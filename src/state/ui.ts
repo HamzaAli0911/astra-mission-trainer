@@ -5,7 +5,7 @@ import type { ModuleType } from "../sim/types";
 export type Screen = "title" | "map" | "game";
 export type Panel = "build" | "power" | "rover" | "crew";
 /** Camera: free look over the outpost, chase behind the rover, or the driver's seat. */
-export type View = "orbit" | "chase" | "cockpit";
+export type View = "orbit" | "chase" | "cockpit" | "walk";
 export type Modal = "pause" | "settings" | "guide" | "library" | "teachers" | "credits" | "reset" | "restart" | "mars";
 export type Selection =
   | { kind: "module"; id: number }

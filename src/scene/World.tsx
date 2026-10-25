@@ -13,7 +13,7 @@ import { MODULES, SHIELD_TIME } from "../sim/modules";
 import { clockOf, dayOf, daylight, isDaytime, PLANETS } from "../sim/planets";
 import { modulePos, ROVER } from "../sim/rover";
 import type { GameState, Module, Planet } from "../sim/types";
-import { CRATER, DOCK, FOOTPRINT, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
+import { CRATER, DOCK, FOOTPRINT, HABITAT_RADIUS, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
 import { useGame } from "../state/game";
 import { useUI, type View } from "../state/ui";
 import { ambience, tick } from "../lib/sound";
@@ -27,8 +27,8 @@ import { bakedNow, prebake } from "./prebake";
 import { buildSky, environmentMap } from "./sky";
 import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem } from "./terrain";
 
-const HOME = new THREE.Vector3(0, 0, 2);
-const OFFSET = new THREE.Vector3(24, 30, 36);
+const HOME = new THREE.Vector3(0, 0, 3);
+const OFFSET = new THREE.Vector3(25.5, 31.5, 38);
 const MARS = {
   night: new THREE.Color("#07060c"),
   day: new THREE.Color("#d9ab82"),
@@ -79,7 +79,7 @@ function buildCable(m: Module, planet: Planet): Entry["cable"] {
   if (d < 1) return null;
   const ux = p.x / d,
     uz = p.z / d;
-  const start = new THREE.Vector3(ux * 3.4, 0, uz * 3.4),
+  const start = new THREE.Vector3(ux * (HABITAT_RADIUS - 0.3), 0, uz * (HABITAT_RADIUS - 0.3)),
     end = new THREE.Vector3(p.x - ux * 2.3, 0, p.z - uz * 2.3);
   const pts: THREE.Vector3[] = [];
   const n = Math.max(4, Math.ceil(start.distanceTo(end) / 2));
@@ -1160,7 +1160,7 @@ export function World() {
           project("rover-body", rv.x, ground + 1.4, rv.z);
         }
         project("dock", DOCK.x, terrainHeight(DOCK.x, DOCK.z, planet) + 0.5, DOCK.z);
-        project("habitat", 0, 2.4, 0);
+        project("habitat", 0, 4.2, 0);
         project("crater", CRATER.x, terrainHeight(CRATER.x, CRATER.z, planet) + 2, CRATER.z);
 
         if (warmStage < 2) {

@@ -35,6 +35,8 @@ export interface ModuleView {
   shieldProgress?: (p: number) => void;
   /** Habitat windows (warm at night). */
   windows?: THREE.MeshStandardMaterial;
+  /** The lit panes behind the habitat's windows: hidden while you walk inside, so you can see out. */
+  windowGlow?: THREE.Object3D[];
   /** Height of the model's top, for labels and effects. */
   top: number;
 }

@@ -9,8 +9,10 @@ import { warmUp } from "./scene/prebake";
 import { startAutosave } from "./state/save";
 
 // Test hook for automated browser checks: add ?debug to the URL.
-if (import.meta.env.DEV || new URLSearchParams(location.search).has("debug"))
-  Object.assign(window, { __astra: { useGame, useUI } });
+const debug = new URLSearchParams(location.search).has("debug");
+if (import.meta.env.DEV || debug) Object.assign(window, { __astra: { useGame, useUI } });
+// The quality-control harness (review shots, timing, overlap and memory checks) loads only with ?debug.
+if (debug) void import("./dev/qc");
 
 class Boundary extends React.Component<{ children: React.ReactNode }, { error: boolean }> {
   state = { error: false };
