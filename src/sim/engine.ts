@@ -41,6 +41,9 @@ export const CREW = [
 ];
 /** The two crew who ride in the rover. */
 export const EVA_CREW = ["maya", "noor"];
+/** Who walks outside when you go on foot (the engineer: the commander drives the rover), and for how long a suit lasts. */
+export const WALKER = "alex";
+export const SUIT_HOURS = 8;
 
 const lcg = (seed: number) => (Math.imul(seed, 1664525) + 1013904223) >>> 0;
 
@@ -67,6 +70,7 @@ export function createState(id: string, seed = 2026): GameState {
     shield: 0,
     shieldStarted: false,
     sheltering: false,
+    eva: null,
     crew: CREW.map((c) => ({ ...c, health: 100, dose: 0, place: "habitat" as const })),
     rover: {
       x: DOCK.x,
@@ -202,9 +206,11 @@ function placeCrew(s: GameState) {
     c.place =
       EVA_CREW.includes(c.id) && !s.rover.docked
         ? "rover"
-        : s.sheltering
-          ? "shelter"
-          : "habitat";
+        : c.id === WALKER && s.eva
+          ? "eva"
+          : s.sheltering
+            ? "shelter"
+            : "habitat";
 }
 
 function snapshot(s: GameState) {
@@ -296,6 +302,17 @@ export function step(s: GameState, dt: number) {
 
   for (const e of s.script)
     if (!s.fired.includes(e.id) && s.t >= e.at - 1e-9) fire(s, e);
+
+  // Suit time outside: a warning at an hour left, then back to the airlock.
+  if (s.eva) {
+    s.eva.left = Math.max(0, s.eva.left - dt);
+    alertOnce(s, "suit", s.eva.left <= 1 + 1e-9, "warn", "Alex has an hour of suit time left. Head back to the airlock.");
+    if (s.eva.left <= 1e-9) {
+      s.eva = null;
+      feed(s, "capcom", "Alex, your suit time is up. Head back in through the airlock now.");
+      placeCrew(s);
+    }
+  }
 
   for (const h of s.hazards) {
     if (h.phase === "pending" && s.t >= h.warnAt - 1e-9) {
@@ -438,14 +455,17 @@ export function step(s: GameState, dt: number) {
     (x) => x.type === "shelter" && isBuilt(x) && x.health >= DAMAGED,
   );
   for (const c of s.crew) {
+    // On foot outside, nothing but the suit: the same as the crew working at a rover site.
     const factor =
-      c.place === "rover"
-        ? rv.task
-          ? 1
-          : 0.8
-        : c.place === "shelter" && shelterOk
-          ? 0.1
-          : habitatFactor;
+      c.place === "eva"
+        ? 1
+        : c.place === "rover"
+          ? rv.task
+            ? 1
+            : 0.8
+          : c.place === "shelter" && shelterOk
+            ? 0.1
+            : habitatFactor;
     c.dose += outdoor * factor * dt;
   }
 
@@ -661,6 +681,8 @@ export function act(prev: GameState, a: Action): Result {
       if (a.on && !s.modules.some((x) => x.type === "shelter" && isBuilt(x) && x.health >= DAMAGED))
         return no("Build a Storm Shelter first.");
       s.sheltering = a.on;
+      // Anyone outside comes in too.
+      if (a.on) s.eva = null;
       placeCrew(s);
       feed(
         s,
@@ -697,6 +719,19 @@ export function act(prev: GameState, a: Action): Result {
       s.dust = 0;
       s.res.o2 = Math.max(0, s.res.o2 - 0.3);
       feed(s, "good", "Alex and Sam brushed the panels clean. Full solar power is back!");
+      break;
+    }
+    case "eva": {
+      if (a.on === !!s.eva) return { state: prev, ok: true };
+      if (a.on) {
+        if (s.sheltering) return no("The crew is sheltering. Wait for the storm to pass.");
+        s.eva = { left: SUIT_HOURS };
+        feed(s, "info", `Alex suits up and steps outside (${SUIT_HOURS} h of suit time).`);
+      } else {
+        s.eva = null;
+        feed(s, "info", "Alex is back inside, and the suit is on its rack.");
+      }
+      placeCrew(s);
       break;
     }
     case "choose": {

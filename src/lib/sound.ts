@@ -154,6 +154,10 @@ export function footstep(weight = 1) {
   burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
 }
 
+/** The airlock cycling: a long hiss as the air is pumped out (going out) or let back in (coming home). */
+export function airlockSound(out: boolean) {
+  burst(6.5, out ? 1400 : 300, out ? 200 : 1300, 0.7, 0.05);
+}
 /** The storm klaxon inside the home: a falling two-tone wail. */
 export function klaxon() {
   const a = audio();
@@ -197,6 +201,7 @@ export function chime(urgent = false) {
 /* ---------- Background sound ---------- */
 
 type Ambience = {
+  breath: GainNode;
   hum: GainNode;
   wind: GainNode;
   windTone: BiquadFilterNode;
@@ -261,27 +266,42 @@ function startAmbience(a: AudioContext, out: GainNode): Ambience {
   motorTone.frequency.value = 520;
   motorOsc.connect(motorTone).connect(motor);
   motorOsc.start();
-  return { hum, wind, windTone, motor, motorOsc };
+  // Breathing inside a helmet: soft noise, swelling and falling with each breath (set from the scene's clock).
+  const breath = a.createGain();
+  breath.gain.value = 0;
+  breath.connect(out);
+  const air2 = noise(a, 3, false);
+  const breathTone = a.createBiquadFilter();
+  breathTone.type = "bandpass";
+  breathTone.frequency.value = 900;
+  breathTone.Q.value = 0.6;
+  air2.connect(breathTone).connect(breath);
+  air2.start();
+  return { breath, hum, wind, windTone, motor, motorOsc };
 }
 
 /**
  * Keep the background sound in step with the scene (call a few times a second): life support always,
  * wind on Mars that rises in a dust storm, and the rover's motors while it drives (0 to 1).
  */
-export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number; drive: number; time: number }) {
+export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number; drive: number; time: number; inside?: boolean; suit?: boolean }) {
   const want = s.on && !document.hidden && useUI.getState().settings.sound;
   if (!want) {
-    if (amb && ctx) for (const g of [amb.hum, amb.wind, amb.motor]) g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+    if (amb && ctx) for (const g of [amb.hum, amb.wind, amb.motor, amb.breath]) g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
     return;
   }
   const a = audio();
   if (!a || !master) return;
   if (!amb) amb = startAmbience(a, master);
   const t = a.currentTime;
-  amb.hum.gain.setTargetAtTime(0.03, t, 0.5);
+  // Inside the home the machines are close and the wind is behind the shell; in a suit on the Moon there's no air
+  // to carry any sound at all, only your own breathing and the suit's fans.
+  const vacuum = s.suit && s.planet === "moon";
+  amb.hum.gain.setTargetAtTime(s.suit ? 0.012 : s.inside ? 0.05 : 0.03, t, 0.5);
   const gust = 0.5 + 0.5 * Math.sin(s.time * 0.7) * Math.sin(s.time * 0.23 + 1);
-  amb.wind.gain.setTargetAtTime(s.planet === "mars" ? 0.012 + s.dust * 0.08 + gust * 0.01 : 0, t, 0.4);
+  amb.wind.gain.setTargetAtTime(s.planet === "mars" ? (0.012 + s.dust * 0.08 + gust * 0.01) * (s.inside ? 0.3 : s.suit ? 0.6 : 1) : 0, t, 0.4);
   amb.windTone.frequency.setTargetAtTime(300 + s.dust * 450 + gust * 160, t, 0.4);
-  amb.motor.gain.setTargetAtTime(s.drive * 0.035, t, 0.2);
+  amb.motor.gain.setTargetAtTime(vacuum || s.inside ? 0 : s.drive * 0.035, t, 0.2);
+  amb.breath.gain.setTargetAtTime(s.suit ? 0.006 + 0.03 * Math.max(0, Math.sin(s.time * 1.4)) ** 2 : 0, t, 0.15);
   amb.motorOsc.frequency.setTargetAtTime(65 + s.drive * 120, t, 0.2);
 }

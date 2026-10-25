@@ -173,7 +173,8 @@ export const INSPECTS: Inspect[] = [
   {
     id: "suits",
     title: "Suit rack",
-    ...at("suit-rack-e"),
+    // (The rack across the room: Alex's suit, for walking outside, is on the other one.)
+    ...at("suit-rack-w"),
     live: (g) => [
       ["Suits", `${4 - (g.rover.task ? 2 : 0)} on the racks${g.rover.task ? ", 2 outside" : ""}`],
       ["Crew outside", g.rover.task ? "collecting at a site" : "none"],

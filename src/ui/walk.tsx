@@ -2,9 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { DoorOpen, ExternalLink, Hand, X } from "lucide-react";
 import { INSPECTS } from "../sim/inspect";
+import { activeHazard } from "../sim/core";
+import { SUIT_HOURS, WALKER } from "../sim/engine";
+import { PLANETS } from "../sim/planets";
+import { AIRLOCK_SECONDS } from "../scene/walk";
 import { useGame } from "../state/game";
 import { useUI } from "../state/ui";
-import { leaveWalk, useWalk, walkInput } from "../state/walk";
+import { leaveWalk, useWalk, walker, walkInput } from "../state/walk";
 
 const isTouch = () => typeof matchMedia !== "undefined" && matchMedia("(hover: none) and (pointer: coarse)").matches;
 
@@ -34,8 +38,8 @@ function WalkOverlay() {
             {room}
           </div>
         )}
-        <button className="btn walk-exit" onClick={leaveWalk} title="Back to looking over the outpost (V switches views)">
-          <DoorOpen size={17} /> Step outside
+        <button className="btn walk-exit" onClick={leaveWalk} title="Stop walking and look over the outpost again (V switches views)">
+          <DoorOpen size={17} /> Overview
         </button>
       </div>
       {(locked || touch) && <div className="walk-cross" aria-hidden="true" />}
@@ -45,6 +49,8 @@ function WalkOverlay() {
         </div>
       )}
       <InspectCard />
+      <SuitHud outside={room.startsWith("Outside")} />
+      <Airlock />
       {!touch && hints && (
         <div className="walk-hints">
           {locked ? (
@@ -90,6 +96,87 @@ function WalkOverlay() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/** Inside the helmet: the visor's edge, suit time, radiation, the suit's battery and a compass. */
+function SuitHud({ outside }: { outside: boolean }) {
+  const eva = useGame((s) => s.game.eva);
+  const g = useGame((s) => s.game);
+  const [heading, setHeading] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setHeading(((walker.yaw * 180) / Math.PI + 3600) % 360), 120);
+    return () => clearInterval(t);
+  }, []);
+  if (!eva) return null;
+  const storm = activeHazard(g, "storm");
+  const rate = PLANETS[g.planet].background + (storm ? storm.strength : 0);
+  const dose = g.crew.find((c) => c.id === WALKER)?.dose ?? 0;
+  const h = Math.floor(eva.left),
+    m = Math.floor((eva.left - h) * 60);
+  const low = eva.left <= 1;
+  const marks = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return (
+    <>
+      {outside && <div className="visor" aria-hidden="true" />}
+      <div className={`suit-hud ${low ? "low" : ""}`} role="status" aria-label="Suit readings">
+        <span>
+          <b>SUIT</b> {h} h {String(m).padStart(2, "0")} min
+        </span>
+        <span>
+          <b>BATTERY</b> {Math.round((eva.left / SUIT_HOURS) * 100)}%
+        </span>
+        <span className={storm ? "hot" : ""}>
+          <b>DOSE</b> {rate.toFixed(2)} mSv/h · {dose.toFixed(1)} total
+        </span>
+      </div>
+      {outside && (
+        <div className="compass" aria-hidden="true">
+          {marks.map((n, i) => {
+            const d = ((i * 45 - heading + 540) % 360) - 180;
+            return Math.abs(d) < 70 ? (
+              <span key={n} style={{ left: `${50 + (d / 70) * 50}%` }} className={n.length === 1 ? "major" : ""}>
+                {n}
+              </span>
+            ) : null;
+          })}
+          <i />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The airlock cycling: the pressure falls to vacuum (or rises back to a breathable 101 kPa); it can be skipped. */
+function Airlock() {
+  const lock = useWalk((s) => s.airlock);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!lock) return;
+    const t = setInterval(() => tick((n) => n + 1), 100);
+    return () => clearInterval(t);
+  }, [lock]);
+  if (!lock) return null;
+  const k = Math.min(1, (performance.now() / 1000 - lock.t0) / AIRLOCK_SECONDS);
+  const kpa = Math.round(lock.dir === "out" ? 101 * (1 - k) : 101 * k);
+  return (
+    <div className="airlock" role="dialog" aria-label="Airlock">
+      <b>{lock.dir === "out" ? "Airlock: pumping the air out" : "Airlock: letting the air back in"}</b>
+      <div className="gauge">
+        <span style={{ width: `${(kpa / 101) * 100}%` }} />
+      </div>
+      <p>
+        {kpa} kPa {lock.dir === "out" ? "→ 0 (the outside)" : "→ 101 (like home)"}
+      </p>
+      <button
+        className="btn small"
+        onClick={() => {
+          walkInput.use = true;
+        }}
+      >
+        Skip
+      </button>
     </div>
   );
 }

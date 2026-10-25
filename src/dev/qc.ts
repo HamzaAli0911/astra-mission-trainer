@@ -287,6 +287,19 @@ SHOTS.push(
   { id: "IS10-evening-galley", planet: "mars", frames: 40, run: state(232, 3.15, 0, 272, -8, (g) => (g.t = 19)) },
 );
 
+// On foot outside (EVA), at eye level: looking back at the home from the outpost (Moon), and across Mars.
+const eva = (x: number, z: number, yaw: number, pitch: number) => (h: Hooks) => {
+  const g = useGame.getState().game;
+  g.eva = { left: 6.5 };
+  h.walk(0, 0, 0, 0, 0);
+  const w = (hooks() as unknown as { walker: { outside: boolean; x: number; z: number; yaw: number; pitch: number } }).walker;
+  Object.assign(w, { outside: true, x, z, yaw: rad(yaw), pitch: rad(pitch) });
+};
+SHOTS.push(
+  { id: "EX05-eva-home-moon", planet: "moon", frames: 30, run: eva(9, 24, 340, 6) },
+  { id: "EX06-eva-mars", planet: "mars", frames: 30, run: eva(-6, 21, 300, 2) },
+);
+
 /** Extra shots (interior, states, new exterior views) register themselves here. */
 export function addShots(...more: Shot[]) {
   for (const s of more) {
@@ -311,6 +324,7 @@ async function capture(prefix: string, only?: string[]) {
       Object.assign(g, { t: 10.5, shield: 0, shieldStarted: false });
       if (!s.id.startsWith("I")) {
         hooks().figure?.(null);
+        useGame.getState().game.eva = null;
         if (useUI.getState().view === "walk") useUI.getState().setView("orbit");
       }
       await s.run(hooks() as Hooks);

@@ -632,7 +632,7 @@ function CrewPanel() {
         <div key={c.id} className="crew-row">
           <b>{c.name}</b>
           <small>
-            {c.role} · {c.place === "rover" ? "in the rover" : c.place === "shelter" ? "in the shelter" : "in the habitat"}
+            {c.role} · {c.place === "rover" ? "in the rover" : c.place === "shelter" ? "in the shelter" : c.place === "eva" ? "outside on foot" : "in the habitat"}
           </small>
           <div className="crew-meter">
             <span>Health</span>

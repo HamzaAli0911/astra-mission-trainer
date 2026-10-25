@@ -27,9 +27,9 @@ export function clearWalkInput() {
 export const lockState = { freedAt: -1e9 };
 
 /** The walker: habitat-local metres, facing a compass bearing in radians (0 north, clockwise), looking up by `pitch`. */
-export const walker = { x: SPAWN.x, z: SPAWN.z, where: SPAWN.where as Where, yaw: SPAWN.yaw, pitch: -0.04, vx: 0, vz: 0, stride: 0 };
+export const walker = { x: SPAWN.x, z: SPAWN.z, where: SPAWN.where as Where, yaw: SPAWN.yaw, pitch: -0.04, vx: 0, vz: 0, stride: 0, outside: false };
 export function respawn() {
-  Object.assign(walker, { x: SPAWN.x, z: SPAWN.z, where: SPAWN.where, yaw: SPAWN.yaw, pitch: -0.04, vx: 0, vz: 0, stride: 0 });
+  Object.assign(walker, { x: SPAWN.x, z: SPAWN.z, where: SPAWN.where, yaw: SPAWN.yaw, pitch: -0.04, vx: 0, vz: 0, stride: 0, outside: false });
   clearWalkInput();
 }
 
@@ -42,15 +42,18 @@ export interface WalkStore {
   locked: boolean;
   /** The inspect card open now (an id from sim/inspect), or null. */
   card: string | null;
+  /** The airlock cycling (out to the surface, or back in), and when it started (seconds). */
+  airlock: { dir: "out" | "in"; t0: number } | null;
   /** The view and sim speed to go back to when you stop walking. */
   back: { view: Exclude<View, "walk">; speed: Speed } | null;
-  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card">>) => void;
+  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock">>) => void;
 }
 export const useWalk = create<WalkStore>((set) => ({
   room: "",
   prompt: null,
   locked: false,
   card: null,
+  airlock: null,
   back: null,
   set: (p) => set(p),
 }));
@@ -98,7 +101,9 @@ useUI.subscribe((s, prev) => {
   } else if (prev.view === "walk") {
     const back = useWalk.getState().back;
     if (back && useGame.getState().speed === 1) useGame.setState({ speed: back.speed });
-    useWalk.setState({ back: null, prompt: null, locked: false, card: null });
+    useWalk.setState({ back: null, prompt: null, locked: false, card: null, airlock: null });
+    // Stepping out of walk mode mid-walk outside brings Alex back in.
+    if (useGame.getState().game.eva) useGame.getState().act({ type: "eva", on: false });
     clearWalkInput();
   }
 });

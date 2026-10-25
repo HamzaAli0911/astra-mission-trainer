@@ -1173,7 +1173,8 @@ export function World() {
         // Background sound: life support, Martian wind, the rover's motors.
         if (clock - ambienceAt > 0.2) {
           ambienceAt = clock;
-          ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock });
+          const walking = view === "walk";
+          ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva });
         }
         // The rover's body rocks a little over the ground as it drives.
         const bump = reduced ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);
@@ -1273,6 +1274,7 @@ export function World() {
         };
         debug.interior = interior;
         debug.camera = camera;
+        debug.walker = walker;
         // A 1.75 m figure for judging scale in review shots (habitat-local, a floor, facing a bearing); null hides it.
         let figure: THREE.Object3D | null = null;
         debug.figure = (x: number | null, z = 0, level: 0 | 1 = 0, yaw = 0) => {

@@ -54,6 +54,11 @@ export function saveNow() {
 
 /** Pick up a saved mission where it was left, paused. */
 export function resumeSave(save: SavedMission) {
+  // A walk outside doesn't survive a reload: the walker is back inside (saves from before walks outside have none).
+  if (save.game.eva) {
+    save.game.eva = null;
+    for (const c of save.game.crew) if (c.place === "eva") c.place = "habitat";
+  }
   useGame.getState().load(save.game, save.route, save.target, save.speed);
   useUI.setState({
     screen: "game",

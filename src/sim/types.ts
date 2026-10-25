@@ -41,7 +41,7 @@ export interface Module {
   repair: number;
 }
 
-export type CrewPlace = "habitat" | "shelter" | "rover";
+export type CrewPlace = "habitat" | "shelter" | "rover" | "eva";
 export interface Crew {
   id: string;
   name: string;
@@ -160,6 +160,8 @@ export interface GameState {
   shield: number;
   shieldStarted: boolean;
   sheltering: boolean;
+  /** A crew member walking outside in a suit (played in first person), with the suit time left in hours. */
+  eva?: { left: number } | null;
   crew: Crew[];
   rover: Rover;
   hazards: Hazard[];
@@ -195,4 +197,5 @@ export type Action =
   | { type: "shelter"; on: boolean }
   | { type: "collect"; site: string }
   | { type: "clean" }
+  | { type: "eva"; on: boolean }
   | { type: "choose"; option: number };

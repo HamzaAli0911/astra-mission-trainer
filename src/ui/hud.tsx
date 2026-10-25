@@ -418,7 +418,7 @@ export function Crew() {
             <li key={c.id}>
               <b>{full[i].name}</b>
               <small>
-                {full[i].role} · {c.place === "rover" ? "in the rover" : c.place === "shelter" ? "in the shelter" : "in the habitat"}
+                {full[i].role} · {c.place === "rover" ? "in the rover" : c.place === "shelter" ? "in the shelter" : c.place === "eva" ? "outside on foot" : "in the habitat"}
               </small>
               <span className="crew-bars">
                 <span title={`Health ${c.health}%`}>
