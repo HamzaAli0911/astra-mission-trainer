@@ -10,6 +10,8 @@ export const FLAT = 27; // radius of the levelled outpost area
 
 export const DOCK = { x: 0, z: 14 };
 export const DOCK_RADIUS = 2.6;
+/** Where the science rover parks, east of the dock and clear of the road and the pads. */
+export const SCOUT_HOME = { x: 6.5, z: 15.5, heading: Math.PI };
 /** The two-storey home's footprint: its shell (5.2 m) plus the regolith shield. See home.ts. */
 export const HABITAT_RADIUS = 5.8;
 

@@ -21,7 +21,7 @@ import {
   spec,
 } from "./modules";
 import { clockOf, daylight, PLANETS } from "./planets";
-import { atDock, headingTo, modulePos } from "./rover";
+import { atDock, headingTo, modulePos, SCOUT_ROVER } from "./rover";
 import type {
   Action,
   FeedKind,
@@ -31,7 +31,7 @@ import type {
   Resources,
   ScriptEntry,
 } from "./types";
-import { COLLECT_TIME, DOCK, HAUL, PADS, padFits, site, SITE_REACH } from "./world";
+import { COLLECT_TIME, DOCK, HAUL, PADS, padFits, SCOUT_HOME, site, SITE_REACH, SITES } from "./world";
 
 export const CREW = [
   { id: "maya", name: "Maya Chen", role: "Commander" },
@@ -44,6 +44,9 @@ export const EVA_CREW = ["maya", "noor"];
 /** Who walks outside when you go on foot (the engineer: the commander drives the rover), and for how long a suit lasts. */
 export const WALKER = "alex";
 export const SUIT_HOURS = 8;
+
+/** The site a rover is parked at (within reach of its marker), if any. */
+const siteNear = (r: { x: number; z: number }) => SITES.find((w) => Math.hypot(r.x - w.x, r.z - w.z) <= SITE_REACH);
 
 const lcg = (seed: number) => (Math.imul(seed, 1664525) + 1013904223) >>> 0;
 
@@ -81,6 +84,17 @@ export function createState(id: string, seed = 2026): GameState {
       docked: true,
       task: null,
       cargo: { water: 0, materials: 0, science: 0, samples: [] },
+    },
+    scout: {
+      ...SCOUT_HOME,
+      speed: 0,
+      battery: 100,
+      docked: false,
+      task: null,
+      cargo: { water: 0, materials: 0, science: 0, samples: [] },
+      top: SCOUT_ROVER.top,
+      rtg: true,
+      studied: [],
     },
     hazards: m.hazards.map((h, i) => ({
       id: i + 1,
@@ -423,6 +437,23 @@ export function step(s: GameState, dt: number) {
       }
     }
   }
+  // The science rover studies a site on its own (storms don't stop a robot), then radios the data home.
+  const sc = s.scout;
+  if (sc?.task) {
+    const where = site(sc.task.site);
+    if (!where || Math.hypot(sc.x - where.x, sc.z - where.z) > SITE_REACH + 0.6) {
+      sc.task = null;
+      feed(s, "info", "The science rover stopped studying: it drove away.");
+    } else {
+      sc.task.left -= dt;
+      if (sc.task.left <= 0) {
+        sc.task = null;
+        sc.studied.push(where.id);
+        s.res.science += SCOUT_ROVER.science;
+        feed(s, "good", `The science rover radioed home its study of ${where.name[s.planet]}: +${SCOUT_ROVER.science} science.`);
+      }
+    }
+  }
   if (rv.docked) {
     const c = rv.cargo;
     if (c.water || c.materials || c.science) {
@@ -711,6 +742,19 @@ export function act(prev: GameState, a: Action): Result {
       rv.task = { site: where.id, left: COLLECT_TIME };
       rv.speed = 0;
       feed(s, "info", `Maya and Noor step outside to collect at ${where.name[s.planet]}.`);
+      break;
+    }
+    case "study": {
+      const sc = s.scout;
+      if (!sc) return no("There's no science rover on this mission.");
+      const where = siteNear(sc);
+      if (!where) return no("Drive the science rover to a science site first.");
+      if (where.kind !== "science") return no("The science rover has no cargo bay: send the crew rover for ice and regolith.");
+      if (sc.task) return no("The science rover is already studying.");
+      if (sc.studied.includes(where.id)) return no("The science rover has already studied this site.");
+      sc.task = { site: where.id, left: SCOUT_ROVER.study };
+      sc.speed = 0;
+      feed(s, "info", `The science rover unfolds its arm at ${where.name[s.planet]} and starts studying the rocks.`);
       break;
     }
     case "clean": {

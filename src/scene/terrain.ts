@@ -191,6 +191,51 @@ function rockMaterial(coat: { color: string; amount: number }) {
   return addDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 }), { ...DETAIL.rock, coat });
 }
 
+/**
+ * The tops of rocks and pebbles, for wheels to climb: each is a dome (half an ellipsoid) as wide and tall as the
+ * rock drawn there, filed in 2 m buckets.
+ */
+export class Bumps {
+  private grid = new Map<string, number[]>();
+  add(x: number, z: number, cy: number, rx: number, ry: number) {
+    for (let bx = Math.floor((x - rx) / 2); bx <= Math.floor((x + rx) / 2); bx++)
+      for (let bz = Math.floor((z - rx) / 2); bz <= Math.floor((z + rx) / 2); bz++) {
+        const key = `${bx},${bz}`;
+        const list = this.grid.get(key);
+        if (list) list.push(x, z, cy, rx, ry);
+        else this.grid.set(key, [x, z, cy, rx, ry]);
+      }
+  }
+  /** The highest rock surface at (x, z), or -Infinity where there is none. */
+  top(x: number, z: number) {
+    const list = this.grid.get(`${Math.floor(x / 2)},${Math.floor(z / 2)}`);
+    let best = -Infinity;
+    if (list)
+      for (let i = 0; i < list.length; i += 5) {
+        const dx = x - list[i],
+          dz = z - list[i + 1],
+          rx = list[i + 3];
+        const k = 1 - (dx * dx + dz * dz) / (rx * rx);
+        if (k > 0) best = Math.max(best, list[i + 2] + list[i + 4] * Math.sqrt(k));
+      }
+    return best;
+  }
+}
+/** The tallest rock a rover drives over (metres above the ground); bigger rocks block it (sim/world.ts). */
+const CLIMBABLE = 0.38;
+/** How far a rock shape reaches sideways and up from its centre (before scaling). */
+function reach(g: THREE.BufferGeometry) {
+  const p = g.attributes.position;
+  let side = 0,
+    up = 0;
+  for (let i = 0; i < p.count; i++) {
+    side += Math.hypot(p.getX(i), p.getZ(i));
+    up = Math.max(up, p.getY(i));
+  }
+  // The average sideways reach (rocks are lumpy: a wheel rolls onto the body of the rock, not its tips).
+  return { side: side / p.count, up };
+}
+
 /** Boulders (several shapes, instanced, part-buried and dusty) and thousands of scattered pebbles. */
 export function buildRocks(baked: Baked, pebbles = true, fine = false) {
   const planet = baked.planet;
@@ -208,18 +253,26 @@ export function buildRocks(baked: Baked, pebbles = true, fine = false) {
     color = new THREE.Color();
   const r = rng(77);
   const base = new THREE.Color(PALETTE[planet].rock);
+  const bumps = new Bumps();
+  group.userData.bumps = bumps;
   shapes.forEach((shape, k) => {
     const list = ROCKS.filter((rock, i) => (rock.r > 1.3 ? 2 + (i % 4) : i % 2) === k);
     if (!list.length) return;
+    const size = reach(shape);
     const inst = new THREE.InstancedMesh(shape, mat, list.length);
     list.forEach((rock, i) => {
       e.set(r() * 0.5, r() * Math.PI * 2, r() * 0.4);
       q.setFromEuler(e);
       s.set(rock.r * (0.9 + r() * 0.45), rock.r * (0.7 + r() * 0.5), rock.r * (0.9 + r() * 0.35));
       // Sunk into the ground by about a third of their height, as real boulders are.
-      v.set(rock.x, terrainHeight(rock.x, rock.z, planet) - s.y * (0.12 + r() * 0.18), rock.z);
+      const sink = 0.12 + r() * 0.18;
+      // Rocks the rovers drive over (only big ones block them) are no taller than a wheel can climb.
+      const stands = s.y * (size.up - sink);
+      if (!rock.solid && stands > CLIMBABLE) s.y *= CLIMBABLE / stands;
+      v.set(rock.x, terrainHeight(rock.x, rock.z, planet) - s.y * sink, rock.z);
       m.compose(v, q, s);
       inst.setMatrixAt(i, m);
+      bumps.add(rock.x, rock.z, v.y, size.side * (s.x + s.z) * 0.5, size.up * s.y);
       color.copy(base).multiplyScalar(1.05 + r() * 0.4);
       inst.setColorAt(i, color);
     });
@@ -231,6 +284,8 @@ export function buildRocks(baked: Baked, pebbles = true, fine = false) {
     const count = fine ? 7000 : 3600;
     const small = new THREE.InstancedMesh(rockGeometry(66, 0, 0.65, 2), mat, count),
       large = new THREE.InstancedMesh(rockGeometry(71, 1, 0.7, 3), mat, Math.ceil(count * 0.45));
+    const smallSize = reach(small.geometry),
+      largeSize = reach(large.geometry);
     let ns = 0,
       nl = 0;
     for (let i = 0; i < count * 3 && ns + nl < count; i++) {
@@ -250,6 +305,9 @@ export function buildRocks(baked: Baked, pebbles = true, fine = false) {
       const n = big ? nl++ : ns++;
       into.setMatrixAt(n, m);
       into.setColorAt(n, color);
+      // Pebbles big enough for a wheel to feel (2 cm and up).
+      const shape = big ? largeSize : smallSize;
+      if (shape.up * s.y - size * 0.08 > 0.02) bumps.add(x, z, v.y, shape.side * (s.x + s.z) * 0.5, shape.up * s.y);
     }
     small.count = ns;
     large.count = nl;

@@ -74,6 +74,15 @@ export interface Rover {
   /** Collecting at a site: hours of work left. */
   task: { site: string; left: number } | null;
   cargo: Cargo;
+  /** Top speed, metres per training hour (the crew rover's when not set). */
+  top?: number;
+  /** Powered by a radioisotope generator: its battery never runs down. */
+  rtg?: boolean;
+}
+/** The robotic science rover: drives like the crew rover, studies science sites, and radios the data home. */
+export interface Scout extends Rover {
+  /** Sites it has already studied this mission. */
+  studied: string[];
 }
 
 export type HazardKind = "storm" | "dust";
@@ -164,6 +173,8 @@ export interface GameState {
   eva?: { left: number } | null;
   crew: Crew[];
   rover: Rover;
+  /** The science rover (missing in saves from before it existed). */
+  scout?: Scout | null;
   hazards: Hazard[];
   /** Timed mission events (copied from the mission, plus random ones). */
   script: ScriptEntry[];
@@ -196,6 +207,7 @@ export type Action =
   | { type: "cancel"; id: number }
   | { type: "shelter"; on: boolean }
   | { type: "collect"; site: string }
+  | { type: "study" }
   | { type: "clean" }
   | { type: "eva"; on: boolean }
   | { type: "choose"; option: number };

@@ -13,7 +13,7 @@ import { MODULES, SHIELD_TIME } from "../sim/modules";
 import { clockOf, dayOf, daylight, isDaytime, PLANETS } from "../sim/planets";
 import { modulePos, ROVER } from "../sim/rover";
 import type { GameState, Module, Planet } from "../sim/types";
-import { CRATER, DOCK, FOOTPRINT, HABITAT_RADIUS, inShadow, LANDER, PADS, padFits, SITES, terrainHeight } from "../sim/world";
+import { CRATER, DOCK, FOOTPRINT, HABITAT_RADIUS, inShadow, LANDER, PADS, padFits, SCOUT_HOME, SITES, terrainHeight } from "../sim/world";
 import { useGame } from "../state/game";
 import { useUI, type View } from "../state/ui";
 import { ambience, tick } from "../lib/sound";
@@ -25,7 +25,9 @@ import { buildAstronaut, buildDock, buildFlag, buildLander, buildModule, buildPa
 import type { Baked } from "./bake";
 import { bakedNow, prebake } from "./prebake";
 import { buildSky, environmentMap } from "./sky";
-import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem } from "./terrain";
+import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem, type Bumps } from "./terrain";
+import { pressTyre, seat, squashableTyres, Wheel } from "./drive";
+import { buildScout, poseArm, poseScout, SCOUT } from "./models/scout";
 import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData, type Interior } from "./interior";
 import { HOME as HOME_PLAN } from "../sim/home";
 import { insideEnvironment } from "./interior/lighting";
@@ -309,7 +311,10 @@ export function World() {
       const terrain = buildTerrain(baked);
       scene.add(terrain);
       scene.add(buildHorizon(baked));
-      scene.add(buildRocks(baked, level > 0, level === 3));
+      const rocks = buildRocks(baked, level > 0, level === 3);
+      scene.add(rocks);
+      const bumps = rocks.userData.bumps as Bumps;
+      const heightAt = (x: number, z: number) => terrainHeight(x, z, planet);
       if (!(await slice())) return;
       const ice = buildIce(planet);
       scene.add(ice);
@@ -360,10 +365,28 @@ export function World() {
       const rover = buildRover();
       rover.group.traverse((o) => (o.userData.rover = true));
       scene.add(rover.group);
+      // Each wheel on its own spring, with a tyre that squashes where it meets the ground; the body rides on them.
+      const tyres = squashableTyres(rover.wheels, rover.tyre, rover.wheelRadius);
+      const roverWheels = rover.wheels.map(() => new Wheel(0.03, 0.12));
+      const hubY = rover.wheels.map(() => 0);
+      const roverBody = { y: Number.NaN, pitch: 0, roll: 0 };
       const headlight = new THREE.SpotLight("#fff1d6", 0, 45, 0.6, 0.55, 1.2);
       headlight.position.set(0, 1.4, -2.0);
       headlight.target.position.set(0, 0, -14);
       rover.group.add(headlight, headlight.target);
+      if (!(await slice())) return;
+      // The science rover: a robotic explorer on rocker-bogie suspension, with rigid metal wheels.
+      const scout = buildScout();
+      scout.group.traverse((o) => (o.userData.scout = true));
+      scout.group.position.set(SCOUT_HOME.x, 0, SCOUT_HOME.z);
+      scene.add(scout.group);
+      const scoutWheels = scout.spin.map(() => new Wheel(0, 0.015));
+      const scoutHub = scout.spin.map(() => 0);
+      const scoutTracks = trackSystem(planet, 1600);
+      scene.add(scoutTracks.mesh);
+      const scoutAt = new THREE.Vector3(SCOUT_HOME.x, 0, SCOUT_HOME.z),
+        scoutTrackFrom = scoutAt.clone();
+      const scoutMotion = { heading: SCOUT_HOME.heading, steer: 0, arm: 0, tool: 0, pan: 0, tilt: 0 };
       if (!(await slice())) return;
       const cockpit = buildCockpit();
       rover.body.add(cockpit.group);
@@ -440,7 +463,7 @@ export function World() {
         ray.setFromCamera(ndc, camera);
         pickables.length = 0;
         for (const e of entries.values()) pickables.push(e.view.group);
-        pickables.push(rover.group, ...markers.map((m) => m.group), ...pads, terrain);
+        pickables.push(rover.group, scout.group, ...markers.map((m) => m.group), ...pads, terrain);
         return ray.intersectObjects(pickables, true)[0] ?? null;
       };
       scene3d.pick = (cx, cy) => {
@@ -461,7 +484,7 @@ export function World() {
           st = useGame.getState();
         if (!hit) return;
         let o: THREE.Object3D | null = hit.object;
-        while (o && o.userData.moduleId === undefined && o.userData.siteId === undefined && o.userData.padId === undefined && !o.userData.rover && o.name !== "terrain") o = o.parent;
+        while (o && o.userData.moduleId === undefined && o.userData.siteId === undefined && o.userData.padId === undefined && !o.userData.rover && !o.userData.scout && o.name !== "terrain") o = o.parent;
         if (!o) return;
         if (ui.placing && o.userData.padId !== undefined) {
           if (st.act({ type: "build", module: ui.placing, pad: o.userData.padId })) {
@@ -476,8 +499,9 @@ export function World() {
         } else if (o.userData.siteId !== undefined) {
           ui.select({ kind: "site", id: o.userData.siteId });
           ui.openPanel("rover");
-        } else if (o.userData.rover) {
+        } else if (o.userData.rover || o.userData.scout) {
           ui.select(null);
+          st.setVehicle(o.userData.scout ? "scout" : "rover");
           ui.openPanel("rover");
         } else if (o.userData.padId !== undefined) {
           const pad = PADS[o.userData.padId];
@@ -487,7 +511,7 @@ export function World() {
             ui.openPanel("build");
           }
         } else if (o.name === "terrain") {
-          if (ui.panel === "rover" && !st.game.rover.task) st.driveTo({ x: hit.point.x, z: hit.point.z });
+          if (ui.panel === "rover") st.driveTo({ x: hit.point.x, z: hit.point.z });
           else ui.select(null);
         }
       };
@@ -498,7 +522,7 @@ export function World() {
         hoverAt = now;
         const hit = hitAt(e.clientX, e.clientY);
         let o: THREE.Object3D | null = hit?.object ?? null;
-        while (o && o.userData.moduleId === undefined && o.userData.siteId === undefined && o.userData.padId === undefined && !o.userData.rover) o = o.parent;
+        while (o && o.userData.moduleId === undefined && o.userData.siteId === undefined && o.userData.padId === undefined && !o.userData.rover && !o.userData.scout) o = o.parent;
         const ui = useUI.getState();
         const clickable = !!o && (o.userData.padId === undefined || !!ui.placing || !useGame.getState().game.modules.some((m) => m.pad === o!.userData.padId));
         renderer.domElement.style.cursor = clickable ? "pointer" : ui.panel === "rover" && hit?.object.name === "terrain" ? "crosshair" : "";
@@ -652,18 +676,21 @@ export function World() {
             goal.copy(HOME);
           }
         }
-        roverTarget.copy(rover.group.position);
-        roverTarget.y += 1.8;
-        const moving = Math.abs(rv.speed) > 3;
+        // The follow and driver's views ride with the rover you're driving: the crew's, or the science rover.
+        const scoutOn = useGame.getState().vehicle === "scout" && !!g.scout;
+        const car = scoutOn ? g.scout! : rv;
+        if (scoutOn) scout.body.getWorldPosition(roverTarget).add(offset.set(0, 0.5, 0));
+        else roverTarget.copy(rover.group.position).add(offset.set(0, 1.8, 0));
+        const moving = Math.abs(car.speed) > 3;
 
         // Where the current view wants the camera.
         if (view === "orbit") {
-          if (follow) goal.set(rv.x, 0, rv.z);
+          if (follow) goal.set(car.x, 0, car.z);
           toTarget.copy(goal);
           toPos.copy(goal).add(orbitOffset);
         } else if (view === "chase") {
           toTarget.copy(roverTarget);
-          sph.set(chase.dist, chase.polar, rv.heading + chase.yaw);
+          sph.set(scoutOn ? chase.dist * 0.75 : chase.dist, chase.polar, car.heading + chase.yaw);
           toPos.copy(roverTarget).add(offset.setFromSpherical(sph));
         } else if (view === "walk") {
           walkCtl.eye(homeOrigin, toPos, toQuat, reduced);
@@ -681,9 +708,16 @@ export function World() {
             look.yaw += (0 - look.yaw) * k;
             look.pitch += (-0.06 - look.pitch) * k;
           }
-          rover.group.updateMatrixWorld(true);
-          toPos.copy(EYE).applyMatrix4(rover.body.matrixWorld);
-          rover.body.getWorldQuaternion(toQuat);
+          if (scoutOn) {
+            // The science rover's "cockpit" is its mast camera.
+            scout.group.updateMatrixWorld(true);
+            toPos.copy(scout.eye).applyMatrix4(scout.tilt.matrixWorld);
+            scout.tilt.getWorldQuaternion(toQuat);
+          } else {
+            rover.group.updateMatrixWorld(true);
+            toPos.copy(EYE).applyMatrix4(rover.body.matrixWorld);
+            rover.body.getWorldQuaternion(toQuat);
+          }
           lookEuler.set(look.pitch, look.yaw, 0);
           toQuat.multiply(lookQuat.setFromEuler(lookEuler));
           toTarget.copy(roverTarget);
@@ -1059,28 +1093,115 @@ export function World() {
         (dock.userData.guide as THREE.MeshStandardMaterial).emissiveIntensity = g.rover.docked ? 0.6 : 1 + Math.max(0, Math.sin(clock * 4)) * 2;
         (lander.userData.beacon as THREE.MeshStandardMaterial).emissiveIntensity = (clock * 0.6) % 1 < 0.1 ? 5 : 0.15;
 
-        // Rover.
+        // Rover: each wheel sits on the ground or on the rock under it, on its own spring; the body rides on the
+        // six of them (tilting and rising as they do, a moment behind), and the tyres squash against what they're on.
         const rv = g.rover;
         const ground = terrainHeight(rv.x, rv.z, planet);
         const prev = roverPos.clone();
         roverPos.set(rv.x, ground, rv.z);
-        rover.group.position.copy(roverPos);
+        const moved = prev.distanceTo(roverPos);
         const fx = -Math.sin(rv.heading),
-          fz = -Math.cos(rv.heading);
-        const pitch = Math.atan2(terrainHeight(rv.x + fx * 1.5, rv.z + fz * 1.5, planet) - terrainHeight(rv.x - fx * 1.5, rv.z - fz * 1.5, planet), 3);
-        const roll = Math.atan2(terrainHeight(rv.x - fz * 1.1, rv.z + fx * 1.1, planet) - terrainHeight(rv.x + fz * 1.1, rv.z - fx * 1.1, planet), 2.2);
+          fz = -Math.cos(rv.heading),
+          sx = Math.cos(rv.heading),
+          sz = -Math.sin(rv.heading);
+        let front = 0,
+          rear = 0,
+          left = 0,
+          right = 0,
+          all = 0;
+        rover.wheels.forEach((w, i) => {
+          const lx = w.position.x,
+            lz = w.position.z;
+          const y = roverWheels[i].update(seat(heightAt, bumps, rv.x + sx * lx - fx * lz, rv.z + sz * lx - fz * lz, fx, fz, rover.wheelRadius), moved > 12 ? 1 : dt);
+          hubY[i] = y;
+          all += y;
+          if (lz < -0.5) front += y;
+          else if (lz > 0.5) rear += y;
+          if (lx < 0) left += y;
+          else right += y;
+        });
+        const bodyY = all / rover.wheels.length - rover.wheelY,
+          bodyPitch = Math.atan2((front - rear) / 2, 2.6),
+          bodyRoll = Math.atan2((right - left) / 3, 2.4);
+        if (moved > 12 || !Number.isFinite(roverBody.y)) Object.assign(roverBody, { y: bodyY, pitch: bodyPitch, roll: bodyRoll });
+        else {
+          const k = 1 - Math.exp(-dt * 14);
+          roverBody.y += (bodyY - roverBody.y) * k;
+          roverBody.pitch += (bodyPitch - roverBody.pitch) * k;
+          roverBody.roll += (bodyRoll - roverBody.roll) * k;
+        }
+        rover.group.position.set(rv.x, roverBody.y, rv.z);
         rover.group.rotation.set(0, 0, 0);
         rover.group.rotateY(rv.heading);
-        rover.group.rotateX(pitch);
-        rover.group.rotateZ(roll);
-        const moved = prev.distanceTo(roverPos);
-        if (moved < 12) for (const w of rover.wheels) w.rotation.x -= (moved / 0.478) * Math.sign(rv.speed || 1);
-        // Each wheel follows the ground under it: the suspension soaks up what the body's tilt doesn't.
+        rover.group.rotateX(roverBody.pitch);
+        rover.group.rotateZ(roverBody.roll);
+        if (moved < 12) for (const w of rover.wheels) w.rotation.x -= (moved / rover.wheelRadius) * Math.sign(rv.speed || 1);
+        // The suspension takes up whatever the body's tilt doesn't.
         rover.group.updateMatrixWorld();
-        for (const w of rover.wheels) {
+        rover.wheels.forEach((w, i) => {
           wheelAt.set(w.position.x, rover.wheelY, w.position.z).applyMatrix4(rover.group.matrixWorld);
-          const lift = THREE.MathUtils.clamp(terrainHeight(wheelAt.x, wheelAt.z, planet) - (wheelAt.y - rover.wheelY), -0.16, 0.16);
-          w.position.y += (rover.wheelY + lift - w.position.y) * Math.min(1, dt * 12);
+          w.position.y = rover.wheelY + THREE.MathUtils.clamp(hubY[i] - wheelAt.y, -0.22, 0.14);
+        });
+        rover.group.updateMatrixWorld();
+        rover.wheels.forEach((w, i) => pressTyre(tyres[i], w, rover.wheelRadius, roverWheels[i].squash));
+
+        // The science rover: each rigid wheel finds its seat on the ground or a rock, the rocker-bogie works out
+        // how the body sits on the six of them, the corner wheels steer into turns, the mast looks about, and the
+        // arm unfolds onto the rocks while it studies a site.
+        const sc = g.scout;
+        scout.group.visible = !!sc;
+        if (sc) {
+          const was = scoutAt.clone();
+          scoutAt.set(sc.x, 0, sc.z);
+          const went = was.distanceTo(scoutAt),
+            jump = went > 12;
+          const hx = -Math.sin(sc.heading),
+            hz = -Math.cos(sc.heading),
+            ax = Math.cos(sc.heading),
+            az = -Math.sin(sc.heading);
+          for (let i = 0; i < 6; i++) {
+            const lx = (i % 2 ? 1 : -1) * SCOUT.track,
+              lz = SCOUT.z[i >> 1];
+            scoutHub[i] = scoutWheels[i].update(seat(heightAt, bumps, sc.x + ax * lx - hx * lz, sc.z + az * lx - hz * lz, hx, hz, SCOUT.R), jump ? 1 : dt);
+          }
+          scout.group.position.set(sc.x, 0, sc.z);
+          scout.group.rotation.set(0, sc.heading, 0);
+          poseScout(scout, scoutHub);
+          if (!jump) for (const w of scout.spin) w.rotation.x -= (went / SCOUT.R) * Math.sign(sc.speed || 1);
+          // Steering: front corners into the turn, rear corners the other way (it can turn on the spot).
+          const yaw = jump || dt <= 0 ? 0 : wrap(sc.heading - scoutMotion.heading) / dt;
+          scoutMotion.heading = sc.heading;
+          const steerTo = THREE.MathUtils.clamp(Math.atan2(yaw * 1.1, Math.max(0.6, went / Math.max(dt, 1e-3))), -0.7, 0.7);
+          scoutMotion.steer += (steerTo - scoutMotion.steer) * (1 - Math.exp(-dt * 6));
+          scout.steer[0].rotation.y = scout.steer[1].rotation.y = scoutMotion.steer;
+          scout.steer[4].rotation.y = scout.steer[5].rotation.y = -scoutMotion.steer;
+          // The arm unfolds while studying; the drill turns once it's down. The mast watches the arm, scans the
+          // view while parked, and looks ahead while driving.
+          const studying = !!sc.task;
+          scoutMotion.arm += ((studying ? 1 : 0) - scoutMotion.arm) * (1 - Math.exp(-dt * 1.8));
+          if (studying && scoutMotion.arm > 0.95 && !reduced) scoutMotion.tool += dt * 0.8;
+          poseArm(scout, scoutMotion.arm, scoutMotion.tool);
+          const driving = Math.abs(sc.speed) > 0.5;
+          const panTo = studying ? -0.55 : driving || reduced ? 0 : Math.sin(clock * 0.21) * 0.9;
+          const tiltTo = studying ? -0.62 : driving ? -0.12 : -0.05 + Math.sin(clock * 0.13) * 0.08;
+          scoutMotion.pan += (panTo - scoutMotion.pan) * (1 - Math.exp(-dt * 1.5));
+          scoutMotion.tilt += (tiltTo - scoutMotion.tilt) * (1 - Math.exp(-dt * 1.5));
+          scout.pan.rotation.y = scoutMotion.pan;
+          scout.tilt.rotation.x = scoutMotion.tilt;
+          if (jump) {
+            scoutTracks.reset();
+            scoutTrackFrom.copy(scoutAt);
+          } else if (scoutTrackFrom.distanceTo(scoutAt) > 0.6) {
+            scoutTracks.add(sc.x, sc.z, sc.heading);
+            scoutTrackFrom.copy(scoutAt);
+          }
+          // A little dust off the wheels on Mars; on the Moon a low spray.
+          if (driving && !reduced && !jump && Math.random() < 0.5)
+            for (const side of [-1, 1]) {
+              const wx = sc.x - hx * 1.1 + ax * side * SCOUT.track,
+                wz = sc.z - hz * 1.1 + az * side * SCOUT.track;
+              dust.emit(wx, heightAt(wx, wz) + 0.1, wz, -hx * 0.8, planet === "moon" ? 0.7 : 0.4, -hz * 0.8, 0.6, 1, planet === "moon" ? 0.9 : 0.6);
+            }
         }
         if (moved > 12) {
           tracks.reset();
@@ -1172,11 +1293,11 @@ export function World() {
           const machines = walking && !walker.outside && walker.where === 0 && Math.hypot(walker.x, walker.z) > HOME_PLAN.hall && (Math.atan2(walker.x, -walker.z) * 180) / Math.PI > -30 && (Math.atan2(walker.x, -walker.z) * 180) / Math.PI < 30 ? 1.5 : 0;
           ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva, machines });
         }
-        // The rover's body rocks a little over the ground as it drives.
+        // The motors' hum: a faint shiver in the body while it drives (the bumps come from the suspension).
         const bump = reduced ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);
-        rover.body.position.y = (Math.sin(clock * 11) * 0.018 + Math.sin(clock * 4.3 + 1) * 0.012) * bump;
-        rover.body.rotation.z = Math.sin(clock * 6.1) * 0.008 * bump;
-        rover.body.rotation.x = Math.sin(clock * 3.7) * 0.006 * bump;
+        rover.body.position.y = Math.sin(clock * 23) * 0.003 * bump;
+        rover.body.rotation.z = Math.sin(clock * 17.3) * 0.0015 * bump;
+        rover.body.rotation.x = 0;
 
         // What the inside shows (lights, alarms, shelves) follows the mission, while you're in or near it.
         const homeState = view === "walk" || interior?.group.visible ? interiorState(g) : null;
@@ -1205,8 +1326,9 @@ export function World() {
         const wantExposure = baseExposure * (view === "walk" ? 1.0 : 1);
         exposure += (wantExposure - exposure) * (1 - Math.exp(-dt / 0.5));
         renderer.toneMappingExposure = exposure;
-        const inside = view === "cockpit" && blend > 0.55;
-        cockpit.group.visible = view === "cockpit" && blend > 0.3;
+        const crewCockpit = view === "cockpit" && useGame.getState().vehicle !== "scout";
+        const inside = crewCockpit && blend > 0.55;
+        cockpit.group.visible = crewCockpit && blend > 0.3;
         for (const pane of rover.glass) pane.visible = !inside;
         if (cockpit.group.visible) cockpit.update(cockpitData(st, !!storm, !!dustStorm, dark), clock);
         const facing = camera.getWorldDirection(v);
@@ -1254,10 +1376,12 @@ export function World() {
       };
       if (debug) {
         // Test hooks (?debug only): place the overview camera exactly, and grab a frame as an image.
-        debug.place = (pos: [number, number, number], at: [number, number, number]) => {
+        debug.place = (pos: [number, number, number], at: [number, number, number], close = false) => {
           setView("orbit");
           blend = 1;
           follow = false;
+          // (Review shots can come in close: the orbit camera normally keeps 10 m away.)
+          controls.minDistance = close ? 0.8 : 10;
           goal.set(at[0], 0, at[2]);
           controls.target.set(...at);
           camera.position.set(...pos);

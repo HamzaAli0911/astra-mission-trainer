@@ -34,6 +34,9 @@ export interface RoverView {
   wheels: THREE.Object3D[];
   /** Resting height of the wheel centres; the scene moves each wheel up or down to meet the ground. */
   wheelY: number;
+  /** The tyres' rolling radius (to the tread lugs) and their rubber, which squashes where it meets the ground. */
+  wheelRadius: number;
+  tyre: THREE.Material;
   /** Window glass and frames, hidden in the driver's view so the crew can see out. */
   glass: THREE.Object3D[];
   heads: THREE.MeshStandardMaterial;
@@ -197,8 +200,9 @@ function shared3<T>(key: string, make: () => T): T {
 }
 
 /** A tyre: a rounded tread band around a rim, with chevron lugs; its axle runs along x. */
+const TYRE = "#1e2128";
 function buildWheel(w: THREE.Group, side: number) {
-  const tyre = rubber("#1e2128"),
+  const tyre = rubber(TYRE),
     rim = metal("#b8c0cc", 0.32),
     hub = metal("#5d6573", 0.45);
   const band = lathe(
@@ -381,6 +385,6 @@ export function buildRover(): RoverView {
   }
   cone(arm, 0.04, 0.05, visor("#0a0e16"), 0.06, -0.06, -0.62, 10);
   finalize(g);
-  return { group: g, body, wheels, wheelY, glass: glassList, heads, tail, beacon, arm };
+  return { group: g, body, wheels, wheelY, wheelRadius: 0.49, tyre: rubber(TYRE), glass: glassList, heads, tail, beacon, arm };
 }
 

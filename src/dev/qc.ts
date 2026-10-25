@@ -19,7 +19,7 @@ import { SHIELD_TIME } from "../sim/modules";
 type V3 = [number, number, number];
 interface Hooks {
   renderer: THREE.WebGLRenderer;
-  place: (pos: V3, at: V3) => void;
+  place: (pos: V3, at: V3, close?: boolean) => void;
   view: (v: View) => void;
   snap: (frames?: number) => string;
   /** Walk mode: stand at a habitat-local point on a floor, facing a compass bearing and tilted up or down (degrees). */

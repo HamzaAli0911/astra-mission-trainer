@@ -8,12 +8,14 @@ import {
   drive,
   followRoute,
   planRoute,
+  SCOUT_ROVER,
   STOP,
+  type Block,
   type DriveInput,
   type Point,
 } from "../sim/rover";
 import type { Action, FeedItem, FeedKind, GameState } from "../sim/types";
-import { DOCK, site } from "../sim/world";
+import { DOCK, SCOUT_HOME, site } from "../sim/world";
 import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
 import { useUI } from "./ui";
@@ -50,6 +52,11 @@ export interface GameStore {
   /** Autopilot waypoints and where they lead ("dock", a site id, or "point"). */
   route: Point[];
   target: string | null;
+  /** Which rover you drive and send (the Rover panel, the keys, the follow camera): the crew's or the science rover. */
+  vehicle: Vehicle;
+  /** The science rover's own autopilot ("home", a site id, or "point"). */
+  scoutRoute: Point[];
+  scoutTarget: string | null;
   /** On-screen drive pad. */
   pad: DriveInput;
   /** True while the player is steering by hand (time runs at 1× then). */
@@ -73,9 +80,11 @@ export interface GameStore {
   resume: () => void;
   togglePause: () => void;
   hold: (held: boolean) => void;
-  sendRover: (target: string) => boolean;
-  driveTo: (p: Point) => boolean;
-  stopRover: () => void;
+  /** Send a rover (the selected one unless named) to a site, or home ("dock" or "home"). */
+  sendRover: (target: string, which?: Vehicle) => boolean;
+  driveTo: (p: Point, which?: Vehicle) => boolean;
+  stopRover: (which?: Vehicle) => void;
+  setVehicle: (v: Vehicle) => void;
   setPad: (key: keyof DriveInput, on: boolean) => void;
   dismissAlert: () => void;
   toast: (text: string, kind?: FeedKind) => void;
@@ -84,6 +93,7 @@ export interface GameStore {
   nextCapcom: () => void;
 }
 
+export type Vehicle = "rover" | "scout";
 let toastId = 0;
 const anyInput = (i: DriveInput) => i.forward || i.back || i.left || i.right;
 
@@ -135,6 +145,9 @@ export const useGame = create<GameStore>((set, get) => {
     reason: "briefing",
     route: [],
     target: null,
+    vehicle: "rover",
+    scoutRoute: [],
+    scoutTarget: null,
     pad: { ...STOP },
     manual: false,
     acc: 0,
@@ -153,6 +166,9 @@ export const useGame = create<GameStore>((set, get) => {
         reason: "briefing",
         route: [],
         target: null,
+        vehicle: "rover",
+        scoutRoute: [],
+        scoutTarget: null,
         pad: { ...STOP },
         manual: false,
         acc: 0,
@@ -171,6 +187,9 @@ export const useGame = create<GameStore>((set, get) => {
         reason: "manual",
         route,
         target,
+        vehicle: "rover",
+        scoutRoute: [],
+        scoutTarget: null,
         pad: { ...STOP },
         manual: false,
         acc: 0,
@@ -216,15 +235,20 @@ export const useGame = create<GameStore>((set, get) => {
       if (hours <= 0) return;
       const g = structuredClone(st.game);
       let route = st.route,
-        target = st.target;
+        target = st.target,
+        scoutRoute = st.scoutRoute,
+        scoutTarget = st.scoutTarget;
+      // The keys drive the rover you picked; the other carries on with its autopilot. Neither drives through the other.
+      const steering: Vehicle = st.vehicle === "scout" && g.scout ? "scout" : "rover";
+      const roverBlock: Block = g.scout ? { x: g.scout.x, z: g.scout.z, r: SCOUT_ROVER.gap } : null;
       if (g.rover.task) {
-        if (manual && !st.manual) get().toast("Wait! The crew is outside collecting.", "warn");
-      } else if (manual) {
+        if (manual && steering === "rover" && !st.manual) get().toast("Wait! The crew is outside collecting.", "warn");
+      } else if (manual && steering === "rover") {
         route = [];
         target = null;
-        g.rover = drive(g.rover, input, hours, g.modules, g.planet);
+        g.rover = drive(g.rover, input, hours, g.modules, g.planet, roverBlock);
       } else if (route.length) {
-        const out = followRoute(g.rover, route, hours, g.modules, g.planet);
+        const out = followRoute(g.rover, route, hours, g.modules, g.planet, roverBlock);
         g.rover = out.rover;
         route = out.route;
         if (!route.length) {
@@ -233,7 +257,27 @@ export const useGame = create<GameStore>((set, get) => {
             get().toast("Autopilot stopped: something is in the way. Steer around it.", "warn");
           target = null;
         }
-      } else if (g.rover.speed !== 0) g.rover = drive(g.rover, STOP, hours, g.modules, g.planet);
+      } else if (g.rover.speed !== 0) g.rover = drive(g.rover, STOP, hours, g.modules, g.planet, roverBlock);
+      if (g.scout) {
+        const block: Block = { x: g.rover.x, z: g.rover.z, r: SCOUT_ROVER.gap };
+        if (g.scout.task) {
+          if (manual && steering === "scout" && !st.manual) get().toast("Wait! The science rover is studying the rocks.", "warn");
+        } else if (manual && steering === "scout") {
+          scoutRoute = [];
+          scoutTarget = null;
+          g.scout = drive(g.scout, input, hours, g.modules, g.planet, block);
+        } else if (scoutRoute.length) {
+          const out = followRoute(g.scout, scoutRoute, hours, g.modules, g.planet, block);
+          g.scout = out.rover;
+          scoutRoute = out.route;
+          if (!scoutRoute.length) {
+            const goal = scoutTarget && scoutTarget !== "home" && scoutTarget !== "point" ? site(scoutTarget) : null;
+            if (goal && Math.hypot(goal.x - g.scout.x, goal.z - g.scout.z) > 5)
+              get().toast("The science rover's autopilot stopped: something is in the way.", "warn");
+            scoutTarget = null;
+          }
+        } else if (g.scout.speed !== 0) g.scout = drive(g.scout, STOP, hours, g.modules, g.planet, block);
+      }
       const wasDocked = g.rover.docked;
       updateDock(g);
       if (g.rover.docked && !wasDocked) play("rover");
@@ -242,7 +286,7 @@ export const useGame = create<GameStore>((set, get) => {
         step(g, SIM_STEP);
         acc -= SIM_STEP;
       }
-      set({ game: g, route, target, acc, manual });
+      set({ game: g, route, target, scoutRoute, scoutTarget, acc, manual });
       digest(g);
       checkEnd(g);
       if (g.choice && !get().paused) {
@@ -277,36 +321,70 @@ export const useGame = create<GameStore>((set, get) => {
     },
     hold: (held) => set({ held }),
 
-    sendRover: (to) => {
+    sendRover: (to, which = get().vehicle) => {
       const g = get().game;
       if (g.status !== "playing") return false;
+      if (which === "scout" && g.scout) {
+        const sc = g.scout;
+        if (sc.task) {
+          get().toast("Wait for the science rover to finish studying.", "warn");
+          return false;
+        }
+        const block: Block = { x: g.rover.x, z: g.rover.z, r: SCOUT_ROVER.gap };
+        const where = to === "home" || to === "dock" ? null : site(to);
+        if (to !== "home" && to !== "dock" && !where) return false;
+        const goal = where ? (approachPoint(sc, where, g.modules, 2.2, block) ?? approachPoint(sc, where, g.modules, 0, block)) : { x: SCOUT_HOME.x, z: SCOUT_HOME.z };
+        const route = goal ? planRoute(sc, goal, g.modules, block) : [];
+        if (!route.length) {
+          get().toast("The science rover can't find a way there.", "warn");
+          return false;
+        }
+        set({ scoutRoute: route, scoutTarget: where ? to : "home" });
+        play("rover");
+        return true;
+      }
       if (g.rover.task) {
         get().toast("Wait for the crew to finish collecting.", "warn");
         return false;
       }
       const r = g.rover;
+      const block: Block = g.scout ? { x: g.scout.x, z: g.scout.z, r: SCOUT_ROVER.gap } : null;
       let goal: Point | null;
-      if (to === "dock") goal = { ...DOCK };
+      if (to === "dock" || to === "home") goal = { ...DOCK };
       else {
         const where = site(to);
         if (!where) return false;
         // Park beside the marker, not on top of it.
-        goal = approachPoint(r, where, g.modules, 2.2) ?? approachPoint(r, where, g.modules, 0);
+        goal = approachPoint(r, where, g.modules, 2.2, block) ?? approachPoint(r, where, g.modules, 0, block);
       }
-      const route = goal ? planRoute(r, goal, g.modules) : [];
+      const route = goal ? planRoute(r, goal, g.modules, block) : [];
       if (!route.length) {
         get().toast("The rover can't find a way there.", "warn");
         return false;
       }
-      set({ route, target: to });
+      set({ route, target: to === "home" ? "dock" : to });
       play("rover");
       return true;
     },
-    driveTo: (p) => {
+    driveTo: (p, which = get().vehicle) => {
       const g = get().game;
+      if (which === "scout" && g.scout) {
+        if (g.status !== "playing" || g.scout.task) return false;
+        const block: Block = { x: g.rover.x, z: g.rover.z, r: SCOUT_ROVER.gap };
+        const goal = approachPoint(g.scout, p, g.modules, 0, block);
+        const route = goal ? planRoute(g.scout, goal, g.modules, block) : [];
+        if (!route.length) {
+          get().toast("The science rover can't drive there.", "warn");
+          return false;
+        }
+        set({ scoutRoute: route, scoutTarget: "point" });
+        play("rover");
+        return true;
+      }
       if (g.status !== "playing" || g.rover.task) return false;
-      const goal = approachPoint(g.rover, p, g.modules, 0);
-      const route = goal ? planRoute(g.rover, goal, g.modules) : [];
+      const block: Block = g.scout ? { x: g.scout.x, z: g.scout.z, r: SCOUT_ROVER.gap } : null;
+      const goal = approachPoint(g.rover, p, g.modules, 0, block);
+      const route = goal ? planRoute(g.rover, goal, g.modules, block) : [];
       if (!route.length) {
         get().toast("The rover can't drive there.", "warn");
         return false;
@@ -315,7 +393,10 @@ export const useGame = create<GameStore>((set, get) => {
       play("rover");
       return true;
     },
-    stopRover: () => set({ route: [], target: null }),
+    stopRover: (which = get().vehicle) => (which === "scout" ? set({ scoutRoute: [], scoutTarget: null }) : set({ route: [], target: null })),
+    // (During a tutorial, which teaches the crew rover, the science rover can't be picked.)
+    setVehicle: (vehicle) =>
+      set({ vehicle: vehicle === "scout" && (!get().game.scout || useUI.getState().tutorial !== null) ? "rover" : vehicle, pad: { ...STOP } }),
     setPad: (key, on) => set({ pad: { ...get().pad, [key]: on } }),
 
     dismissAlert: () => {

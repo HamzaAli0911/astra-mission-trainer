@@ -26,15 +26,15 @@ import { freePad } from "../sim/engine";
 import { mission } from "../sim/missions";
 import { BUILD_ORDER, CREW_NEEDS, DAMAGED, MODULES, RATES, REPAIR_COST, SHIELD_COST, SHIELD_TIME, spec } from "../sim/modules";
 import { clockOf, PLANETS } from "../sim/planets";
-import { planRoute, approachPoint, tripCost, routeLength } from "../sim/rover";
+import { planRoute, approachPoint, tripCost, routeLength, SCOUT_ROVER } from "../sim/rover";
 import type { GameState, Light, Module, ModuleType } from "../sim/types";
-import { DOCK, HAUL, PADS, padFits, SITE_REACH, SITES, type Site } from "../sim/world";
-import { useGame } from "../state/game";
+import { DOCK, HAUL, PADS, padFits, SCOUT_HOME, site as siteById, SITE_REACH, SITES, type Site } from "../sim/world";
+import { useGame, type Vehicle } from "../state/game";
 import { useUI, type Panel } from "../state/ui";
 import { enterWalk } from "../state/walk";
 import { play } from "../lib/sound";
 import { duration } from "./common";
-import { IconDose, IconIce, IconRock, IconRover, IconSample, IconShelter, MODULE_ICON, RESOURCE_ICON } from "./icons";
+import { IconDose, IconIce, IconRock, IconRover, IconSample, IconScout, IconShelter, MODULE_ICON, RESOURCE_ICON } from "./icons";
 
 /** The right-hand drawer (a bottom sheet on phones): one panel at a time. */
 export function Drawer() {
@@ -65,7 +65,7 @@ export function Drawer() {
       <div className="drawer-body">
         {panel === "build" && <BuildPanel />}
         {panel === "power" && <PowerPanel />}
-        {panel === "rover" && <RoverPanel />}
+        {panel === "rover" && <RoverDrawer />}
         {panel === "crew" && <CrewPanel />}
       </div>
     </aside>
@@ -467,6 +467,160 @@ function siteInfo(s: Site, planet: "moon" | "mars") {
   return { gives: `+${HAUL.science.science} science (once)`, about: s.fact[planet] };
 }
 
+/** The Rover drawer: pick which rover to drive and send (when the mission has the science rover too). */
+function RoverDrawer() {
+  // (Tutorials teach the crew rover: the science rover waits until they're done.)
+  const tutorial = useUI((s) => s.tutorial !== null);
+  const vehicle = useGame((s) => (tutorial ? "rover" : s.vehicle));
+  const hasScout = useGame((s) => !!s.game.scout) && !tutorial;
+  const pick = (v: Vehicle) => {
+    if (v === vehicle) return;
+    useGame.getState().setVehicle(v);
+    // Show the one you picked.
+    useUI.getState().cam("rover");
+    play("toggle");
+  };
+  return (
+    <>
+      {hasScout && (
+        <div className="vehicle-switch segmented" role="radiogroup" aria-label="Which rover">
+          <button className={vehicle === "rover" ? "on" : ""} role="radio" aria-checked={vehicle === "rover"} onClick={() => pick("rover")}>
+            <IconRover size={18} /> Crew rover
+          </button>
+          <button className={vehicle === "scout" ? "on" : ""} role="radio" aria-checked={vehicle === "scout"} onClick={() => pick("scout")} data-act="scout">
+            <IconScout size={18} /> Science rover
+          </button>
+        </div>
+      )}
+      {vehicle === "scout" && hasScout ? <ScoutPanel /> : <RoverPanel />}
+    </>
+  );
+}
+
+/** The science rover: a robot on nuclear power that studies science sites and radios the data home. */
+function ScoutPanel() {
+  const g = useGame((s) => s.game);
+  const { target, routeLen } = useGame(useShallow((s) => ({ target: s.scoutTarget, routeLen: s.scoutRoute.length })));
+  const selected = useUI((s) => (s.selected?.kind === "site" ? s.selected.id : null));
+  const sc = g.scout!;
+  const near = SITES.find((w) => Math.hypot(sc.x - w.x, sc.z - w.z) <= SITE_REACH);
+  const parked = Math.hypot(sc.x - SCOUT_HOME.x, sc.z - SCOUT_HOME.z) < 3;
+  const studying = sc.task ? siteById(sc.task.site) : null;
+  const status = studying
+    ? `Studying ${studying.name[g.planet]}… ${Math.round((1 - sc.task!.left / SCOUT_ROVER.study) * 100)}%`
+    : routeLen
+      ? target === "home"
+        ? "Driving back to its parking spot"
+        : "Driving…"
+      : parked
+        ? "Parked by the dock"
+        : near
+          ? `At ${near.name[g.planet]}`
+          : "Stopped outside";
+  const science = SITES.filter((w) => w.kind === "science").sort(
+    (a, b) => Number(b.id === selected) - Number(a.id === selected) || Math.hypot(sc.x - a.x, sc.z - a.z) - Math.hypot(sc.x - b.x, sc.z - b.z),
+  );
+  return (
+    <div className="rover-panel scout-panel">
+      <section className="rover-status">
+        <span className="rover-art" aria-hidden="true">
+          <IconScout size={34} />
+        </span>
+        <div>
+          <b>{status}</b>
+          <small>
+            Nuclear power (an RTG): it never needs charging · {sc.studied.length} of {science.length} sites studied
+          </small>
+        </div>
+      </section>
+      <div className="rover-actions">
+        {near && <StudyButton site={near} g={g} />}
+        {!parked && (
+          <button className="btn secondary" onClick={() => useGame.getState().sendRover("home", "scout") && play("rover")}>
+            <House size={17} /> Park
+          </button>
+        )}
+        {routeLen > 0 && (
+          <button className="btn ghost" onClick={() => useGame.getState().stopRover("scout")}>
+            Stop
+          </button>
+        )}
+        <button className="btn ghost" onClick={() => useUI.getState().cam("rover")} title="Follow the science rover">
+          <Crosshair size={16} /> Camera
+        </button>
+      </div>
+      <h3 className="section-title">Science sites</h3>
+      <div className="site-list">
+        {science.map((w) => (
+          <ScoutSiteCard key={w.id} s={w} g={g} selected={selected === w.id} active={target === w.id} />
+        ))}
+      </div>
+      <p className="hint drive-hint">
+        <Navigation size={14} /> A robot needs no air, food or shelter, so it can keep exploring through a solar storm. It is slower than the crew rover
+        ({SCOUT_ROVER.top} instead of 36 m an hour) and has no cargo bay: it studies rocks where they lie and radios the results home. Drive it with{" "}
+        <kbd className="kbd">W</kbd>
+        <kbd className="kbd">A</kbd>
+        <kbd className="kbd">S</kbd>
+        <kbd className="kbd">D</kbd>; in the cockpit view you see through its mast camera.
+      </p>
+    </div>
+  );
+}
+
+function StudyButton({ site, g }: { site: Site; g: GameState }) {
+  const sc = g.scout!;
+  if (sc.task) return <span className="collecting">Studying… {Math.round((1 - sc.task.left / SCOUT_ROVER.study) * 100)}%</span>;
+  if (site.kind !== "science") return <span className="collecting done">No cargo bay: send the crew rover</span>;
+  if (sc.studied.includes(site.id)) return <span className="collecting done">Studied</span>;
+  return (
+    <button className="btn primary" data-act="study" onClick={() => useGame.getState().act({ type: "study" }) && play("click")}>
+      <IconSample size={17} /> Study here
+    </button>
+  );
+}
+
+function ScoutSiteCard({ s, g, selected, active }: { s: Site; g: GameState; selected: boolean; active: boolean }) {
+  const sc = g.scout!;
+  const done = sc.studied.includes(s.id);
+  const dist = Math.hypot(sc.x - s.x, sc.z - s.z);
+  const here = dist <= SITE_REACH;
+  return (
+    <article className={`site-card science ${selected ? "selected" : ""} ${active ? "active" : ""} ${done ? "done" : ""}`} data-site={s.id}>
+      <span className="site-icon">
+        <IconSample size={22} />
+      </span>
+      <div className="site-info">
+        <h4>{s.name[g.planet]}</h4>
+        <p className="gives">+{SCOUT_ROVER.science} science, radioed home</p>
+        <p className="about">{s.fact[g.planet]}</p>
+        <div className="chips">
+          <span className="chip">{Math.round(dist)} m</span>
+          <span className="chip">~{Math.max(1, Math.round((dist / SCOUT_ROVER.top) * 10) / 10)} h away</span>
+        </div>
+      </div>
+      <div className="site-go">
+        {done ? (
+          <span className="done-tag">
+            <Check size={15} /> Done
+          </span>
+        ) : here ? (
+          <span className="done-tag busy">Here</span>
+        ) : (
+          <button
+            className="btn primary small"
+            onClick={() => {
+              useGame.getState().sendRover(s.id, "scout");
+              useUI.getState().select({ kind: "site", id: s.id });
+            }}
+          >
+            Go
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function RoverPanel() {
   const g = useGame((s) => s.game);
   const { target, routeLen } = useGame(useShallow((s) => ({ target: s.target, routeLen: s.route.length })));
@@ -510,12 +664,12 @@ function RoverPanel() {
           <CollectButton site={near} g={g} />
         )}
         {!rv.docked && (
-          <button className="btn secondary" data-act="home" onClick={() => useGame.getState().sendRover("dock") && play("rover")}>
+          <button className="btn secondary" data-act="home" onClick={() => useGame.getState().sendRover("dock", "rover") && play("rover")}>
             <House size={17} /> Drive home
           </button>
         )}
         {routeLen > 0 && (
-          <button className="btn ghost" onClick={() => useGame.getState().stopRover()}>
+          <button className="btn ghost" onClick={() => useGame.getState().stopRover("rover")}>
             Stop
           </button>
         )}
@@ -605,7 +759,7 @@ function SiteCard({ s, g, selected, active }: { s: Site; g: GameState; selected:
             className={`btn ${risky ? "secondary" : "primary"} small`}
             onClick={() => {
               if (risky) useGame.getState().toast(`Careful: that trip needs about ${need}% battery and the rover has ${Math.round(rv.battery)}%.`, "warn");
-              useGame.getState().sendRover(s.id);
+              useGame.getState().sendRover(s.id, "rover");
               useUI.getState().select({ kind: "site", id: s.id });
             }}
           >

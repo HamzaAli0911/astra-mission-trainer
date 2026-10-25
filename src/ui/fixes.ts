@@ -27,7 +27,7 @@ export function runFix(fix: Fix) {
     case "rover":
       ui.select(null);
       ui.openPanel("rover");
-      st.sendRover(fix.target);
+      st.sendRover(fix.target, "rover");
       break;
   }
 }

@@ -161,6 +161,35 @@ export function Minimap() {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
+      // The science rover: a smaller pale arrow, with its own planned route.
+      const sc = g.scout;
+      if (sc) {
+        if (st.scoutRoute.length) {
+          ctx.strokeStyle = "rgba(170,225,255,0.9)";
+          ctx.setLineDash([2, 3]);
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(toMap(sc.x), toMap(sc.z));
+          for (const p of st.scoutRoute) ctx.lineTo(toMap(p.x), toMap(p.z));
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.save();
+        ctx.translate(toMap(sc.x), toMap(sc.z));
+        ctx.rotate(-sc.heading);
+        ctx.fillStyle = "#e6f4ff";
+        ctx.strokeStyle = "#2b5f86";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(0, -5.5);
+        ctx.lineTo(4, 4);
+        ctx.lineTo(0, 2);
+        ctx.lineTo(-4, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
       // North.
       ctx.fillStyle = "rgba(255,255,255,0.85)";
       ctx.font = "700 10px Lexend Variable, system-ui, sans-serif";

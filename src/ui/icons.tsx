@@ -147,6 +147,18 @@ export const IconRover = (p: P) => (
     <circle cx="17.5" cy="17.5" r="2" />
   </Svg>
 );
+/** The science rover: a body on rocker-bogie legs, a camera mast and an arm. */
+export const IconScout = (p: P) => (
+  <Svg {...p}>
+    <path d="M4.5 11.5h10v3h-10z" />
+    <path d="M12.5 11.5V5.5M10.5 4h4.5v2.5h-4.5z" />
+    <path d="M14.5 13l3.5 1.5 1 2.5" />
+    <path d="M5.5 14.5l-1 2.2M9.5 14.5v2.2M13.5 14.5l1 2.2" />
+    <circle cx="4.5" cy="18.5" r="1.7" />
+    <circle cx="9.5" cy="18.5" r="1.7" />
+    <circle cx="14.5" cy="18.5" r="1.7" />
+  </Svg>
+);
 export const IconCapcom = (p: P) => (
   <Svg {...p}>
     <path d="M4 14v-2a8 8 0 0 1 16 0v2" />

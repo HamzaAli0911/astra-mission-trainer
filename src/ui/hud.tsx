@@ -869,8 +869,27 @@ export function nextView(v: View): View {
 }
 
 /** Switch between the overview, the follow camera, the driver's seat and walking inside. */
+/** Looking through the science rover's mast camera: a viewfinder frame and what the camera is. */
+export function MastcamFrame() {
+  const cockpit = useUI((s) => s.view === "cockpit");
+  const scout = useGame((s) => s.vehicle === "scout" && !!s.game.scout);
+  if (!cockpit || !scout) return null;
+  return (
+    <div className="mastcam" aria-hidden="true">
+      <span className="mastcam-label">MAST CAMERA · SCOUT-1</span>
+      <i />
+      <i />
+      <i />
+      <i />
+      <b className="mastcam-cross" />
+    </div>
+  );
+}
+
 export function ViewSwitcher() {
   const view = useUI((s) => s.view);
+  // Driving the science rover, the "cockpit" is its mast camera.
+  const scout = useGame((s) => s.vehicle === "scout" && !!s.game.scout);
   return (
     <div className="view-switch" role="group" aria-label="Camera view" data-tut="views">
       <span className="view-label">
@@ -881,7 +900,7 @@ export function ViewSwitcher() {
           key={v.id}
           className={view === v.id ? "on" : ""}
           aria-pressed={view === v.id}
-          title={v.title}
+          title={scout && v.id === "cockpit" ? "Look through the science rover's mast camera. Drag to look around." : scout && v.id === "chase" ? "Ride behind the science rover. Drag to look from any side." : v.title}
           onClick={() => {
             if (v.id === "walk") enterWalk();
             else useUI.getState().setView(v.id);
@@ -889,7 +908,7 @@ export function ViewSwitcher() {
           }}
         >
           {v.icon}
-          <span>{v.label}</span>
+          <span>{scout && v.id === "cockpit" ? "Mast cam" : v.label}</span>
         </button>
       ))}
     </div>
