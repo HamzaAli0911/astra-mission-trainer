@@ -4561,10 +4561,13 @@ table.keys .kbd {
     top: 196px;
   }
 }
-/* While walking: no labels floating over the outpost, no dust haze indoors, no rover pad. */
+/* While walking: no labels floating over the outpost, no dust haze indoors, no rover pad. The tutorial's card and
+   spotlight are about the outpost: they wait until you step back out. */
 .walking .world-labels,
 .walking .fx-dust,
-.walking .drive-pad {
+.walking .drive-pad,
+.walking .coach,
+.walking .spotlight {
   display: none;
 }
 @media (max-width: 640px) {
@@ -4609,6 +4612,10 @@ table.keys .kbd {
   display: none;
 }
 @media (max-width: 1100px) and (min-width: 641px) {
+  /* As on a phone, the goals step aside while you walk (the walking hints need the bottom of the screen). */
+  .walking .hud-left {
+    display: none;
+  }
   .walk-bar {
     top: 150px;
     left: auto;
