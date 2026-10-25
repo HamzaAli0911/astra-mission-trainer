@@ -132,7 +132,29 @@ function shellGeometry() {
       p.setXYZ(i, x * s, y, z * s);
     }
     g.computeVertexNormals();
+    // Openings behind the windows (hidden from outside by each window's frame plate), so you can see out from
+    // inside and sunlight falls through them onto the floors.
+    const idx = g.index!;
+    const keepTris: number[] = [];
+    for (let t = 0; t < idx.count; t += 3) {
+      const a = idx.getX(t),
+        b = idx.getX(t + 1),
+        c = idx.getX(t + 2);
+      const cx = (p.getX(a) + p.getX(b) + p.getX(c)) / 3,
+        cy = (p.getY(a) + p.getY(b) + p.getY(c)) / 3,
+        cz = (p.getZ(a) + p.getZ(b) + p.getZ(c)) / 3;
+      if (!inWindow(bearingOf(cx, cz), cy, 0.08)) keepTris.push(a, b, c);
+    }
+    g.setIndex(keepTris);
     return g;
+  });
+}
+/** Is a point on the shell inside a window's glass (plus a margin, metres)? */
+function inWindow(bearing: number, y: number, margin: number) {
+  return WINDOWS.some((w) => {
+    const cy = windowY(w),
+      half = (((w.w / 2 + margin) / shellRadius(cy)) * 180) / Math.PI;
+    return angleDiff(bearing, w.bearing) < half && Math.abs(y - cy) < w.h / 2 + margin;
   });
 }
 
@@ -231,6 +253,13 @@ function shield(planet: Planet, view: ModuleView) {
   };
 }
 
+/** The stiffening plate round a window: a rounded slab with the window's shape cut out of it. */
+function platePlate(w: number, h: number) {
+  const shape = roundRect(w + 0.34, h + 0.34, 0.12);
+  shape.holes.push(roundRect(w - 0.02, h - 0.02, Math.min(w, h) * 0.28, new THREE.Path()));
+  return new THREE.ExtrudeGeometry(shape, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 8 });
+}
+
 /** Turn an object on the shell so its +z faces outward at a bearing. */
 const faceOut = (o: THREE.Object3D, bearing: number) => {
   o.rotation.y = Math.PI - (bearing * Math.PI) / 180;
@@ -280,9 +309,9 @@ export function buildHabitat(view: ModuleView, planet: Planet) {
     const glow = mesh(geo(`hab2-glow-${w.w}-${w.h}`, () => new THREE.ShapeGeometry(roundRect(w.w - 0.02, w.h - 0.02, Math.min(w.w, w.h) * 0.28), 8)), view.windows, pane, 0, 0, -0.06);
     glow.castShadow = false;
     view.windowGlow.push(glow);
-    // A sun hood over each window, and a stiffening plate under the frame.
+    // A sun hood over each window, and a stiffening plate round the frame (open in the middle: you can see in and out).
     box(pane, w.w + 0.3, 0.05, 0.1, frame, 0, w.h / 2 + 0.16, 0.03);
-    panel(pane, w.w + 0.34, w.h + 0.34, 0.03, 0.12, paint("#dfe2e6", 0.55, 0.1), 0, 0, -0.035);
+    mesh(geo(`hab2-plate-${w.w}-${w.h}`, () => platePlate(w.w, w.h)), paint("#dfe2e6", 0.55, 0.1), pane, 0, 0, -0.05);
   }
 
   // Airlock tunnel toward the rover dock (south, +z).

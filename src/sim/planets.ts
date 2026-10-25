@@ -26,6 +26,8 @@ export interface PlanetSpec {
   oxygenWater: number;
   /** Rover battery % per metre driven. */
   roverDrain: number;
+  /** Surface gravity, m/s² (Earth 9.81). */
+  gravity: number;
 }
 
 export const PLANETS: Record<Planet, PlanetSpec> = {
@@ -41,6 +43,7 @@ export const PLANETS: Record<Planet, PlanetSpec> = {
     oxygenPower: 1.5,
     oxygenWater: 0.23,
     roverDrain: 0.16,
+    gravity: 1.62,
   },
   mars: {
     name: "Mars",
@@ -54,6 +57,7 @@ export const PLANETS: Record<Planet, PlanetSpec> = {
     oxygenPower: 3.5,
     oxygenWater: 0,
     roverDrain: 0.18,
+    gravity: 3.71,
   },
 };
 

@@ -6,6 +6,7 @@ import {
   Check,
   CornerDownLeft,
   Crosshair,
+  DoorOpen,
   Hammer,
   House,
   MapPin,
@@ -30,6 +31,7 @@ import type { GameState, Light, Module, ModuleType } from "../sim/types";
 import { DOCK, HAUL, PADS, padFits, SITE_REACH, SITES, type Site } from "../sim/world";
 import { useGame } from "../state/game";
 import { useUI, type Panel } from "../state/ui";
+import { enterWalk } from "../state/walk";
 import { play } from "../lib/sound";
 import { duration } from "./common";
 import { IconDose, IconIce, IconRock, IconRover, IconSample, IconShelter, MODULE_ICON, RESOURCE_ICON } from "./icons";
@@ -715,6 +717,18 @@ function ModuleCard({ id }: { id: number }) {
           <p>{MODULES[m.type].real}</p>
         </div>
         <div className="module-actions">
+          {m.type === "habitat" && (
+            <button
+              className="btn primary"
+              onClick={() => {
+                if (!enterWalk()) return;
+                useUI.getState().select(null);
+                play("open");
+              }}
+            >
+              <DoorOpen size={16} /> Go inside
+            </button>
+          )}
           {m.type === "greenhouse" && built && (
             <div className="light-row">
               <span>Grow lights</span>

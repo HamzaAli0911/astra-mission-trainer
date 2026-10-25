@@ -122,6 +122,38 @@ export function tick() {
   src.start(t);
 }
 
+/** A short burst of filtered noise, swept from one pitch to another. */
+function burst(len: number, from: number, to: number, q: number, gain: number) {
+  const a = audio();
+  if (!a || !master) return;
+  const t = a.currentTime;
+  const buf = a.createBuffer(1, Math.ceil(a.sampleRate * len), a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = a.createBufferSource(),
+    f = a.createBiquadFilter(),
+    g = a.createGain();
+  src.buffer = buf;
+  f.type = "bandpass";
+  f.Q.value = q;
+  f.frequency.setValueAtTime(from, t);
+  f.frequency.exponentialRampToValueAtTime(to, t + len);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + len * 0.25);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + len + 0.02);
+}
+/** A sliding door's pneumatic hiss, rising as it opens and falling as it closes; quieter further away. */
+export function doorSound(open: boolean, near = 1) {
+  burst(0.55, open ? 700 : 1500, open ? 1500 : 650, 1.1, 0.07 * near);
+}
+/** One footstep on the padded floor: a soft, low thud (softer still in low gravity). */
+export function footstep(weight = 1) {
+  burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
+}
+
 /* ---------- Background sound ---------- */
 
 type Ambience = {

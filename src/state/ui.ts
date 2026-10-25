@@ -4,7 +4,7 @@ import type { ModuleType } from "../sim/types";
 
 export type Screen = "title" | "map" | "game";
 export type Panel = "build" | "power" | "rover" | "crew";
-/** Camera: free look over the outpost, chase behind the rover, or the driver's seat. */
+/** Camera: free look over the outpost, chase behind the rover, the driver's seat, or walking inside the home. */
 export type View = "orbit" | "chase" | "cockpit" | "walk";
 export type Modal = "pause" | "settings" | "guide" | "library" | "teachers" | "credits" | "reset" | "restart" | "mars";
 export type Selection =
@@ -28,6 +28,11 @@ export interface Settings {
   graphics: "auto" | "ultra" | "high" | "low";
   /** Show the map in the corner. */
   minimap: boolean;
+  /** Walking inside: field of view (degrees, 60–90), look speed (0.5–2), invert up and down, head bob. */
+  fov: number;
+  look: number;
+  invert: boolean;
+  bob: boolean;
 }
 export interface Progress {
   /** Best stars per mission id (0–3). */
@@ -48,6 +53,10 @@ const defaults: Settings = {
   pad: "auto",
   graphics: "auto",
   minimap: true,
+  fov: 70,
+  look: 1,
+  invert: false,
+  bob: true,
 };
 
 function load<T>(key: string, fallback: T, check: (raw: Record<string, unknown>) => T): T {
@@ -66,6 +75,7 @@ function save(key: string, value: unknown) {
   }
 }
 const bool = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
+const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const ids = new Set(MISSIONS.map((m) => m.id));
 
 function readSettings(): Settings {
@@ -79,6 +89,10 @@ function readSettings(): Settings {
     pad: r.pad === "on" || r.pad === "off" ? r.pad : "auto",
     graphics: r.graphics === "ultra" || r.graphics === "high" || r.graphics === "low" ? r.graphics : "auto",
     minimap: bool(r.minimap, defaults.minimap),
+    fov: num(r.fov, defaults.fov, 60, 90),
+    look: num(r.look, defaults.look, 0.5, 2),
+    invert: bool(r.invert, defaults.invert),
+    bob: bool(r.bob, defaults.bob),
   }));
 }
 function readProgress(): Progress {

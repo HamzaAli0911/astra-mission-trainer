@@ -14,6 +14,8 @@ import { Coach } from "./Coach";
 import { MissionMap, Title } from "./screens";
 import { Modals } from "./modals";
 import { Minimap } from "./Minimap";
+import { WalkHud } from "./walk";
+import { clearWalkInput, enterWalk, lockState, walkInput } from "../state/walk";
 
 /** Keys held for driving, by physical key code. */
 const held = new Set<string>();
@@ -32,6 +34,8 @@ function keys(): DriveInput {
   for (const code of held) k[DRIVE[code]] = true;
   return k;
 }
+/** Keys that walk you about while you're inside the home. */
+const WALK_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 const typing = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !(t instanceof HTMLInputElement && t.type === "checkbox"));
 
@@ -63,13 +67,17 @@ export default function App() {
   useEffect(() => {
     const vis = () => {
       held.clear();
+      clearWalkInput();
       const st = useGame.getState();
       // (Not while the tutorial holds the clock: time is already stopped, and a second "paused" note would only get in the way.)
       if (document.hidden && useUI.getState().screen === "game" && !st.paused && !st.held && st.game.status === "playing") st.pause("hidden");
       if (document.hidden) hush();
     };
     document.addEventListener("visibilitychange", vis);
-    window.addEventListener("blur", () => held.clear());
+    window.addEventListener("blur", () => {
+      held.clear();
+      clearWalkInput();
+    });
     return () => document.removeEventListener("visibilitychange", vis);
   }, []);
 
@@ -81,6 +89,14 @@ export default function App() {
         st = useGame.getState();
       if (ui.screen !== "game") return;
       if (ui.modal || ui.briefing || ui.debrief || st.alert || st.game.choice) return;
+      const walking = ui.view === "walk";
+      if (walking && WALK_KEYS.has(e.code)) {
+        if (e.code.startsWith("Arrow")) e.preventDefault();
+        walkInput.keys.add(e.code);
+        walkInput.fast = e.shiftKey;
+        return;
+      }
+      if (walking && e.key === "Shift") walkInput.fast = true;
       if (DRIVE[e.code]) {
         if (e.code.startsWith("Arrow")) e.preventDefault();
         held.add(e.code);
@@ -126,19 +142,32 @@ export default function App() {
         case "KeyF":
           ui.cam("rover");
           break;
-        case "KeyV":
-          ui.setView(nextView(ui.view));
+        case "KeyV": {
+          const next = nextView(ui.view);
+          if (next === "walk") enterWalk();
+          else ui.setView(next);
           play("toggle");
           break;
+        }
+        case "KeyE":
+          if (walking) walkInput.use = true;
+          break;
         case "Escape":
-          if (ui.placing) ui.place(null);
+          // While walking, Esc first lets go of the mouse (the browser does that itself); the next press works as usual.
+          if (walking && document.pointerLockElement) document.exitPointerLock();
+          else if (walking && performance.now() - lockState.freedAt < 400) break;
+          else if (ui.placing) ui.place(null);
           else if (ui.selected) ui.select(null);
           else if (ui.panel) ui.openPanel(null);
           else openPause();
           break;
       }
     };
-    const up = (e: KeyboardEvent) => held.delete(e.code);
+    const up = (e: KeyboardEvent) => {
+      held.delete(e.code);
+      walkInput.keys.delete(e.code);
+      if (e.key === "Shift") walkInput.fast = false;
+    };
     // After a mouse click, give focus back to the game so Space still pauses (keyboard users keep their focus).
     const pointerUp = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
@@ -171,8 +200,9 @@ function Game() {
   const { planet, reason } = useGame(useShallow((s) => ({ planet: s.game.planet, reason: s.reason })));
   const panel = useUI((s) => s.panel);
   const selected = useUI((s) => s.selected?.kind === "module");
+  const walking = useUI((s) => s.view === "walk");
   return (
-    <div className={`game ${planet} ${panel || selected ? "drawer-open" : ""}`}>
+    <div className={`game ${planet} ${panel || selected ? "drawer-open" : ""} ${walking ? "walking" : ""}`}>
       <World />
       <Atmosphere />
       <WorldLabels />
@@ -190,6 +220,7 @@ function Game() {
       <Dock />
       <ViewSwitcher />
       <DrivePad />
+      <WalkHud />
       <Drawer />
       {reason === "hidden" && (
         <div className="paused-chip">

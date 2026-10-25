@@ -26,6 +26,11 @@ import type { Baked } from "./bake";
 import { bakedNow, prebake } from "./prebake";
 import { buildSky, environmentMap } from "./sky";
 import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem } from "./terrain";
+import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure } from "./interior";
+import { HOME as HOME_PLAN } from "../sim/home";
+import { insideEnvironment } from "./interior/lighting";
+import { walkController } from "./walk";
+import { walker } from "../state/walk";
 
 const HOME = new THREE.Vector3(0, 0, 3);
 const OFFSET = new THREE.Vector3(25.5, 31.5, 38);
@@ -194,6 +199,8 @@ export function World() {
       scene.background = new THREE.Color("#000000");
       const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 6000);
       camera.position.copy(HOME).add(OFFSET);
+      // The inside of the home lives on its own layer: drawn, but never tested by clicks on the outpost.
+      camera.layers.enable(INSIDE_LAYER);
       // Camera view: free look over the outpost, chase behind the rover, or the driver's seat.
       let view: View = "orbit";
       useUI.getState().setView("orbit");
@@ -201,8 +208,14 @@ export function World() {
         // Keep the same width of world in view on tall phone screens.
         const half = THREE.MathUtils.degToRad(21);
         const base = camera.aspect >= 1.2 ? 42 : Math.min(78, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(half) * 1.2) / camera.aspect)));
+        if (v === "walk") {
+          // The walking field of view is a setting; on a tall phone screen it widens to show as much side to side.
+          const want = useUI.getState().settings.fov;
+          return camera.aspect >= 1.2 ? want : Math.min(100, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(THREE.MathUtils.degToRad(want / 2)) * 1.2) / camera.aspect)));
+        }
         return v === "cockpit" ? Math.max(base, 62) : v === "chase" ? Math.max(base, 50) : base;
       };
+      const firstPerson = (v: View) => v === "cockpit" || v === "walk";
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.copy(HOME);
       controls.enableDamping = !reduced;
@@ -359,6 +372,23 @@ export function World() {
         scene.add(w);
       }
 
+      // The inside of the Mars home (shown only while you walk in it, or look in from close by).
+      if (!(await slice())) return;
+      const insideEnv = insideEnvironment(renderer);
+      const interior = buildInterior();
+      interior.group.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (m?.isMeshStandardMaterial) m.envMap = insideEnv.texture;
+      });
+      const homeAt = modulePos({ pad: -1 });
+      const homeOrigin = new THREE.Vector3(homeAt.x, terrainHeight(homeAt.x, homeAt.z, planet), homeAt.z);
+      placeInterior(interior, homeOrigin.x, homeOrigin.y, homeOrigin.z);
+      interior.group.visible = false;
+      scene.add(interior.group);
+      const walkCtl = walkController(renderer.domElement, planet, interior);
+      const baseExposure = renderer.toneMappingExposure;
+      let exposure = baseExposure;
+
       if (!(await slice())) return;
       const entries = new Map<number, Entry>();
       /** The 3D model for a module, built (or rebuilt after it moves or changes type) on demand. */
@@ -426,7 +456,7 @@ export function World() {
         down = { x: e.clientX, y: e.clientY };
       };
       const onUp = (e: PointerEvent) => {
-        if (!down || e.button !== 0) return;
+        if (!down || e.button !== 0 || view === "walk") return;
         const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
         down = null;
         if (moved > 7) return;
@@ -468,7 +498,7 @@ export function World() {
       let hoverAt = 0;
       const onMove = (e: PointerEvent) => {
         const now = performance.now();
-        if (now - hoverAt < 60 || e.buttons) return;
+        if (now - hoverAt < 60 || e.buttons || view === "walk") return;
         hoverAt = now;
         const hit = hitAt(e.clientX, e.clientY);
         let o: THREE.Object3D | null = hit?.object ?? null;
@@ -526,6 +556,7 @@ export function World() {
       function setView(next: View) {
         if (useUI.getState().view !== next) useUI.getState().setView(next);
         if (next === view) return;
+        const prev = view;
         if (view === "orbit" && blend >= 1) orbitOffset.copy(camera.position).sub(controls.target);
         fromPos.copy(camera.position);
         fromQuat.copy(camera.quaternion);
@@ -538,8 +569,16 @@ export function World() {
         if (next === "orbit") follow = reduced && !useGame.getState().game.rover.docked;
         controls.minDistance = next === "chase" ? 5 : 10;
         controls.maxDistance = next === "chase" ? 70 : 260;
-        camera.near = next === "cockpit" ? 0.04 : 0.5;
+        camera.near = next === "cockpit" ? 0.04 : next === "walk" ? 0.05 : 0.5;
         camera.far = next === "cockpit" ? 3400 : 6000;
+        camera.updateProjectionMatrix();
+        // Stepping inside cuts straight to the walker's eyes (the screen fades through black); stepping back out
+        // starts the glide from just outside the airlock rather than through the walls.
+        if (next === "walk") blend = 1;
+        else if (prev === "walk") {
+          fromPos.copy(homeOrigin).add(offset.set(0, 3.2, 9.5));
+          fromQuat.setFromRotationMatrix(lookMatrix.lookAt(fromPos, homeOrigin, UP));
+        }
       }
       // Looking around from the driver's seat.
       let lookFrom: { x: number; y: number } | null = null;
@@ -589,6 +628,7 @@ export function World() {
             const turn = c.cmd === "left" ? -Math.PI / 5 : Math.PI / 5;
             if (view === "chase") chase.yaw = wrap(chase.yaw + turn);
             else if (view === "cockpit") look.yaw = THREE.MathUtils.clamp(look.yaw - turn, -2.6, 2.6);
+            else if (view === "walk") walker.yaw += turn;
             else {
               off.applyAxisAngle(UP, turn);
               camera.position.copy(controls.target).add(off);
@@ -610,7 +650,7 @@ export function World() {
           if (!rv.docked && view === "orbit") {
             if (reduced) follow = true;
             else setView("chase");
-          } else if (rv.docked && view !== "cockpit") {
+          } else if (rv.docked && !firstPerson(view)) {
             setView("orbit");
             follow = false;
             goal.copy(HOME);
@@ -629,6 +669,15 @@ export function World() {
           toTarget.copy(roverTarget);
           sph.set(chase.dist, chase.polar, rv.heading + chase.yaw);
           toPos.copy(roverTarget).add(offset.setFromSpherical(sph));
+        } else if (view === "walk") {
+          walkCtl.eye(homeOrigin, toPos, toQuat, reduced);
+          toTarget.copy(toPos);
+          // (The field of view is a setting, so it can change while you walk.)
+          const fov = fovFor("walk");
+          if (Math.abs(camera.fov - fov) > 0.01) {
+            camera.fov = fov;
+            camera.updateProjectionMatrix();
+          }
         } else {
           // The driver's view turns back to the road while driving, unless you are looking around.
           if (moving && !lookFrom && clock - lookAt > 2.5 && !reduced) {
@@ -648,14 +697,14 @@ export function World() {
         if (blend < 1) {
           blend = Math.min(1, blend + dt / (reduced ? 0.05 : 0.9));
           const e = blend * blend * (3 - 2 * blend);
-          if (view !== "cockpit") toQuat.setFromRotationMatrix(lookMatrix.lookAt(toPos, toTarget, UP));
+          if (!firstPerson(view)) toQuat.setFromRotationMatrix(lookMatrix.lookAt(toPos, toTarget, UP));
           camera.position.lerpVectors(fromPos, toPos, e);
           camera.quaternion.slerpQuaternions(fromQuat, toQuat, e);
           camera.fov = fromFov + (fovFor(view) - fromFov) * e;
           camera.updateProjectionMatrix();
           if (blend >= 1) {
             controls.target.copy(toTarget);
-            if (view !== "cockpit") {
+            if (!firstPerson(view)) {
               camera.position.copy(toPos);
               controls.enabled = true;
               controls.update();
@@ -694,10 +743,11 @@ export function World() {
         } else {
           camera.position.copy(toPos);
           camera.quaternion.copy(toQuat);
-          controls.target.copy(roverTarget);
+          // (The shadows centre on the target: on the walker, inside.)
+          controls.target.copy(view === "walk" ? toPos : roverTarget);
         }
         // Keep the camera above the ground, and lift it over buildings instead of passing through them.
-        if (view !== "cockpit") {
+        if (!firstPerson(view)) {
           let floor = terrainHeight(camera.position.x, camera.position.z, planet) + (view === "chase" ? 1.2 : 2.5);
           if (view === "chase")
             for (const e of entries.values()) {
@@ -841,7 +891,7 @@ export function World() {
         if (now - panelAt > 200) {
           panelAt = now;
           shiftWant.set(0, 0);
-          const drawer = view === "cockpit" ? null : el.querySelector<HTMLElement>(".drawer") ?? document.querySelector<HTMLElement>(".game.drawer-open .drawer");
+          const drawer = firstPerson(view) ? null : el.querySelector<HTMLElement>(".drawer") ?? document.querySelector<HTMLElement>(".game.drawer-open .drawer");
           if (drawer) {
             const r = drawer.getBoundingClientRect(),
               box = el.getBoundingClientRect();
@@ -1129,7 +1179,17 @@ export function World() {
         rover.body.rotation.z = Math.sin(clock * 6.1) * 0.008 * bump;
         rover.body.rotation.x = Math.sin(clock * 3.7) * 0.006 * bump;
 
+        walkCtl.update(dt, view === "walk", !!(ui.modal || ui.briefing || ui.debrief || st.alert || g.choice));
         runCamera(g, dt);
+        // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
+        const near = view === "walk" || camera.position.distanceTo(homeOrigin) < 24;
+        interior.group.visible = near;
+        const home = g.modules.find((m) => m.type === "habitat");
+        for (const w of (home && entries.get(home.id)?.view.windowGlow) || []) w.visible = !near;
+        // Eyes adjust between the sunlit outdoors and the lit rooms inside (about half a second).
+        const wantExposure = baseExposure * (view === "walk" ? 1.0 : 1);
+        exposure += (wantExposure - exposure) * (1 - Math.exp(-dt / 0.5));
+        renderer.toneMappingExposure = exposure;
         const inside = view === "cockpit" && blend > 0.55;
         cockpit.group.visible = view === "cockpit" && blend > 0.3;
         for (const pane of rover.glass) pane.visible = !inside;
@@ -1193,6 +1253,38 @@ export function World() {
           setView(v);
           blend = 0.999;
         };
+        // Stand somewhere inside the home (habitat-local metres, a floor, a facing and a tilt in degrees).
+        debug.walk = (x: number, z: number, level: 0 | 1, yaw = 0, pitch = 0) => {
+          if (useUI.getState().view !== "walk") useUI.getState().setView("walk");
+          setView("walk");
+          Object.assign(walker, { x, z, where: level, yaw: THREE.MathUtils.degToRad(yaw), pitch: THREE.MathUtils.degToRad(pitch), vx: 0, vz: 0 });
+        };
+        debug.interior = interior;
+        debug.camera = camera;
+        // A 1.75 m figure for judging scale in review shots (habitat-local, a floor, facing a bearing); null hides it.
+        let figure: THREE.Object3D | null = null;
+        debug.figure = (x: number | null, z = 0, level: 0 | 1 = 0, yaw = 0) => {
+          if (!figure) {
+            figure = scaleFigure();
+            interior.group.add(figure);
+          }
+          figure.visible = x !== null;
+          if (x !== null) {
+            figure.position.set(x, HOME_PLAN.floor[level], z);
+            figure.rotation.y = -THREE.MathUtils.degToRad(yaw);
+          }
+        };
+        // What the middle of the view is looking at, inside the home (habitat-local point and the surface's colour).
+        debug.probe = (sx = 0, sy = 0) => {
+          const r = new THREE.Raycaster();
+          r.layers.enableAll();
+          r.setFromCamera(new THREE.Vector2(sx, sy), camera);
+          const hit = r.intersectObjects([interior.group], true)[0];
+          if (!hit) return null;
+          const p = hit.point.clone().sub(homeOrigin);
+          const m = hit.object as THREE.Mesh;
+          return { d: +hit.distance.toFixed(2), x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +Math.hypot(p.x, p.z).toFixed(2), b: +((Math.atan2(p.x, -p.z) * 180) / Math.PI + 360).toFixed(1) % 360, color: (m.material as THREE.MeshStandardMaterial).color?.getHexString(), name: m.name || m.parent?.name };
+        };
         debug.snap = (frames = 1) => {
           for (let i = 0; i < frames; i++) frame(performance.now());
           return renderer.domElement.toDataURL("image/jpeg", 0.9);
@@ -1251,6 +1343,9 @@ export function World() {
         window.removeEventListener("pointermove", onLookMove);
         window.removeEventListener("pointerup", onLookUp);
         controls.dispose();
+        walkCtl.dispose();
+        interior.dispose();
+        insideEnv.dispose();
         scene3d.pick = null;
         scene3d.lookAt = null;
         anchors.clear();

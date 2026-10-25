@@ -12,7 +12,7 @@ import type * as THREE from "three";
 import { useGame } from "../state/game";
 import { useUI, type View } from "../state/ui";
 import { DOCK, HABITAT_RADIUS, PADS } from "../sim/world";
-import { HOME, polar, rad, ROOMS, SPAWN, STAIR, stairPoint, walls, WINDOWS } from "../sim/home";
+import { HOME, polar, rad, roomAt, ROOMS, SPAWN, STAIR, stairPoint, walls, WINDOWS } from "../sim/home";
 import type { ModuleType, Planet } from "../sim/types";
 import { SHIELD_TIME } from "../sim/modules";
 
@@ -22,8 +22,10 @@ interface Hooks {
   place: (pos: V3, at: V3) => void;
   view: (v: View) => void;
   snap: (frames?: number) => string;
-  /** Walk mode: stand at a point (eye height is added) looking along yaw/pitch (radians). */
-  walk?: (x: number, z: number, level: number, yaw: number, pitch: number) => void;
+  /** Walk mode: stand at a habitat-local point on a floor, facing a compass bearing and tilted up or down (degrees). */
+  walk: (x: number, z: number, level: 0 | 1, yaw?: number, pitch?: number) => void;
+  /** The 1.75 m scale figure: habitat-local point, floor, facing (degrees); null hides it. */
+  figure: (x: number | null, z?: number, level?: 0 | 1, yaw?: number) => void;
 }
 const SERVER = "http://127.0.0.1:8799";
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -172,6 +174,55 @@ SHOTS.push(
   },
 );
 
+// Inside the home (Mars, mid-morning), each with a 1.75 m figure for scale where it helps.
+/** Stand at a bearing and distance from the centre on a floor, looking along a bearing, tilted (degrees); maybe a figure too. */
+const inside =
+  (b: number, r: number, level: 0 | 1, yaw: number, pitch: number, fig?: [number, number, 0 | 1, number]) =>
+  (h: Hooks) => {
+    const p = polar(b, r);
+    h.walk(p.x, p.z, level, yaw, pitch);
+    if (fig) {
+      const f = polar(fig[0], fig[1]);
+      h.figure(f.x, f.z, fig[2], fig[3]);
+    } else h.figure(null);
+  };
+const mid = (STAIR.inner + STAIR.outer) / 2;
+const stairAt = (u: number) => {
+  const p = stairPoint(u, mid);
+  return { b: (Math.atan2(p.x, -p.z) * 180) / Math.PI, r: Math.hypot(p.x, p.z) };
+};
+const foot = stairAt(-STAIR.half - 0.55),
+  head = stairAt(STAIR.half + 0.7);
+SHOTS.push(
+  { id: "IC01-hatch-into-suit-room", planet: "mars", run: inside(180, 4.6, 0, 356, -8, [185, 3.45, 0, 180]) },
+  { id: "IC02-suit-room", planet: "mars", run: inside(185, 3.25, 0, 180, -6, [192, 4.25, 0, 20]) },
+  { id: "IC03-galley-table", planet: "mars", run: inside(232, 3.15, 0, 272, -10, [266, 3.45, 0, 225]) },
+  { id: "IC04-galley-counter-store", planet: "mars", run: inside(246, 3.55, 0, 212, -8, [222, 3.95, 0, 40]) },
+  { id: "IC05-life-support", planet: "mars", run: inside(2, 2.95, 0, 352, -8, [12, 3.7, 0, 220]) },
+  { id: "IC06-water-tanks", planet: "mars", run: inside(4, 3.55, 0, 28, -10) },
+  { id: "IC07-lab-bench", planet: "mars", run: inside(40, 3.15, 0, 50, -14, [58, 3.3, 0, 300]) },
+  { id: "IC08-printer-tool-wall", planet: "mars", run: inside(55, 3.75, 0, 8, -6) },
+  { id: "IC09-hygiene", planet: "mars", run: inside(310, 3.2, 0, 310, -8) },
+  { id: "IC10-medical-bay", planet: "mars", run: inside(66, 3.05, 0, 92, -10, [86, 3.9, 0, 300]) },
+  { id: "IC11-shelter-doorway", planet: "mars", run: inside(250, 2.5, 0, 70, -6, [80, 1.0, 0, 250]) },
+  { id: "IC12-inside-shelter", planet: "mars", run: inside(250, 1.05, 0, 75, -8) },
+  { id: "IC13-stair-from-below", planet: "mars", run: inside(foot.b, foot.r, 0, STAIR.bearing + 90, 18, [head.b, head.r, 1, 270]) },
+  { id: "IC14-landing", planet: "mars", run: inside(head.b, head.r, 1, STAIR.bearing - 90, -16) },
+  { id: "IC15-crew-quarters", planet: "mars", run: inside(272.5, 3.2, 1, 268, -10, [258, 3.6, 1, 90]) },
+  { id: "IC16-exercise", planet: "mars", run: inside(50, 2.9, 1, 66, -8, [84, 3.3, 1, 260]) },
+  { id: "IC17-garden", planet: "mars", run: inside(160, 2.6, 1, 200, -6, [195, 3.0, 1, 30]) },
+  { id: "IC18-command", planet: "mars", run: inside(250, 1.3, 1, 80, -6, [10, 1.1, 1, 200]) },
+  { id: "IC19-cupola-ladder", planet: "mars", run: inside(200, 0.95, 1, 20, 38) },
+  {
+    id: "IC20-window-day",
+    planet: "mars",
+    run: (h) => {
+      useGame.getState().game.t = 13;
+      inside(317.5, 3.55, 1, 317.5, 0)(h);
+    },
+  },
+);
+
 /** Extra shots (interior, states, new exterior views) register themselves here. */
 export function addShots(...more: Shot[]) {
   for (const s of more) {
@@ -194,6 +245,10 @@ async function capture(prefix: string, only?: string[]) {
       Object.assign(g.rover, { docked: true, x: DOCK.x, z: DOCK.z, heading: Math.PI, task: null });
       g.hazards = g.hazards.filter((x) => x.id !== 991);
       Object.assign(g, { t: 10.5, shield: 0, shieldStarted: false });
+      if (!s.id.startsWith("I")) {
+        hooks().figure?.(null);
+        if (useUI.getState().view === "walk") useUI.getState().setView("orbit");
+      }
       await s.run(hooks() as Hooks);
       await settle(s.frames ?? 25);
       await post(`${prefix}-${s.id}`, hooks().snap!(2));
@@ -258,9 +313,113 @@ async function startup(tier: "low" | "high" | "ultra", mission = "mars-colony") 
   return { tier, readyMs, longest: Math.max(0, ...tasks), tasks };
 }
 
+/** Stand inside the home at a bearing and distance from its centre (setting up a mission first if needed). */
+async function go(bearing: number, r: number, level: 0 | 1, yaw = 0, pitch = 0, planet: Planet = "mars") {
+  if (useUI.getState().screen !== "game" || !hooks().snap || useGame.getState().game.planet !== planet) await setup(planet);
+  const p = polar(bearing, r);
+  hooks().walk!(p.x, p.z, level, yaw, pitch);
+  await settle(12);
+}
+/** Save what the 3D view shows right now. */
+async function shot(name: string) {
+  await post(name, hooks().snap!(2));
+  return name;
+}
+
+/**
+ * Walk the whole home with the real controls: hold W while facing the next point of a route through every room
+ * on both floors, up the stair and back down. Doors open as you come near, as they do for a player. Reports the
+ * rooms reached and anywhere the walker got stuck.
+ */
+async function walkAll(planet: Planet = "mars") {
+  await go(180, 4.35, 0, 0, 0, planet);
+  const { walker, walkInput } = await import("../state/walk");
+  const ring = (from: number, to: number, level: 0 | 1) => {
+    const pts: [number, number, 0 | 1][] = [];
+    const span = ((to - from + 540) % 360) - 180;
+    const n = Math.max(1, Math.ceil(Math.abs(span) / 25));
+    for (let i = 1; i <= n; i++) pts.push([from + (span * i) / n, 2.42, level]);
+    return pts;
+  };
+  // In through a door from the hall and back out: [bearing, depth into the room].
+  const visit = (b: number, depth: number, level: 0 | 1): [number, number, 0 | 1][] => [
+    [b, 2.42, level],
+    [b, depth, level],
+    [b, 2.42, level],
+  ];
+  const sp = (u: number) => {
+    const p = stairPoint(u, (STAIR.inner + STAIR.outer) / 2);
+    return [(Math.atan2(p.x, -p.z) * 180) / Math.PI, Math.hypot(p.x, p.z)] as const;
+  };
+  const route: [number, number, 0 | 1][] = [
+    [185, 3.6, 0],
+    [185, 2.42, 0],
+    ...ring(185, 232, 0),
+    [232, 3.3, 0],
+    ...ring(232, 250, 0),
+    ...visit(250, 0.7, 0),
+    ...ring(250, 310, 0),
+    ...visit(310, 3.55, 0),
+    ...ring(310, 360, 0),
+    ...visit(0, 3.55, 0),
+    ...ring(0, 46, 0),
+    ...visit(46, 3.45, 0),
+    ...ring(46, 78, 0),
+    ...visit(78, 3.6, 0),
+    [92, 3.9, 0],
+    [...sp(-STAIR.half - 0.45), 0],
+    [...sp(STAIR.half + 0.5), 1],
+    [...sp(STAIR.half + 0.5).map((v, i) => (i ? 2.42 : v)), 1] as [number, number, 1],
+    ...ring(162, 165, 1),
+    ...visit(165, 0.75, 1),
+    ...ring(165, 185, 1),
+    ...visit(185, 3.6, 1),
+    ...ring(185, 227.5, 1),
+    ...visit(227.5, 3.55, 1),
+    ...ring(227.5, 272.5, 1),
+    ...visit(272.5, 3.55, 1),
+    ...ring(272.5, 317.5, 1),
+    ...visit(317.5, 3.55, 1),
+    ...ring(317.5, 362.5, 1),
+    ...visit(2.5, 3.55, 1),
+    ...ring(2.5, 58, 1),
+    [58, 3.5, 1],
+    ...ring(58, 158, 1),
+    [...sp(STAIR.half + 0.5), 1],
+    [...sp(-STAIR.half - 0.45), 0],
+  ];
+  const seen = new Set<string>();
+  let frames = 0;
+  const stuck: string[] = [];
+  for (const [b, r, level] of route) {
+    const goal = polar(b, r);
+    let best = Infinity,
+      still = 0;
+    while (still < 40 && frames < 20000) {
+      const d = Math.hypot(goal.x - walker.x, goal.z - walker.z);
+      if (d < 0.22 && (walker.where === level || walker.where === "stair")) break;
+      if (d < best - 0.02) {
+        best = d;
+        still = 0;
+      } else still++;
+      walker.yaw = Math.atan2(goal.x - walker.x, -(goal.z - walker.z));
+      walkInput.keys.add("KeyW");
+      hooks().snap!(1);
+      frames++;
+      if (walker.where !== "stair") seen.add(`${walker.where}:${roomAt(walker.x, walker.z, walker.where).id}`);
+      else seen.add("stair");
+      await wait(4);
+    }
+    if (still >= 40) stuck.push(`${b.toFixed(1)}° ${r} m floor ${level} (at ${walker.x.toFixed(2)}, ${walker.z.toFixed(2)}, ${walker.where})`);
+  }
+  walkInput.keys.delete("KeyW");
+  const rooms = ROOMS.map((m) => `${m.level}:${m.id}`);
+  return { frames, missed: rooms.filter((k) => !seen.has(k)), stair: seen.has("stair"), stuck };
+}
+
 /** Panels that overlap each other at the current window size (ignoring one fully inside another). */
 function overlaps() {
-  const sel = [".topbar", ".quick-actions", ".goals", ".hud-right", ".dock", ".view-switch", ".capcom", ".coach", ".drawer", ".paused-chip", ".speed-note", ".resource-bar", ".walk-hud", ".walk-stick", ".walk-buttons", ".inspect-card"];
+  const sel = [".topbar", ".quick-actions", ".goals", ".hud-right", ".dock", ".view-switch", ".capcom", ".coach", ".drawer", ".paused-chip", ".speed-note", ".resource-bar", ".toasts", ".walk-bar", ".walk-hints", ".walk-stick", ".walk-use", ".inspect-card"];
   const els: [string, DOMRect][] = [];
   for (const s of sel)
     document.querySelectorAll(s).forEach((e) => {
@@ -310,7 +469,7 @@ async function plan() {
   c.fillRect(0, 0, W, H);
   const hues: Record<string, string> = {
     suit: "#5b7bd6", galley: "#e0a64a", hygiene: "#4fb7c9", eclss: "#56c28a", lab: "#9a7be0", medical: "#e0697a", stairs: "#6b7280",
-    shelter: "#3f6fd8", landing: "#6b7280", stowage: "#b59a6a", q1: "#e46b6b", q2: "#d98b3a", q3: "#5fbf6a", q4: "#46b8d6", exercise: "#c86bd6", command: "#7aa2ff",
+    shelter: "#3f6fd8", landing: "#6b7280", garden: "#7fb069", q1: "#e46b6b", q2: "#d98b3a", q3: "#5fbf6a", q4: "#46b8d6", exercise: "#c86bd6", command: "#7aa2ff",
   };
   for (const level of [0, 1] as const) {
     const ox = 30 + level * (11 * S + 0) + 5.5 * S,
@@ -403,4 +562,4 @@ async function plan() {
   return url.length;
 }
 
-Object.assign(window, { __qc: { capture, perf, startup, overlaps, leak, plan, post, shots: () => SHOTS.map((s) => s.id) } });
+Object.assign(window, { __qc: { capture, perf, startup, overlaps, leak, plan, post, go, shot, walkAll, shots: () => SHOTS.map((s) => s.id) } });

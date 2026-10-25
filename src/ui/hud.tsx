@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Circle,
   CircleAlert,
+  Footprints,
   Gauge,
   Hammer,
   Info,
@@ -42,6 +43,7 @@ import { SITES } from "../sim/world";
 import { useGame, SPEEDS } from "../state/game";
 import { useUI, type View } from "../state/ui";
 import { follow } from "../scene/anchors";
+import { enterWalk } from "../state/walk";
 import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
 import { duration } from "./common";
@@ -859,13 +861,14 @@ const VIEWS: { id: View; label: string; title: string; icon: React.ReactNode }[]
   { id: "orbit", label: "Overview", title: "Look over the whole outpost", icon: <Orbit size={20} /> },
   { id: "chase", label: "Follow", title: "Ride behind the rover. Drag to look from any side.", icon: <Video size={20} /> },
   { id: "cockpit", label: "Cockpit", title: "Sit in the driver's seat. Drag to look around.", icon: <Gauge size={20} /> },
+  { id: "walk", label: "Walk", title: "Step inside the Mars home and walk around it in first person.", icon: <Footprints size={20} /> },
 ];
 /** Next camera view, for the V key. */
 export function nextView(v: View): View {
   return VIEWS[(VIEWS.findIndex((x) => x.id === v) + 1) % VIEWS.length].id;
 }
 
-/** Switch between the overview, the follow camera and the driver's seat. */
+/** Switch between the overview, the follow camera, the driver's seat and walking inside. */
 export function ViewSwitcher() {
   const view = useUI((s) => s.view);
   return (
@@ -880,7 +883,8 @@ export function ViewSwitcher() {
           aria-pressed={view === v.id}
           title={v.title}
           onClick={() => {
-            useUI.getState().setView(v.id);
+            if (v.id === "walk") enterWalk();
+            else useUI.getState().setView(v.id);
             play("toggle");
           }}
         >
