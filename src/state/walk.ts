@@ -40,14 +40,17 @@ export interface WalkStore {
   prompt: string | null;
   /** The mouse is captured for looking. */
   locked: boolean;
+  /** The inspect card open now (an id from sim/inspect), or null. */
+  card: string | null;
   /** The view and sim speed to go back to when you stop walking. */
   back: { view: Exclude<View, "walk">; speed: Speed } | null;
-  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked">>) => void;
+  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card">>) => void;
 }
 export const useWalk = create<WalkStore>((set) => ({
   room: "",
   prompt: null,
   locked: false,
+  card: null,
   back: null,
   set: (p) => set(p),
 }));
@@ -89,13 +92,13 @@ useUI.subscribe((s, prev) => {
       return;
     }
     const speed = useGame.getState().speed;
-    useWalk.setState({ back: { view: prev.view === "walk" ? "orbit" : prev.view, speed }, prompt: null });
+    useWalk.setState({ back: { view: prev.view === "walk" ? "orbit" : prev.view, speed }, prompt: null, card: null });
     respawn();
     if (speed !== 1) useGame.setState({ speed: 1 });
   } else if (prev.view === "walk") {
     const back = useWalk.getState().back;
     if (back && useGame.getState().speed === 1) useGame.setState({ speed: back.speed });
-    useWalk.setState({ back: null, prompt: null, locked: false });
+    useWalk.setState({ back: null, prompt: null, locked: false, card: null });
     clearWalkInput();
   }
 });

@@ -4348,6 +4348,70 @@ table.keys .kbd {
 .walk-use:disabled {
   opacity: 0.45;
 }
+.inspect-card {
+  position: absolute;
+  right: 16px;
+  top: 150px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  pointer-events: auto;
+}
+.inspect-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.inspect-card h3 {
+  font-size: 1.05rem;
+}
+.inspect-card dl {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+.inspect-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.86rem;
+}
+.inspect-card dt {
+  color: var(--text-2);
+}
+.inspect-card dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+.inspect-card .warn dd {
+  color: var(--warn);
+}
+.inspect-fact {
+  font-size: 0.84rem;
+  color: var(--text-2);
+  line-height: 1.45;
+  margin: 0 0 8px;
+}
+.inspect-card a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--cyan);
+}
+@media (max-width: 640px) {
+  .inspect-card {
+    top: auto;
+    bottom: 280px;
+    right: 8px;
+  }
+}
 /* While walking: no labels floating over the outpost, no dust haze indoors, no rover pad. */
 .walking .world-labels,
 .walking .fx-dust,

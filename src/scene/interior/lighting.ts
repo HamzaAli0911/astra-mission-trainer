@@ -69,6 +69,8 @@ export const insideLight = {
   uSky: { value: 0.1 },
   /** Sunlight through the windows (shadowed by the shell, so it only lands where a window lets it). */
   uSun: { value: 1 },
+  /** Reflections and soft ambient light come from the room itself, so they take the lamps' colour and level. */
+  uEnvTint: { value: new THREE.Color(1, 0.96, 0.9) },
 };
 
 const f = (n: number) => n.toFixed(4);
@@ -142,6 +144,7 @@ uniform vec3 uLampColor;
 uniform float uFill;
 uniform float uSky;
 uniform float uSun;
+uniform vec3 uEnvTint;
 varying vec3 vHomePos;
 ${planGlsl()}
 `;
@@ -281,6 +284,16 @@ export function inside<T extends THREE.MeshStandardMaterial>(mat: T, pattern?: P
         #endif`,
       )
       .replace("#include <lights_fragment_begin>", patchLights(THREE.ShaderChunk.lights_fragment_begin))
+      .replace(
+        "#include <lights_fragment_maps>",
+        `#include <lights_fragment_maps>
+        #if defined( RE_IndirectDiffuse )
+          iblIrradiance *= uEnvTint;
+        #endif
+        #if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
+          radiance *= uEnvTint;
+        #endif`,
+      )
       .replace(
         "#include <aomap_fragment>",
         `#include <aomap_fragment>

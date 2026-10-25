@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { ExternalLink, GraduationCap, Info, Settings as SettingsIcon, BookOpen, RotateCcw } from "lucide-react";
 import { CAMPAIGN } from "../sim/missions";
 import { DOSE_LIMIT } from "../sim/core";
+import { LIBRARY } from "../sim/library";
 import { useUI, type Settings } from "../state/ui";
 import { useGame } from "../state/game";
 import { play } from "../lib/sound";
@@ -274,86 +275,6 @@ function Guide({ close }: { close: () => void }) {
     </Modal>
   );
 }
-
-export const LIBRARY = [
-  {
-    topic: "Life support",
-    title: "Water becomes air",
-    text: "Electricity can split water (H₂O) into hydrogen and oxygen. The International Space Station makes breathing oxygen this way, so water and air are linked.",
-    source: "NASA · Life support (ECLSS)",
-    url: "https://www.nasa.gov/reference/environmental-control-and-life-support-systems-eclss/",
-  },
-  {
-    topic: "Life support",
-    title: "Recycling almost every drop",
-    text: "In 2023 the ISS reached about 98% water recovery: sweat, breath moisture and urine are cleaned into drinking water.",
-    source: "NASA · Water recovery milestone",
-    url: "https://www.nasa.gov/missions/station/iss-research/nasa-achieves-water-recovery-milestone-on-international-space-station/",
-  },
-  {
-    topic: "The Moon",
-    title: "Ice in eternal shadow",
-    text: "Some craters near the Moon's poles never see sunlight and stay colder than −200 °C. In 2009 NASA's LCROSS impact found water in one of them.",
-    source: "NASA Science · LCROSS",
-    url: "https://science.nasa.gov/mission/lcross/",
-  },
-  {
-    topic: "The Moon",
-    title: "Long days, long nights",
-    text: "A full day–night cycle on the Moon takes about 29.5 Earth days. Without air to hold heat, the surface swings from scorching to far below freezing.",
-    source: "NASA Science · Moon facts",
-    url: "https://science.nasa.gov/moon/facts/",
-  },
-  {
-    topic: "The Moon",
-    title: "Why the south pole?",
-    text: "Artemis plans to land near the lunar south pole: high ridges get long stretches of sunlight for power, and the dark craters nearby hold ice.",
-    source: "NASA · Artemis III",
-    url: "https://www.nasa.gov/missions/artemis/artemis-iii/",
-  },
-  {
-    topic: "Radiation",
-    title: "No air, no shield",
-    text: "Earth's atmosphere and magnetic field block most space radiation. China's Chang'e-4 lander measured about 1.4 mSv a day on the Moon's surface, more than twice the dose on the ISS.",
-    source: "NASA · Space radiation",
-    url: "https://www.nasa.gov/hrp/radiation/",
-  },
-  {
-    topic: "Radiation",
-    title: "Building a storm shelter",
-    text: "If a solar storm hits during an Artemis flight, the crew builds a shelter inside Orion from bags of food, water and supplies. Dense stuff makes a good shield.",
-    source: "NASA · Orion radiation protection",
-    url: "https://www.nasa.gov/missions/artemis/orion/scientists-and-engineers-evaluate-orion-radiation-protection-plan/",
-  },
-  {
-    topic: "Food",
-    title: "Gardens in space",
-    text: "The Veggie garden on the ISS has grown lettuce, cabbage and zinnias under LED lights. Plants also make a little oxygen.",
-    source: "NASA Science · Veggie",
-    url: "https://science.nasa.gov/mission/veggie/",
-  },
-  {
-    topic: "Mars",
-    title: "Weaker sunlight, dusty panels",
-    text: "Mars is about 1.5 times farther from the Sun than Earth, so sunlight there is roughly 43% as strong. NASA's InSight lander shut down in 2022 when dust covered its solar panels.",
-    source: "NASA Science · InSight",
-    url: "https://science.nasa.gov/mission/insight/",
-  },
-  {
-    topic: "Mars",
-    title: "Making oxygen from Mars air",
-    text: "MOXIE, on the Perseverance rover, split carbon dioxide from the Martian air and made 122 grams of oxygen between 2021 and 2023.",
-    source: "NASA · MOXIE",
-    url: "https://www.nasa.gov/solar-system/nasas-oxygen-generating-experiment-moxie-completes-mars-mission/",
-  },
-  {
-    topic: "Power",
-    title: "Nuclear power for the night",
-    text: "NASA's Fission Surface Power project is designing a small reactor (around 40 kW) that could run for ten years without sunlight.",
-    source: "NASA · Fission Surface Power",
-    url: "https://www.nasa.gov/centers-and-facilities/glenn/nasas-fission-surface-power-project-energizes-lunar-exploration/",
-  },
-];
 
 function Library({ close }: { close: () => void }) {
   return (

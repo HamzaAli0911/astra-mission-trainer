@@ -1,8 +1,11 @@
 import * as THREE from "three";
 import { floorY, HOME, PACE, polar, roomAt, stepLength, stride, type Level } from "../sim/home";
+import { INSPECTS } from "../sim/inspect";
+import type { InteriorState } from "../sim/interior";
+import { useGame } from "../state/game";
 import { PLANETS } from "../sim/planets";
 import type { Planet } from "../sim/types";
-import { doorSound, footstep } from "../lib/sound";
+import { chime, doorSound, footstep, klaxon } from "../lib/sound";
 import { useUI } from "../state/ui";
 import { leaveWalk, lockState, useWalk, walker, walkInput } from "../state/walk";
 import type { Interior } from "./interior";
@@ -34,10 +37,27 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
   const step = stepLength(gravity);
   const open = new Map<string, number>();
   const isOpen = (id: string) => (open.get(id) ?? 0) > 0.8;
+  let state: InteriorState | null = null;
   const usables: Usable[] = [
     // Until walks outside arrive, the airlock takes you back out to look over the outpost.
     { level: 0, ...polar(180, HOME.lining - 0.2), label: "Leave by the airlock", use: () => leaveWalk() },
+    // Equipment you can look at closely: live readings and a fact.
+    ...INSPECTS.map((p) => ({ level: p.level, x: p.x, z: p.z, label: `Look at the ${p.title.toLowerCase()}`, use: () => useWalk.getState().set({ card: useWalk.getState().card === p.id ? null : p.id }) })),
   ];
+  // The storm drill: inside the shelter, the same shelter action as the HUD's (same rules, same costs).
+  const shelterSpot = { level: 0 as Level, ...polar(70, 0.4) };
+  const shelterUse = (): Usable | null => {
+    const g = useGame.getState().game;
+    const storm = state && state.storm !== "none";
+    if (!storm && !g.sheltering) return null;
+    return {
+      ...shelterSpot,
+      label: g.sheltering ? "Leave the shelter (whole crew)" : "Take shelter now (whole crew)",
+      use: () => useGame.getState().act({ type: "shelter", on: !g.sheltering }),
+    };
+  };
+  let alarmAt = -1e9,
+    lastAlarm: string | null = null;
   let active = false,
     drag: { x: number; y: number } | null = null;
 
@@ -91,7 +111,8 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
       return active;
     },
     /** One frame: move the walker (while walking), slide the doors, and work out what you could use. */
-    update(dt: number, walking: boolean, blocked: boolean) {
+    update(dt: number, walking: boolean, blocked: boolean, st: InteriorState | null = null) {
+      state = st;
       if (active && !walking && locked()) document.exitPointerLock();
       active = walking;
       // A menu or card on top: let go of the mouse, and stand still.
@@ -130,7 +151,8 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
       // Doors slide open as you come near (the airlock's hatch stays shut until walks outside arrive).
       const level = walker.where === "stair" ? null : walker.where;
       for (const d of interior.doors) {
-        const near = walking && d.id !== "airlock" && level === d.level && Math.hypot(walker.x - d.x, walker.z - d.z) < DOOR_REACH;
+        // (The shelter's hatch stands open while a storm is coming or on.)
+        const near = (walking && d.id !== "airlock" && level === d.level && Math.hypot(walker.x - d.x, walker.z - d.z) < DOOR_REACH) || (d.id === "shelter" && !!st?.shelterOpen);
         const was = open.get(d.id) ?? 0;
         const now = THREE.MathUtils.clamp(was + (near ? dt : -dt) / DOOR_TIME, 0, 1);
         if (now !== was) {
@@ -143,10 +165,28 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, interi
 
       // What room you're in, and what you could use.
       if (!walking) return;
+      // Alarms you hear inside: the storm klaxon every few seconds, a chime when the battery or oxygen runs low.
+      const alarm = st?.alarm ?? null;
+      const now = performance.now() / 1000;
+      const heard = `${alarm}|${!!st?.batteryLow}`;
+      if (alarm === "storm") {
+        if (now - alarmAt > 2.6) {
+          alarmAt = now;
+          klaxon();
+        }
+      } else if (heard !== lastAlarm && (alarm || st?.batteryLow)) chime(alarm === "o2");
+      lastAlarm = heard;
+      // Walk away from an open card and it closes.
+      const card = useWalk.getState().card;
+      if (card) {
+        const p = INSPECTS.find((x) => x.id === card);
+        if (!p || p.level !== level || Math.hypot(p.x - walker.x, p.z - walker.z) > 2.2) useWalk.getState().set({ card: null });
+      }
       const here = walker.where === "stair" ? "Stairs" : roomAt(walker.x, walker.z, walker.where).name;
       let best: Usable | null = null,
         bestScore = Infinity;
-      for (const u of usables) {
+      const shelter = shelterUse();
+      for (const u of shelter ? [shelter, ...usables] : usables) {
         if (u.level !== level) continue;
         const dx = u.x - walker.x,
           dz = u.z - walker.z;

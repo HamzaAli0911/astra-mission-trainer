@@ -31,6 +31,7 @@ import { HOME as HOME_PLAN } from "../sim/home";
 import { insideEnvironment } from "./interior/lighting";
 import { walkController } from "./walk";
 import { walker } from "../state/walk";
+import { interiorState } from "../sim/interior";
 
 const HOME = new THREE.Vector3(0, 0, 3);
 const OFFSET = new THREE.Vector3(25.5, 31.5, 38);
@@ -1180,18 +1181,20 @@ export function World() {
         rover.body.rotation.z = Math.sin(clock * 6.1) * 0.008 * bump;
         rover.body.rotation.x = Math.sin(clock * 3.7) * 0.006 * bump;
 
-        walkCtl.update(dt, view === "walk", !!(ui.modal || ui.briefing || ui.debrief || st.alert || g.choice));
+        // What the inside shows (lights, alarms, shelves) follows the mission, while you're in or near it.
+        const homeState = view === "walk" || interior.group.visible ? interiorState(g) : null;
+        walkCtl.update(dt, view === "walk", !!(ui.modal || ui.briefing || ui.debrief || st.alert || g.choice), homeState);
         runCamera(g, dt);
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
         const near = view === "walk" || camera.position.distanceTo(homeOrigin) < 24;
         interior.group.visible = near;
-        if (near) {
-          // Screens inside redraw a few times a second; the life-support fans turn.
+        if (near && homeState) {
+          interior.apply(homeState, dt, clock, reduced);
+          // Screens inside redraw a few times a second (in a blackout only life support's stay on).
           if (clock - screensAt > 0.33) {
             screensAt = clock;
-            interior.redraw(screenData(g));
+            interior.redraw({ ...screenData(g), essentialOnly: homeState.screens === "essential" });
           }
-          if (!reduced) for (const fan of interior.living.fans) fan.rotation.z += dt * 8;
         }
         const home = g.modules.find((m) => m.type === "habitat");
         for (const w of (home && entries.get(home.id)?.view.windowGlow) || []) w.visible = !near;

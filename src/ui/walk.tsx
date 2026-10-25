@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { DoorOpen, Hand } from "lucide-react";
+import { DoorOpen, ExternalLink, Hand, X } from "lucide-react";
+import { INSPECTS } from "../sim/inspect";
+import { useGame } from "../state/game";
 import { useUI } from "../state/ui";
 import { leaveWalk, useWalk, walkInput } from "../state/walk";
 
@@ -42,6 +44,7 @@ function WalkOverlay() {
           {touch ? <Hand size={16} /> : <kbd className="kbd">E</kbd>} {prompt}
         </div>
       )}
+      <InspectCard />
       {!touch && hints && (
         <div className="walk-hints">
           {locked ? (
@@ -88,6 +91,43 @@ function WalkOverlay() {
         </>
       )}
     </div>
+  );
+}
+
+/** A close look at a piece of equipment: live readings from the mission and one sourced science fact. */
+function InspectCard() {
+  const id = useWalk((s) => s.card);
+  const g = useGame((s) => s.game);
+  const p = INSPECTS.find((x) => x.id === id);
+  // Let go of the mouse while a card is open, so its link can be clicked.
+  useEffect(() => {
+    if (p && document.pointerLockElement) document.exitPointerLock();
+  }, [p]);
+  if (!p) return null;
+  const f = p.fact(g);
+  return (
+    <aside className="inspect-card" role="dialog" aria-label={p.title}>
+      <header>
+        <h3>{p.title}</h3>
+        <button className="icon-btn" aria-label="Close" onClick={() => useWalk.getState().set({ card: null })}>
+          <X size={18} />
+        </button>
+      </header>
+      <dl>
+        {p.live(g).map(([label, value, warn]) => (
+          <div key={label} className={warn ? "warn" : ""}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="inspect-fact">
+        <b>{f.title}.</b> {f.text}
+      </p>
+      <a href={f.url} target="_blank" rel="noreferrer">
+        {f.source} <ExternalLink size={12} />
+      </a>
+    </aside>
   );
 }
 

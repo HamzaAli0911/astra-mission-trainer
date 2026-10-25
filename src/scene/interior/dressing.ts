@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { HOME, polar, rad, ROOMS, STAIR, stairPoint, type Level } from "../../sim/home";
-import { box, cyl, rbox, strut, torus } from "../kit";
+import { box, cyl, keep, mesh, rbox, strut, torus } from "../kit";
+import { living } from "./furniture";
 import { ifabric, imetal, ipaint, iplastic } from "./lighting";
 import { cableTray, extinguisher, handle, hazard, ilabel, screen, vent, type ScreenData } from "./parts";
 import { HATCH } from "./structure";
@@ -156,7 +157,7 @@ export function dress(g: THREE.Group, planet: "moon" | "mars") {
   const line = onWall(g, 330, HOME.lining - 0.08, HOME.floor[0] + 2.05);
   strut(line, 0, 0, 0, 0.9, 0, 0.0, 0.03, ipaint("#2f6fb0", 0.35, 0.3), 8);
   ilabel(onWall(g, 333, HOME.lining - 0.01, HOME.floor[0] + 2.15), planet === "mars" ? "O2 FROM MOXIE PLANT" : "O2 FROM ELECTROLYSIS", 0.5, 0, 0, 0.004, "#2f6fb0", "#eaf2fb");
-  screen(onWall(g, 15, HOME.hall + HOME.wall / 2 + 0.002, HOME.floor[0] + 1.5, true), 0.5, 0.32, 0, 0, 0.01, drawLifeSupport, 256);
+  screen(onWall(g, 15, HOME.hall + HOME.wall / 2 + 0.002, HOME.floor[0] + 1.5, true), 0.5, 0.32, 0, 0, 0.01, drawLifeSupport, 256, true);
 
   // Lab: the tool wall on the partition, a sample rack.
   const tools = onPartition(g, 30, 1, 4.25, HOME.floor[0] + 1.45);
@@ -202,7 +203,7 @@ export function dress(g: THREE.Group, planet: "moon" | "mars") {
       rbox(f, 0.36, 0.42, 0.06, 0.08, bag, 0, 0, 0.03);
     }
   }
-  screen(onWall(g, 250, HOME.shelter - 0.005, HOME.floor[0] + 2.33), 0.32, 0.2, 0, 0, 0.01, drawDosimeter, 256);
+  screen(onWall(g, 250, HOME.shelter - 0.005, HOME.floor[0] + 2.33), 0.32, 0.2, 0, 0, 0.01, drawDosimeter, 256, true);
   ilabel(onWall(g, 285, HOME.shelter - 0.005, HOME.floor[0] + 0.75), "WATER WALLS · 40 cm", 0.36, 0, 0, 0.004, "#ffffff", "#2f6fb0");
 
   // Command: the big screen with the outpost's summary and the signal delay to Earth.
@@ -213,6 +214,43 @@ export function dress(g: THREE.Group, planet: "moon" | "mars") {
 
   // Exercise: a poster and the session board.
   ilabel(onWall(g, 30, HOME.lining - 0.01, HOME.floor[1] + 1.7), "2 HOURS A DAY KEEPS BONES STRONG", 0.6, 0, 0, 0.004, "#1d222b", "#f2e6d0");
+
+  // Path lights: small LEDs along the hall floor on both floors, lit at night and in a blackout.
+  const path = (living.path = new THREE.MeshStandardMaterial({ color: "#ffd9a0", emissive: "#ffb85c", emissiveIntensity: 0, roughness: 0.4, toneMapped: false }));
+  for (const level of [0, 1] as const)
+    for (let b = 0; b < 360; b += 10) {
+      const p = polar(b + 5, HOME.core + 0.02);
+      const led = mesh(new THREE.BoxGeometry(0.08, 0.02, 0.015), path, g, p.x, HOME.floor[level] + 0.12, p.z);
+      led.rotation.y = -rad(b + 5);
+      led.castShadow = false;
+    }
+
+  // Storm beacons over the shelter's door and in the command room: red, turning, only during a storm.
+  living.beaconLight = new THREE.MeshStandardMaterial({ color: "#ff3a2e", emissive: "#ff2a1e", emissiveIntensity: 0, roughness: 0.3, toneMapped: false, transparent: true, opacity: 0.85 });
+  for (const [b, level] of [
+    [250, 0],
+    [165, 1],
+  ] as [number, Level][]) {
+    const f = onWall(g, b + 14, HOME.core + 0.002, HOME.floor[level] + 2.3, true);
+    cyl(f, 0.07, 0.08, 0.04, ipaint("#2b3038", 0.5), 0, -0.04, 0.09, 16);
+    const head = keep(new THREE.Group());
+    head.position.set(0, 0.04, 0.09);
+    f.add(head);
+    mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 16), living.beaconLight, head);
+    mesh(new THREE.BoxGeometry(0.11, 0.08, 0.012), imetal("#d9dde2", 0.2), head, 0, 0, 0.015);
+    living.beacons.push(head);
+  }
+
+  // Signs for hard times: water rationing at the galley and the hygiene room, food running out, oxygen low.
+  const warn = (list: THREE.Object3D[], text: string, bearing: number, r: number, y: number, w: number, outward = false) => {
+    const sign = keep(ilabel(onWall(g, bearing, r, y, outward), text, w, 0, 0, 0.01, "#ffffff", "#c8322a"));
+    sign.visible = false;
+    list.push(sign);
+  };
+  warn(living.signs.water, "WATER RATIONING: 2 L EACH TODAY", 240, HOME.lining - 0.02, HOME.floor[0] + 1.95, 0.56);
+  warn(living.signs.water, "SHOWER CLOSED: SAVE WATER", 310, HOME.hall + HOME.wall / 2 + 0.003, HOME.floor[0] + 1.75, 0.42, true);
+  warn(living.signs.food, "FOOD LOW: HALF RATIONS", 212, HOME.lining - 0.02, HOME.floor[0] + 2.05, 0.44);
+  warn(living.signs.o2, "O2 LOW: CHECK THE OXYGEN PLANT", 345, HOME.hall + HOME.wall / 2 + 0.003, HOME.floor[0] + 1.85, 0.5, true);
 
   // Stowage: cargo bags strapped in the space beside the stairwell upstairs (reached over the rail).
   const cargo = ifabric("#d8cfbc", 0.9),

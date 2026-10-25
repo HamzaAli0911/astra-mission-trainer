@@ -78,6 +78,8 @@ export function ilabel(p: THREE.Object3D, text: string, w: number, x: number, y:
 /** A screen showing live data: redrawn a few times a second from whatever `draw` is given. */
 export interface Screen {
   mesh: THREE.Mesh;
+  /** Stays on in a power shortage (life support, the dosimeter). */
+  essential: boolean;
   draw: (c: CanvasRenderingContext2D, w: number, h: number, data: ScreenData) => void;
   canvas: HTMLCanvasElement | null;
   texture: THREE.CanvasTexture | null;
@@ -99,11 +101,13 @@ export interface ScreenData {
   crew: { name: string; place: string; health: number }[];
   samples: number;
   modules: { name: string; ok: boolean }[];
+  /** Power is short: only life support's screens stay on. */
+  essentialOnly?: boolean;
   [k: string]: unknown;
 }
 export const screens: Screen[] = [];
 /** A flat screen in a dark bezel (facing +z), `w` × `h` metres, its picture drawn by `draw`. */
-export function screen(p: THREE.Object3D, w: number, h: number, x: number, y: number, z: number, draw: Screen["draw"], px = 320) {
+export function screen(p: THREE.Object3D, w: number, h: number, x: number, y: number, z: number, draw: Screen["draw"], px = 320, essential = false) {
   const bezel = iplastic("#1b1f27", 0.4);
   box(p, w + 0.04, h + 0.04, 0.025, bezel, x, y, z - 0.012);
   const canvas = typeof document === "undefined" ? null : document.createElement("canvas");
@@ -117,7 +121,7 @@ export function screen(p: THREE.Object3D, w: number, h: number, x: number, y: nu
   const mat = new THREE.MeshStandardMaterial({ color: "#000", emissive: "#fff", emissiveMap: texture, emissiveIntensity: 0.9, roughness: 0.3, toneMapped: false });
   const m = keep(mesh(new THREE.PlaneGeometry(w, h), mat, p, x, y, z + 0.002));
   m.castShadow = false;
-  const s: Screen = { mesh: m, draw, canvas, texture };
+  const s: Screen = { mesh: m, draw, canvas, texture, essential };
   screens.push(s);
   return s;
 }

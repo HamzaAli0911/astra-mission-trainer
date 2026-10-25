@@ -5,6 +5,7 @@ import { box, dispose, finalize, keep } from "../kit";
 import { activeHazard, capacity, flows } from "../../sim/core";
 import { clockOf, dayOf, PLANETS } from "../../sim/planets";
 import type { GameState, Planet } from "../../sim/types";
+import type { InteriorState } from "../../sim/interior";
 import { dress } from "./dressing";
 import { buildPiece, living, placeInstances, resetLiving } from "./furniture";
 import { finishMaterial, insideLight, ipaint } from "./lighting";
@@ -26,6 +27,8 @@ export interface Interior {
   living: typeof living;
   /** Redraw the screens (call a few times a second). */
   redraw: (data: ScreenData) => void;
+  /** Show the mission's state: lights, alarms, shelves, tanks, plants, faults (call every frame while visible). */
+  apply: (state: InteriorState, dt: number, clock: number, reduced: boolean) => void;
   dispose: () => void;
 }
 
@@ -71,16 +74,85 @@ export function buildInterior(planet: Planet = "mars"): Interior {
   finalize(group);
   group.traverse((o) => o.layers.set(INSIDE_LAYER));
   const own = [...screens];
+  const live = { ...living, signs: { ...living.signs } };
+  const lampColor = new THREE.Color(),
+    target = new THREE.Color(),
+    m4 = new THREE.Matrix4(),
+    grow = new THREE.Matrix4();
+  let lastGrowth = -1,
+    lastFood = -1,
+    fanSpeed = 1;
+  const foodTotal = live.food?.count ?? 0,
+    tomatoTotal = live.tomatoes?.count ?? 0;
+  const apply = (st: InteriorState, dt: number, clock: number, reduced: boolean) => {
+    // Lamps: the hour's colour and brightness, amber when the battery is low, red in a blackout; eased, not snapped.
+    target.setRGB(...st.color).multiplyScalar(st.brightness * 5);
+    const k = 1 - Math.exp(-dt * 3);
+    insideLight.uLampColor.value.lerp(target, k);
+    lampColor.copy(insideLight.uLampColor.value).multiplyScalar(1 / 5);
+    insideLight.uEnvTint.value.copy(lampColor);
+    lit.emissive.copy(lampColor);
+    lit.emissiveIntensity = 0.4 + 2 * Math.max(lampColor.r, lampColor.g, lampColor.b);
+    insideLight.uFill.value = st.lights === "emergency" ? 0.06 : 0.025;
+    if (live.path) {
+      live.path.emissive.set(st.lights === "emergency" ? "#ff3a2e" : "#ffb85c");
+      live.path.emissiveIntensity = st.pathLights ? 1.4 : 0;
+    }
+    // The storm beacons turn and flash while a storm is coming or on.
+    const storm = st.storm !== "none";
+    if (live.beaconLight) live.beaconLight.emissiveIntensity = storm ? (reduced ? 2 : 1.5 + Math.sin(clock * 9) * 1.2) : 0;
+    for (const b of live.beacons) if (storm && !reduced) b.rotation.y += dt * 6;
+    // Signs that only show when things are short.
+    for (const sgn of live.signs.water) sgn.visible = st.waterLow;
+    for (const sgn of live.signs.food) sgn.visible = st.foodLow;
+    for (const sgn of live.signs.o2) sgn.visible = st.o2Low;
+    // Food packs on the shelves (from the bottom shelf up), water in the tank gauges.
+    if (live.food && Math.abs(st.foodFill - lastFood) > 0.005) {
+      lastFood = st.foodFill;
+      live.food.count = Math.round(foodTotal * st.foodFill);
+    }
+    for (const l of live.levels) l.scale.y = Math.max(0.02, st.waterFill);
+    // Racks' status strips: green, or red for a fault (the CO2 scrubber goes amber on backup power).
+    const [o2, co2, water] = live.status;
+    const paint = (m: THREE.Mesh | undefined, c: string) => {
+      if (!m) return;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      mat.color.set(c);
+      mat.emissive.set(c);
+    };
+    paint(o2, st.faults.oxygen ? "#ff4d5e" : st.o2Low ? "#ffb020" : "#3ee39a");
+    paint(co2, st.lights === "emergency" ? "#ffb020" : "#3ee39a");
+    paint(water, st.faults.recycler ? "#ff4d5e" : "#3ee39a");
+    // Fans spin down in a blackout.
+    fanSpeed += (st.fans - fanSpeed) * Math.min(1, dt * 0.8);
+    if (!reduced) for (const fan of live.fans) fan.rotation.z += dt * 8 * fanSpeed;
+    // The food wall: plants grow (scale) with the greenhouse; tomatoes only on healthy plants; grow lights with the power.
+    if (live.plants && Math.abs(st.plants - lastGrowth) > 0.01) {
+      lastGrowth = st.plants;
+      const s = 0.45 + 0.55 * st.plants;
+      grow.makeScale(s, s, s);
+      live.plantBase.forEach((base, i) => live.plants!.setMatrixAt(i, m4.multiplyMatrices(base, grow)));
+      live.plants.instanceMatrix.needsUpdate = true;
+      if (live.tomatoes) live.tomatoes.count = st.plants > 0.7 ? tomatoTotal : 0;
+    }
+    for (const gl of live.growLights) gl.emissiveIntensity = st.lights === "emergency" ? 0.15 : 0.4 + 1.2 * st.plants;
+  };
   return {
+    apply,
     group,
     doors,
     lit,
     screens: own,
-    living: { ...living },
+    living: live,
     redraw: (data) => {
       for (const s of own) {
         if (!s.canvas || !s.texture) continue;
-        s.draw(s.canvas.getContext("2d")!, s.canvas.width, s.canvas.height, data);
+        const c = s.canvas.getContext("2d")!;
+        if (data.essentialOnly && !s.essential) {
+          // Switched off to save power.
+          c.fillStyle = "#020305";
+          c.fillRect(0, 0, s.canvas.width, s.canvas.height);
+        } else s.draw(c, s.canvas.width, s.canvas.height, data);
         s.texture.needsUpdate = true;
       }
     },

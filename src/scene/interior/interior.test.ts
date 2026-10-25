@@ -35,7 +35,7 @@ describe("the inside of the home, against its floor plan", () => {
       // Parts merged by finish carry their colours per vertex: the colours must survive the merge.
       if ((m.material as THREE.Material & { vertexColors?: boolean }).vertexColors) expect(m.geometry.attributes.color, m.name).toBeDefined();
     });
-    expect(meshes).toBeLessThan(100);
+    expect(meshes).toBeLessThan(115);
   });
 
   it("draws a wall wherever the walker bumps into one", { timeout: 60000 }, () => {

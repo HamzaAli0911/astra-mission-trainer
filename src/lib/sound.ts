@@ -154,6 +154,46 @@ export function footstep(weight = 1) {
   burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
 }
 
+/** The storm klaxon inside the home: a falling two-tone wail. */
+export function klaxon() {
+  const a = audio();
+  if (!a || !master) return;
+  const t = a.currentTime;
+  for (let i = 0; i < 2; i++) {
+    const o = a.createOscillator(),
+      g = a.createGain();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(760, t + i * 0.55);
+    o.frequency.linearRampToValueAtTime(520, t + i * 0.55 + 0.5);
+    g.gain.setValueAtTime(0.0001, t + i * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.035, t + i * 0.55 + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.55 + 0.52);
+    const lp = a.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1800;
+    o.connect(lp).connect(g).connect(master);
+    o.start(t + i * 0.55);
+    o.stop(t + i * 0.55 + 0.56);
+  }
+}
+/** A soft two-note chime (the battery's getting low; the oxygen's short). */
+export function chime(urgent = false) {
+  const a = audio();
+  if (!a || !master) return;
+  const t = a.currentTime;
+  [urgent ? 880 : 660, urgent ? 660 : 880].forEach((f, i) => {
+    const o = a.createOscillator(),
+      g = a.createGain();
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t + i * 0.22);
+    g.gain.exponentialRampToValueAtTime(0.04, t + i * 0.22 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.22 + 0.4);
+    o.connect(g).connect(master!);
+    o.start(t + i * 0.22);
+    o.stop(t + i * 0.22 + 0.42);
+  });
+}
+
 /* ---------- Background sound ---------- */
 
 type Ambience = {

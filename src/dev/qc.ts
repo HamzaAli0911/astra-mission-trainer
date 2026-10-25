@@ -223,6 +223,70 @@ SHOTS.push(
   },
 );
 
+// The home reacting to the mission (Mars). Each starts from a well-stocked, powered outpost, then sets one situation.
+const fresh = () => {
+  const g = useGame.getState().game;
+  Object.assign(g.res, { power: 60, o2: 25, water: 350, food: 130 });
+  g.sheltering = false;
+  g.hazards = g.hazards.filter((x) => x.id !== 991 && x.id !== 992);
+  for (const m of g.modules) {
+    m.health = 100;
+    m.on = true;
+  }
+  return g;
+};
+const state = (b: number, r: number, level: 0 | 1, yaw: number, pitch: number, set: (g: ReturnType<typeof fresh>) => void, fig?: [number, number, 0 | 1, number]) => (h: Hooks) => {
+  set(fresh());
+  inside(b, r, level, yaw, pitch, fig)(h);
+};
+SHOTS.push(
+  {
+    id: "IS01-power-cut-galley",
+    planet: "mars",
+    frames: 40,
+    run: state(232, 3.15, 0, 272, -8, (g) => {
+      g.t = 22;
+      g.res.power = 0;
+      for (const m of g.modules) if (m.type === "solar" || m.type === "reactor") m.on = false;
+    }),
+  },
+  { id: "IS02-battery-low-life-support", planet: "mars", frames: 40, run: state(0, 2.6, 0, 0, -4, (g) => (g.res.power = 4)) },
+  { id: "IS03-night-quarters", planet: "mars", frames: 40, run: state(272.5, 3.2, 1, 268, -10, (g) => (g.t = 23.5)) },
+  {
+    id: "IS04-storm-warned-core",
+    planet: "mars",
+    frames: 40,
+    run: state(212, 2.55, 0, 334, 4, (g) => g.hazards.push({ id: 991, kind: "storm", warnAt: 10, startAt: 12, endAt: 20, strength: 1, phase: "warned" })),
+  },
+  {
+    id: "IS05-sheltering",
+    planet: "mars",
+    frames: 40,
+    run: state(250, 1.05, 0, 75, -8, (g) => {
+      g.hazards.push({ id: 991, kind: "storm", warnAt: 8, startAt: 10, endAt: 20, strength: 1, phase: "active" });
+      g.sheltering = true;
+    }),
+  },
+  {
+    id: "IS06-dust-storm-window",
+    planet: "mars",
+    frames: 40,
+    run: state(255, 3.6, 0, 268, -2, (g) => g.hazards.push({ id: 992, kind: "dust", warnAt: 9, startAt: 10, endAt: 30, strength: 0.35, phase: "active" })),
+  },
+  { id: "IS07-food-low-galley", planet: "mars", frames: 40, run: state(240, 3.3, 0, 205, -8, (g) => (g.res.food = 9)) },
+  {
+    id: "IS08-fault-water-recovery",
+    planet: "mars",
+    frames: 40,
+    run: state(0, 2.6, 0, 6, -4, (g) => {
+      const r = g.modules.find((m) => m.type === "recycler");
+      if (r) r.health = 25;
+    }),
+  },
+  { id: "IS09-morning-galley", planet: "mars", frames: 40, run: state(232, 3.15, 0, 272, -8, (g) => (g.t = 7)) },
+  { id: "IS10-evening-galley", planet: "mars", frames: 40, run: state(232, 3.15, 0, 272, -8, (g) => (g.t = 19)) },
+);
+
 /** Extra shots (interior, states, new exterior views) register themselves here. */
 export function addShots(...more: Shot[]) {
   for (const s of more) {
