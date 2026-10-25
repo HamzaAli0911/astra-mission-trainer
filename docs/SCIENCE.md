@@ -18,6 +18,15 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 | MOXIE | Mars oxygen from CO₂ needs no water but more power | MOXIE made 122 g of O₂ on Mars, 2021–2023 ([NASA](https://www.nasa.gov/solar-system/nasas-oxygen-generating-experiment-moxie-completes-mars-mission/)) |
 | Fission power | 10 kW, day and night | NASA Fission Surface Power targets about 40 kW ([NASA](https://www.nasa.gov/centers-and-facilities/glenn/nasas-fission-surface-power-project-energizes-lunar-exploration/)) |
 | Ice in dark craters | Shadow Crater holds ice; the rover drains faster there | LCROSS found water at Cabeus crater in 2009 ([NASA](https://science.nasa.gov/mission/lcross/)) |
+| Gravity | Mars 3.71 m/s² (38% of Earth's), Moon 1.62 m/s² (17%) | NASA planetary fact sheets ([NASA](https://nssdc.gsfc.nasa.gov/planetary/factsheet/)) |
+| Walking in low gravity | steps of about 1.2 m on Mars and 1.85 m on the Moon, slower and bouncier | Step length scales with √(1/g) in our model (0.75 m on Earth); Apollo crews loped and hopped on the Moon |
+| Signal delay to Earth | Mars 3 to 22 minutes each way; Moon about 1.3 s | Light travel time; the Perseverance team plans around it ([NASA](https://science.nasa.gov/blog/speaking-percys-language-how-to-talk-so-perseverance-will-listen/)) |
+| CO₂ breathed out | about 1 kg per person per day, removed by a scrubber | NASA life-support planning figure; the ISS scrubbers ([NASA](https://www.nasa.gov/reference/environmental-control-and-life-support-systems-eclss/)) |
+| Exercise | two hours a day per crew member, on a treadmill and a cycle | ISS crews exercise about two hours a day to slow bone and muscle loss ([NASA](https://www.nasa.gov/missions/station/iss-research/counteracting-bone-and-muscle-loss-in-microgravity/)) |
+| Walking outside (EVA) | full outdoor radiation dose (no walls); 8 hours of suit time | Spacewalks usually last five to eight hours ([NASA](https://www.nasa.gov/learning-resources/for-kids-and-students/what-is-a-spacewalk-grades-5-8/)) |
+| Martian dust | a sealed suit room keeps dust out of the living space | Mars dust contains toxic perchlorates ([NASA JPL](https://www.jpl.nasa.gov/news/how-nasas-perseverance-is-helping-prepare-astronauts-for-mars/)) |
+| Storm shelter in the core | water walls 0.4 m thick round the middle of the home | Mass between you and space blocks radiation; water is one of the best shields ([NASA Orion plan](https://www.nasa.gov/missions/artemis/orion/scientists-and-engineers-evaluate-orion-radiation-protection-plan/)) |
+| Parts printer | spares printed in the lab | The ISS printed its first part in 2014 ([NASA](https://www.nasa.gov/missions/station/open-for-business-3-d-printer-creates-first-object-in-space-on-international-space-station/)) |
 
 ## Deliberate simplifications
 
@@ -26,6 +35,9 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 - **Equipment outputs are rounded** (a 6 kW solar array, a 40 kWh battery bank, a greenhouse growing up to 8.6 meals a day) so that a handful of modules can support four people.
 - **Radiation limit.** The trainer uses a 50 mSv limit per mission so storms matter within a short game. Real NASA limits are set over a whole career (about 600 mSv).
 - **Health.** Crew health falls with missing oxygen (fast), water, food or heat; radiation is tracked as dose, not health.
-- **Not modelled:** CO₂ scrubbing, air pressure and leaks (except as an event card), thermal design, plant growth cycles, crew psychology.
+- **The home.** The CO₂ scrubber and its screen are shown, but CO₂ levels aren't simulated (the scrubber goes on backup when power is short). The crew keep a routine (meals, work, exercise, sleep) but don't walk between rooms.
+- **Walking outside.** Only one crew member, Alex, goes out on foot, and the airlock plays an 8-second cycle instead of a real one (which takes much longer). Suit time counts training hours, so a walk outside uses up suit time quickly.
+- **Nothing you can't see is drawn.** Radiation and CO₂ are invisible: storms show only through alarms, beacons, the dosimeter and the screen edge, never a glow. On the Moon there is no outdoor sound, only your breathing and the suit's fans.
+- **Not modelled:** CO₂ levels, air pressure and leaks (except as an event card), thermal design, plant growth cycles, crew psychology.
 
 The in-game **Science library** shows these facts with links; the debrief of every mission ends with one real-science fact and its source.

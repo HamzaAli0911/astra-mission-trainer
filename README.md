@@ -31,6 +31,8 @@ The core loop:
 - **Shelter**: during solar storms, move the crew into the shelter. Research and building pause while they hide.
 - **Decisions**: event cards in the middle of every mission where every option costs something (cargo lander, leaks, a sick crew member, meteor showers, dust devils, an overheating battery, a damaged solar array). Some choices come back later: a battery or array left running may fail and need repairs before nightfall. A card shows what you have, and an option you can't afford is greyed out.
 - **CAPCOM** (Jo, at Mission Control) explains, warns before trouble and offers one button that helps. Messages can be read aloud.
+- **Walk inside the home**: step into the habitat in first person and walk its two floors: the suit room and airlock, galley, hygiene, life support, lab, medical bay, storm shelter, four crew quarters, exercise, garden and command. Every machine shows the mission's real numbers (press E to look closely), the crew keep a daily routine, and the home reacts to the mission: dim at night, amber on a low battery, emergency red in a power cut, a klaxon and an open shelter in a solar storm.
+- **Walk outside (EVA)**: suit up, cycle the airlock and go out on foot to repair modules or brush dust off solar panels. On foot you take the full outdoor radiation dose, and the suit has 8 hours of air.
 
 Every supply shows how long it will last ("▼ 2.1 days"), so cause and effect is visible before it becomes an emergency. Time pauses for emergencies and decisions, so players always have time to think.
 
@@ -43,7 +45,8 @@ Everything is drawn in real time in the browser, with no image or model files: e
 - A **300 m × 300 m** area around the outpost on each world, ringed by distant hills: an icy crater that never sees the Sun, boulder fields, smaller craters, a lava-tube skylight (Moon), dunes and a layered mesa (Mars), and the lander that brought the crew.
 - **Moon**: a black sky with the Milky Way, a low Sun that casts long shadows, Earth hanging over the horizon, no air (so no haze and no blowing dust), and a crater floor that never sees the Sun, with frost on its rocks. **Mars**: a butterscotch sky, blue sunsets, Phobos and Deimos at night, rippled dunes, a layered mesa and dust storms that dim the Sun. Solar storms don't tint the sky (radiation is invisible); the screen edge pulses instead.
 - Detailed, physically shaded modules: an inflatable habitat (quilted shell, cupola, airlock with a pressure door, radiators, a dish) that gets buried under regolith sandbags as you build its shield; tall Sun-tracking solar masts on the Moon and dusty tilting tables on Mars; a battery bank with cooling fans; ice-water electrolysis on the Moon and a MOXIE-style CO₂ unit on Mars; a water recycler; a greenhouse with lettuce and staked tomato vines under LED bars; an ice drill with a turning auger; a sandbagged storm shelter; a lab with a dish and weather mast; and a fission reactor buried in a berm under a mast of radiator panels (nothing nuclear glows). A six-wheeled pressurised rover with a wraparound canopy, suspension that follows the ground, chevron tyres, suitports and an arm; jointed astronauts who lope on the Moon and walk on Mars; welding sparks while things are built; power cables that pulse in the direction energy flows.
-- Three camera views. **Overview** looks over the outpost. **Follow** rides behind the rover and turns with it (drag to watch from any side). **Cockpit** puts you in the driver's seat, with live screens for speed, battery, a radar of nearby sites and your cargo. Leaving the dock switches to Follow by itself.
+- A **walkable home**: a two-storey inflatable habitat about 10 m across with 14 rooms, furnished from real analogs (NASA's Mars Dune Alpha, HI-SEAS, the Mars Desert Research Station, the ISS). Lamps light each room on its own, sunlight comes in through the windows, and longer, slower steps match the lower gravity. See [docs/HABITAT.md](docs/HABITAT.md).
+- Four camera views. **Overview** looks over the outpost. **Follow** rides behind the rover and turns with it (drag to watch from any side). **Cockpit** puts you in the driver's seat, with live screens for speed, battery, a radar of nearby sites and your cargo. Leaving the dock switches to Follow by itself. **Walk** puts you inside the home.
 - A **map** in the corner shows the whole area. Click a site on it to plan a rover trip, or anywhere else to look there.
 - **Settings → Graphics**: *Auto* adapts to the device (it lowers detail if the game runs slowly), *High* adds glow and soft shadows, *Ultra* adds ambient occlusion, sharper shadows, a finer ground mesh and more pebbles and never steps down on its own (for fast computers), *Low* is for older computers. On a fast desktop, *Auto* also tries Ultra's ambient occlusion and edge smoothing after a few smooth seconds, and steps back if frames start to slip.
 - **Settings** also has *High contrast* (solid panels, brighter text, stronger outlines), *Larger text*, *Reduce motion* and *Sound* (interface sounds, the Geiger counter, and a quiet background: life-support hum everywhere, wind only on Mars, the rover's motors).
@@ -56,7 +59,7 @@ Needs Node.js 20 or newer.
 ```bash
 npm install
 npm run dev        # http://127.0.0.1:5173
-npm test           # simulation, mission, rover and advisor tests
+npm test           # simulation, mission, rover, advisor, home and walking tests
 npm run build      # type check + production build in dist/
 npm run preview    # serve dist/ on http://127.0.0.1:5175
 ```
@@ -75,7 +78,11 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Pause · speed | top-right buttons | Space · 1 2 3 |
 | Camera on base · rover | Camera button in the Rover panel | C · F |
 | Look somewhere else · plan a trip | click the map (top right) | |
-| Camera view: Overview · Follow · Cockpit | View buttons (bottom right); drag to look around | V |
+| Camera view: Overview · Follow · Cockpit · Walk | View buttons (bottom right); drag to look around | V |
+| Walk inside the home | **Walk** view button, or **Go inside** on the habitat's card | V |
+| Walk · look (walking) | stick on the left, drag on the right | W A S D / arrows, Shift to go faster; mouse (click the view to capture it, Esc to let go) |
+| Look closely · use (suit up, airlock, shelter, repair) | **Use** button | E |
+| Take a tour of the home | **Take a tour** (top) | |
 | Restart the mission from the start | **Restart mission** on the title screen, or above the goals in a mission (asks first) | |
 | Skip the tutorial | **Skip tutorial** on the title screen, the mission briefing, above the goals or on the CAPCOM card | |
 | Go straight to Mars | **Go to Mars** on the title screen, the briefing of a Moon mission, or above the goals | |
@@ -87,7 +94,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 - **Settings → Unlock every mission** opens the whole campaign immediately.
 - **For teachers** (title screen) lists learning goals, NGSS connections and discussion questions for each mission.
 - **Science library** links every fact to its NASA source.
-- See [docs/JUDGES.md](docs/JUDGES.md) for a 5-minute demo and how ASTRA answers the challenge, and [docs/SCIENCE.md](docs/SCIENCE.md) for the numbers and what is simplified.
+- See [docs/JUDGES.md](docs/JUDGES.md) for a 5-minute demo, a 60-second "step inside" demo and how ASTRA answers the challenge, [docs/SCIENCE.md](docs/SCIENCE.md) for the numbers and what is simplified, and [docs/HABITAT.md](docs/HABITAT.md) for the design of the home.
 
 ## Project layout
 
@@ -99,15 +106,19 @@ src/sim/      pure, deterministic simulation (no React, no DOM), with tests
   advisor.ts    plain-language advice and forecasts
   rover.ts      driving, collisions, A* autopilot
   world.ts      map: terrain, pads, sites, crater, rocks
+  home.ts       the walkable home's floor plan, walking and collision
+  interior.ts   what the inside shows for the mission's state; the crew's routine
+  inspect.ts    things to look at closely, with live numbers and sources
+  outside.ts    walking outside in a suit
 src/state/    Zustand stores: game loop, UI, tutorial scripts
-src/scene/    Three.js world: procedural models, terrain, sky, effects
+src/scene/    Three.js world: procedural models, terrain, sky, effects, the inside of the home (interior/), walking (walk.ts)
 src/ui/       HUD, panels, overlays, tutorial coach, screens, dialogs
 docs/         judges' guide, science notes, architecture
 ```
 
 ## Accessibility
 
-Lexend typeface (designed for reading ease), large hit targets, keyboard shortcuts, focus outlines, text plus icons (never colour alone), an optional read-aloud voice, larger text and reduced-motion settings, and a touch drive pad.
+Lexend typeface (designed for reading ease), large hit targets, keyboard shortcuts, focus outlines, text plus icons (never colour alone), an optional read-aloud voice, larger text and reduced-motion settings, and a touch drive pad. Walking has touch controls, a drag fallback when the mouse can't be captured, and settings for field of view, look speed, inverted look and head bob (off with Reduce motion); alarms in the home come with signs and screen text, not only sound.
 
 ## License
 
