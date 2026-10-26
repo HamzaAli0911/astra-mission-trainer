@@ -75,7 +75,8 @@ function shellHeightAt(r: number) {
 const BANDS = [0.46, 1.4, 2.4, 3.4, 4.25, 5.35, 6.05, 6.75, 7.35];
 /** Vertical restraint straps every 15°. */
 const STRAPS = 24;
-const AIRLOCK = { bearing: 180, y: 1.45, r: 0.95, from: 4.95, to: 7.15 };
+/** Where the campus's link corridor joins the shell (south): its half-width and the top of its roof (see sim/base.ts). */
+const LINK = { bearing: 180, half: 2.0, top: 4.1 };
 const LADDER = 125;
 const MAST = { bearing: 45, r: 3.6 };
 
@@ -88,8 +89,8 @@ function inOpening(bearing: number, y: number, margin: number) {
     const half = (((w.w / 2 + 0.12 + margin) / R) * 180) / Math.PI;
     if (angleDiff(bearing, w.bearing) < half && Math.abs(y - cy) < w.h / 2 + 0.12 + margin) return true;
   }
-  const half = (((AIRLOCK.r + 0.15 + margin) / HOME.shell) * 180) / Math.PI;
-  return angleDiff(bearing, AIRLOCK.bearing) < half && y < AIRLOCK.y + AIRLOCK.r + 0.2 + margin;
+  const half = (((LINK.half + 0.15 + margin) / HOME.shell) * 180) / Math.PI;
+  return angleDiff(bearing, LINK.bearing) < half && y < LINK.top + 0.2 + margin;
 }
 /** How close a shell point is to a window (1 at its frame, 0 well clear): the fabric is stiffened there. */
 function nearWindow(bearing: number, y: number) {
@@ -277,8 +278,7 @@ export function buildHabitat(view: ModuleView, planet: Planet) {
     strap = fabric("#c9ced6", 0.85),
     frame = metal("#a7afbb", 0.4),
     dark = metal("#5d6573", 0.5),
-    seal = rubber("#3a3f47"),
-    white = paint(C.white, 0.5, 0.1);
+    seal = rubber("#3a3f47");
   contactShadow(g, 6.6, 6.6, 0.6, 0.02);
   // Foundation ring with anchors driven into the ground.
   lathe(g, "hab2-base", [[4.85, 0.02], [5.5, 0.02], [5.58, 0.09], [5.58, 0.32], [5.4, 0.4], [4.85, 0.4]], dark, 0, 0, 0, 96);
@@ -314,52 +314,12 @@ export function buildHabitat(view: ModuleView, planet: Planet) {
     mesh(geo(`hab2-plate-${w.w}-${w.h}`, () => platePlate(w.w, w.h)), paint("#dfe2e6", 0.55, 0.1), pane, 0, 0, -0.05);
   }
 
-  // Airlock tunnel toward the rover dock (south, +z).
-  const tunnelLen = AIRLOCK.to - AIRLOCK.from,
-    tz = (AIRLOCK.from + AIRLOCK.to) / 2;
-  cyl(g, AIRLOCK.r, AIRLOCK.r, tunnelLen, white, 0, AIRLOCK.y, tz, 48).rotation.x = Math.PI / 2;
-  for (const z of [5.5, 6.05, 6.6, 7.05]) torus(g, AIRLOCK.r + 0.015, 0.045, frame, 0, AIRLOCK.y, z);
-  // Two suitports on the tunnel's flanks, for quick trips outside without bringing dust in.
-  for (const sx of [-1, 1]) {
-    const port = new THREE.Group();
-    port.position.set(sx * (AIRLOCK.r + 0.02), AIRLOCK.y + 0.05, 6.35);
-    port.rotation.y = (sx * Math.PI) / 2;
-    g.add(port);
-    torus(port, 0.32, 0.05, frame, 0, 0, 0);
-    cyl(port, 0.29, 0.29, 0.05, paint(C.off, 0.5, 0.15), 0, 0, 0, 24).rotation.x = Math.PI / 2;
-    label(port, "SUITPORT", 0.42, 0, 0.44, 0.03);
-  }
-  // The outer pressure door: a domed hatch in a reinforced frame, with gasket, hinges and a locking wheel.
-  const hz = AIRLOCK.to + 0.03;
-  torus(g, 0.84, 0.09, frame, 0, AIRLOCK.y, hz);
-  torus(g, 0.74, 0.035, seal, 0, AIRLOCK.y, hz + 0.02);
-  const hatch = lathe(g, "hatch", [[0, 0.08], [0.45, 0.07], [0.66, 0.035], [0.7, 0], [0.66, -0.03], [0, -0.03]], paint(C.off, 0.5, 0.2), 0, AIRLOCK.y, hz + 0.04, 40);
-  hatch.rotation.x = Math.PI / 2;
-  for (const dy of [-0.4, 0.4]) {
-    rbox(g, 0.2, 0.18, 0.16, 0.03, dark, 0.86, AIRLOCK.y + dy, hz + 0.08);
-    cyl(g, 0.035, 0.035, 0.26, frame, 0.86, AIRLOCK.y + dy, hz + 0.1, 10);
-  }
-  torus(g, 0.17, 0.022, frame, 0, AIRLOCK.y, hz + 0.19);
-  for (let i = 0; i < 3; i++) strut(g, 0, AIRLOCK.y, hz + 0.19, Math.cos((i / 3) * Math.PI * 2) * 0.17, AIRLOCK.y + Math.sin((i / 3) * Math.PI * 2) * 0.17, hz + 0.19, 0.012, frame);
-  cyl(g, 0.04, 0.04, 0.06, frame, 0, AIRLOCK.y, hz + 0.19, 10).rotation.x = Math.PI / 2;
-  windowPane(g, 0.2, 0.2, 0.1, frame, glass("#9fb8cc", 0.4), seal, 0, AIRLOCK.y + 0.37, hz + 0.12, 0.04);
-  // Entry deck and steps down to the ground.
-  const dz = hz + 0.45;
-  panel(g, 1.8, 0.8, 0.06, 0.02, paint("#4a5263", 0.8, 0.3), 0, 0.5, dz).rotation.x = -Math.PI / 2;
-  grille(g, 1.6, 0.64, 9, dark, frame, 0, 0.535, dz).rotation.x = -Math.PI / 2;
-  for (const [y, z] of [[0.32, dz + 0.52], [0.15, dz + 0.8]]) panel(g, 1.45, 0.3, 0.05, 0.02, paint("#4a5263", 0.8, 0.3), 0, y, z).rotation.x = -Math.PI / 2;
-  for (const sx of [-1, 1]) {
-    strut(g, sx * 0.86, 0.05, dz + 0.4, sx * 0.86, 0.5, dz + 0.4, 0.035, frame);
-    pipe(g, [[sx * 1.0, 0.55, hz - 0.3], [sx * 1.0, 1.4, hz - 0.18], [sx * 0.94, 1.55, hz + 0.4], [sx * 0.86, 1.1, dz + 0.42], [sx * 0.86, 0.55, dz + 0.5]], 0.025, frame, 6);
-  }
-  // Porch light, status lamp and an access panel beside the door.
-  box(g, 0.5, 0.08, 0.12, paint(C.dark, 0.5), 0, AIRLOCK.y + AIRLOCK.r + 0.12, hz - 0.08);
-  box(g, 0.42, 0.04, 0.04, light("#fff1d6", 2.2), 0, AIRLOCK.y + AIRLOCK.r + 0.08, hz - 0.01);
-  view.status = statusLamp(g, 0.66, AIRLOCK.y + AIRLOCK.r + 0.12, hz - 0.35);
-  rbox(g, 0.32, 0.42, 0.08, 0.03, paint(C.grey, 0.5, 0.3), -0.95, AIRLOCK.y + 0.1, hz - 0.1);
-  box(g, 0.2, 0.12, 0.01, light("#5ee0ff", 1.0), -0.95, AIRLOCK.y + 0.17, hz - 0.055);
-  label(g, "AIRLOCK 1", 0.8, AIRLOCK.r + 0.015, AIRLOCK.y + 0.55, 5.75).rotation.y = Math.PI / 2;
-  label(g, "AIRLOCK 1", 0.8, -AIRLOCK.r - 0.015, AIRLOCK.y + 0.55, 5.75).rotation.y = -Math.PI / 2;
+  // The link corridor to the campus joins the shell to the south (built with the campus); a collar seals the join.
+  const collarZ = Math.sqrt(HOME.shell ** 2 - LINK.half ** 2) - 0.05;
+  box(g, LINK.half * 2 + 0.3, 0.16, 0.5, frame, 0, LINK.top - 0.4, collarZ + 0.2);
+  for (const sx of [-1, 1]) box(g, 0.16, LINK.top - 0.4, 0.5, frame, sx * (LINK.half + 0.07), (LINK.top - 0.4) / 2, collarZ + 0.2);
+  view.status = statusLamp(g, LINK.half + 0.45, 3.4, collarZ - 0.2);
+  label(g, "HAB-1", 1.1, 0, LINK.top + 0.25, collarZ + 0.05);
 
   // Cupola on the crown: an eight-sided ring of windows with a top pane.
   const cy = 7.86;

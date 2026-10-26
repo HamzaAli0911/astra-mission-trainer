@@ -2,26 +2,29 @@ import { describe, expect, it } from "vitest";
 import { createState, updateDock } from "./engine";
 import { approachPoint, canOccupy, clearLine, drive, followRoute, forwardOf, planRoute, ROVER, STOP, tripCost } from "./rover";
 import type { Rover } from "./types";
-import { DOCK, HABITAT_RADIUS, rocksNear, ROCKS, SITES, SITE_REACH } from "./world";
+import { CRATER, DOCK, HABITAT_RADIUS, rocksNear, ROCKS, SITES, SITE_REACH } from "./world";
 
 const fwd = { ...STOP, forward: true };
-const rover = (x = 0, z = 30, heading = 0): Rover => ({ ...createState("free-moon").rover, x, z, heading, docked: false });
+/** Open graded ground in front of the garage, with room all round; and a long clear lane east along the aprons. */
+const OPEN = { x: 33, z: 90 };
+const LANE = { x: -80, z: 76, heading: -Math.PI / 2 };
+const rover = (x = OPEN.x, z = OPEN.z, heading = 0): Rover => ({ ...createState("free-moon").rover, x, z, heading, docked: false });
 
 describe("driving", () => {
   it("drives forward along its heading (0 faces north, −z)", () => {
-    const out = drive(rover(0, 30, 0), fwd, 0.5, [], "moon");
-    expect(out.z).toBeLessThan(30);
-    expect(Math.abs(out.x)).toBeLessThan(0.01);
+    const out = drive(rover(OPEN.x, OPEN.z, 0), fwd, 0.25, [], "moon");
+    expect(out.z).toBeLessThan(OPEN.z);
+    expect(Math.abs(out.x - OPEN.x)).toBeLessThan(0.01);
     const f = forwardOf(Math.PI / 2);
     expect(f.x).toBeCloseTo(-1);
   });
   it("tops out at the rover's maximum speed", () => {
-    const out = drive(rover(), fwd, 1, [], "moon");
+    const out = drive(rover(LANE.x, LANE.z, LANE.heading), fwd, 1, [], "moon");
     expect(out.speed).toBeCloseTo(ROVER.maxSpeed, 0);
   });
   it("drains the battery with distance, faster in the dark crater", () => {
-    const open = drive(rover(0, 30, 0), fwd, 0.3, [], "moon");
-    const crater = drive(rover(-66, -48, Math.PI / 2), fwd, 0.3, [], "moon");
+    const open = drive(rover(LANE.x, LANE.z, LANE.heading), fwd, 0.3, [], "moon");
+    const crater = drive(rover(CRATER.x + 6, CRATER.z, Math.PI / 2), fwd, 0.3, [], "moon");
     const used = (r: Rover) => 100 - r.battery;
     expect(used(open)).toBeGreaterThan(0);
     expect(used(crater) / used(open)).toBeGreaterThan(2);
@@ -48,7 +51,7 @@ describe("driving", () => {
     expect(Math.hypot(r.x, r.z)).toBeGreaterThan(HABITAT_RADIUS + ROVER.radius - 0.01);
   });
   it("crawls with a flat battery", () => {
-    const out = drive({ ...rover(), battery: 0 }, fwd, 1, [], "moon");
+    const out = drive({ ...rover(LANE.x, LANE.z, LANE.heading), battery: 0 }, fwd, 1, [], "moon");
     expect(out.speed).toBeLessThanOrEqual(ROVER.crawl + 1e-6);
   });
   it("docks only when it stops on the pad", () => {

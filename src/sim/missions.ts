@@ -329,7 +329,8 @@ export const MISSIONS: Mission[] = [
       { type: "recycler", pad: 4 },
       { type: "greenhouse", pad: 5, light: 1 },
     ],
-    rover: { x: -24.5, z: -108, heading: 2.95, battery: 78 },
+    // Out at the Crater Wall Layers (a few metres from the site, facing home) when the first warning comes.
+    rover: { x: -102.5, z: 158, heading: -1.05, battery: 78 },
     build: ["solar", "battery", "oxygen", "recycler", "greenhouse", "shelter", "lab", "icedrill"],
     shield: true,
     hazards: [

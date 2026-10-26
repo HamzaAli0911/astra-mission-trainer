@@ -4,7 +4,7 @@ import { capacity, DOSE_LIMIT, flows, isBuilt } from "./core";
 import { MODULES, RATES } from "./modules";
 import { daylight, sunlight } from "./planets";
 import type { GameState, ModuleType } from "./types";
-import { PADS } from "./world";
+import { PADS, SITES } from "./world";
 import { mission } from "./missions";
 import { advanceAnswering } from "./harness";
 
@@ -231,7 +231,8 @@ describe("actions", () => {
     const s = createState("free-moon");
     expect(act(s, { type: "collect", site: "ice" }).ok).toBe(false);
     const there = structuredClone(s);
-    there.rover = { ...there.rover, x: -70, z: -46, docked: false };
+    const ice = SITES.find((w) => w.id === "ice")!;
+    there.rover = { ...there.rover, x: ice.x + 2, z: ice.z + 2, docked: false };
     const r = act(there, { type: "collect", site: "ice" });
     expect(r.ok).toBe(true);
     const done = advance(r.state, 1.1);

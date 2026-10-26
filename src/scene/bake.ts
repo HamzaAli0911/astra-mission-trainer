@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Planet } from "../sim/types";
-import { CRATER, cratersNear, FLAT, LANDER, noise, SITES, terrainHeight, WORLD } from "../sim/world";
+import { CRATER, cratersNear, DUNES, graded, LANDER, MESA, noise, SITES, terrainHeight, WORLD } from "../sim/world";
 import { rng } from "./kit";
 
 /**
@@ -36,17 +36,30 @@ export interface MeshArrays {
   index: Uint32Array;
 }
 
+/**
+ * Where a grid line falls: closer together near the colony, further apart towards the horizon (a cubic stretch), so
+ * the big map keeps fine detail where you walk and drive most.
+ */
+const WARP = 0.6;
+export const warp = (v: number) => {
+  const u = v / HORIZON;
+  return HORIZON * (WARP * u + (1 - WARP) * u * u * u);
+};
+
 /** The playable ground, coloured by geology. */
 function terrainArrays(planet: Planet, seg: number): MeshArrays {
   const size = HORIZON * 2;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position;
+  const pos = geo.attributes.position,
+    uv = geo.attributes.uv;
   // The ground is round: past the horizon radius it sinks under the distant hills.
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i),
-      z = pos.getZ(i);
-    pos.setY(i, terrainHeight(x, z, planet) - 40 * smooth(HORIZON - 1, HORIZON + 2, Math.hypot(x, z)));
+    const x = warp(pos.getX(i)),
+      z = warp(pos.getZ(i));
+    pos.setXYZ(i, x, terrainHeight(x, z, planet) - 40 * smooth(HORIZON - 1, HORIZON + 2, Math.hypot(x, z)), z);
+    // Texture coordinates follow the ground itself, so the detail texture isn't stretched by the grid.
+    uv.setXY(i, (x + HORIZON) / size, 1 - (z + HORIZON) / size);
   }
   geo.computeVertexNormals();
   const nrm = geo.attributes.normal;
@@ -70,9 +83,8 @@ function terrainArrays(planet: Planet, seg: number): MeshArrays {
     // Steep ground shows darker, fresher rock.
     const slope = 1 - nrm.getY(i);
     c.lerp(dark, Math.min(0.55, slope * 2.2));
-    // The outpost area is trampled and a little brighter.
-    const r = Math.hypot(x, z);
-    c.lerp(bright, (1 - smooth(FLAT - 10, FLAT + 4, r)) * 0.22);
+    // The colony's graded ground is trampled and a little brighter.
+    c.lerp(bright, (1 - smooth(0, 12, graded(x, z))) * 0.22);
     for (const k of cratersNear(x, z)) {
       const d = Math.hypot(x - k.x, z - k.z) / k.r;
       if (d < 0.95) c.lerp(crater, (1 - smooth(0.5, 0.95, d)) * (k === CRATER ? 0.9 : 0.35));
@@ -95,8 +107,8 @@ function terrainArrays(planet: Planet, seg: number): MeshArrays {
         const streak = Math.abs(Math.sin(x * 0.09 + Math.sin(z * 0.05) * 3 + z * 0.02));
         if (streak < 0.12) c.lerp(dark, (1 - streak / 0.12) * (1 - dd / 50) * 0.7);
       }
-      if (y > 1.5 && Math.hypot((x + 30) * 0.8, z + 132) < 32) c.lerp(tmp.set(Math.sin(y * 3.1) > 0 ? "#c98a62" : "#8a4a33"), 0.5);
-      c.lerp(tmp.set("#c4805a"), smooth(70, 25, Math.hypot(x - 40, z - 112)) * 0.4);
+      if (y > 1.5 && Math.hypot((x - MESA.x) * 0.8, z - MESA.z) < 32) c.lerp(tmp.set(Math.sin(y * 3.1) > 0 ? "#c98a62" : "#8a4a33"), 0.5);
+      c.lerp(tmp.set("#c4805a"), smooth(87, 31, Math.hypot(x - DUNES.x, z - DUNES.z)) * 0.4);
     }
     // Frost mixed into the regolith on the floor of the permanently dark crater.
     const cd = Math.hypot(x - CRATER.x, z - CRATER.z) / CRATER.r;
@@ -312,7 +324,7 @@ export function bakePlanet(planet: Planet, fine = false): Baked {
   return {
     planet,
     fine,
-    terrain: terrainArrays(planet, fine ? 520 : 340),
+    terrain: terrainArrays(planet, fine ? 600 : 400),
     horizon: horizonArrays(planet),
     detail: detailPixels(planet),
     earth: planet === "moon" ? earthPixels() : null,

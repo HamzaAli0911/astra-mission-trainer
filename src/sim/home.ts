@@ -1,3 +1,5 @@
+import { campusWalls, cellAt, HQ_STAIR, hqStairY, MEZZANINE, onHqStair } from "./base";
+
 /**
  * The Mars home: a two-storey inflatable habitat on a rigid core. One floor plan, shared by the 3D model,
  * the first-person walking and the tests, so what you see is exactly where you can walk.
@@ -367,12 +369,16 @@ export function partitions(level: Level) {
   return out;
 }
 
-/** Where the walker can be: on a floor, or on the stair (between the two). */
-export type Where = Level | "stair";
+/**
+ * Where the walker can be: on a floor (0: the ground floor of Hab-1 and the whole campus, 1: Hab-1's upper floor,
+ * 2: the command HQ's mezzanine), or on a stair between floors (Hab-1's, or the HQ's).
+ */
+export type Floor = Level | 2;
+export type Where = Floor | "stair" | "hq-stair";
 
 let cache: Map<Where, Seg[]> | null = null;
-/** Every wall, rail and piece of furniture that blocks the walker, for a floor or the stair. */
-export function walls(where: Where): Seg[] {
+/** Every wall, rail and piece of furniture in Hab-1 that blocks the walker, for one of its floors or its stair. */
+export function walls(where: Level | "stair"): Seg[] {
   if (!cache) cache = new Map();
   const hit = cache.get(where);
   if (hit) return hit;
@@ -421,13 +427,54 @@ export function walls(where: Where): Seg[] {
   cache.set(where, segs);
   return segs;
 }
+
+/** Walls in 2 m cells (each listed in every cell it comes within half a metre of), so walking checks stay quick. */
+const GRID = 2;
+let grids: Map<Where, { all: Seg[]; cells: Map<string, Seg[]> }> | null = null;
+function gridFor(where: Where) {
+  if (!grids) grids = new Map();
+  let g = grids.get(where);
+  if (g) return g;
+  const all = where === "hq-stair" || where === 2 ? campusWalls(where) : where === 0 ? [...walls(0), ...campusWalls(0)] : walls(where);
+  const cells = new Map<string, Seg[]>();
+  for (const s of all) {
+    const pad = 0.5;
+    for (let i = Math.floor((Math.min(s.ax, s.bx) - pad) / GRID); i <= Math.floor((Math.max(s.ax, s.bx) + pad) / GRID); i++)
+      for (let j = Math.floor((Math.min(s.az, s.bz) - pad) / GRID); j <= Math.floor((Math.max(s.az, s.bz) + pad) / GRID); j++) {
+        const key = `${i},${j}`;
+        const list = cells.get(key);
+        if (list) list.push(s);
+        else cells.set(key, [s]);
+      }
+  }
+  g = { all, cells };
+  grids.set(where, g);
+  return g;
+}
+/** Everything that blocks the walker anywhere they can be: Hab-1 and the campus around it. */
+export const walkWalls = (where: Where) => gridFor(where).all;
+const NO_SEGS: Seg[] = [];
+/** The walls near a point (within half a metre of its 2 m cell). */
+export const wallsNear = (where: Where, x: number, z: number) => gridFor(where).cells.get(`${Math.floor(x / GRID)},${Math.floor(z / GRID)}`) ?? NO_SEGS;
+/** The walls that could cross the box between two points. */
+function wallsBetween(where: Where, a: { x: number; z: number }, b: { x: number; z: number }) {
+  const g = gridFor(where);
+  const i0 = Math.floor(Math.min(a.x, b.x) / GRID),
+    i1 = Math.floor(Math.max(a.x, b.x) / GRID),
+    j0 = Math.floor(Math.min(a.z, b.z) / GRID),
+    j1 = Math.floor(Math.max(a.z, b.z) / GRID);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 400) return g.all;
+  const out = new Set<Seg>();
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) for (const s of g.cells.get(`${i},${j}`) ?? NO_SEGS) out.add(s);
+  return out;
+}
 /**
  * Can you see (and reach) from a to b without anything solid in between? Closed doors block, open ones don't;
  * `through` names a piece of furniture you are looking at, whose own edges don't count.
  */
 export function lineClear(where: Where, a: { x: number; z: number }, b: { x: number; z: number }, open: (door: string) => boolean = () => false, through?: string) {
   const cross = (ox: number, oz: number, px: number, pz: number, qx: number, qz: number) => (px - ox) * (qz - oz) - (pz - oz) * (qx - ox);
-  for (const s of walls(where)) {
+  for (const s of wallsBetween(where, a, b)) {
     if ((s.door && open(s.door)) || (through && s.block === through)) continue;
     const d1 = cross(a.x, a.z, b.x, b.z, s.ax, s.az),
       d2 = cross(a.x, a.z, b.x, b.z, s.bx, s.bz),
@@ -440,6 +487,7 @@ export function lineClear(where: Where, a: { x: number; z: number }, b: { x: num
 /** Forget the cached walls (after the interior plan adds furniture blocks). */
 export function resetWalls() {
   cache = null;
+  grids = null;
 }
 
 export interface Walker {
@@ -451,12 +499,15 @@ export interface Walker {
 /** The height of the floor under the walker. */
 export function floorY(w: Walker) {
   if (w.where === "stair") return stairY(stairLocal(w.x, w.z).u);
+  if (w.where === "hq-stair") return hqStairY(w.z);
+  if (w.where === 2) return MEZZANINE;
   return HOME.floor[w.where];
 }
 
 /** Push a circle out of every segment it overlaps (sliding along walls). */
-function resolve(p: { x: number; z: number }, segs: Seg[], open: (door: string) => boolean) {
+function resolve(p: { x: number; z: number }, where: Where, open: (door: string) => boolean) {
   const R = HOME.body;
+  const segs = wallsNear(where, p.x, p.z);
   for (let pass = 0; pass < 4; pass++) {
     let moved = false;
     for (const s of segs) {
@@ -492,7 +543,7 @@ export function walk(w: Walker, dx: number, dz: number, open: (door: string) => 
   for (let i = 0; i < steps; i++) {
     p.x += dx / steps;
     p.z += dz / steps;
-    resolve(p, walls(where), open);
+    resolve(p, where, open);
     const { u, w: across } = stairLocal(p.x, p.z);
     const onFlight = Math.abs(u) <= STAIR.half && across >= STAIR.inner && across <= STAIR.outer;
     if (where === 0 && onFlight) where = "stair";
@@ -501,8 +552,23 @@ export function walk(w: Walker, dx: number, dz: number, open: (door: string) => 
       if (u < -STAIR.half) where = 0;
       else if (u > STAIR.half) where = 1;
     }
+    // The HQ stair: on at its low end from the hall, or at its high end from the mezzanine.
+    else if ((where === 0 || where === 2) && onHqStair(p.x, p.z)) where = "hq-stair";
+    else if (where === "hq-stair") {
+      if (p.z < HQ_STAIR.z0) where = 0;
+      else if (p.z > HQ_STAIR.z1) where = 2;
+    }
   }
   return { x: p.x, z: p.z, where };
+}
+
+/** The name of the room or corridor at a point (Hab-1's rooms, or the campus's), for the HUD. */
+export function placeName(x: number, z: number, where: Where) {
+  if (where === "stair" || where === "hq-stair") return where === "stair" ? "Stairs" : "Command HQ: stair";
+  const cell = cellAt(x, z, where === 2 ? 2 : 0);
+  if (cell && where !== 1) return cell.name;
+  if (where === 2) return "Command mezzanine";
+  return roomAt(x, z, where).name;
 }
 
 /** Where a walk starts: just inside the airlock's inner hatch, in the suit room, facing the door out to the hall and the galley. */

@@ -154,7 +154,7 @@ export function createState(id: string, seed = 2026): GameState {
       battery: m.rover.battery,
       docked: false,
     };
-  } else s.rover.heading = headingTo(DOCK, { x: 0, z: 40 });
+  } else s.rover.heading = headingTo(DOCK, { x: DOCK.x, z: DOCK.z + 10 }); // nose to the garage's vehicle door
   if (m.random) addRandomEvents(s, m);
   placeCrew(s);
   s.history.push(snapshot(s));

@@ -31,25 +31,36 @@ v6 code does today, the decisions taken, and what is done. The final report is w
 
 ## 2. Decisions
 
-- **World:** features beyond the campus scale by S = 1.45 (sites, craters, mesa, dunes, rocks); `WORLD` 150 to 270
-  (a 540 m square). Rover speed x1.25 and drain / 1.45 keep trip battery the same and trip time about +16%.
-- **Campus:** data-driven (`src/sim/base.ts`): rectangular buildings in world metres (origin at the old home's
-  centre, x east, z south, y up), rooms, doors (portals), corridors, floors and stairs, stage gating, module
-  bindings, collision segments, nav graph. The v6 round home stays as **Hab-1** (crew residence, building B).
-- **Layout:** the pad field and Hab-1 stay in the middle (pads unchanged except the ice pad and the far reactor
-  pad, which move outward). A pressurised corridor loop runs round the pad field at about 36 m; buildings hang off
-  it. Hab-1's airlock tunnel becomes a pressurised link (T0) south to the loop. EVA moves to the EVA complex (H),
-  which has a yard door (into the pad field) and a surface door (out to the world). The dock moves into the rover
-  garage (I, unpressurised hangar). The reactor pad moves to a remote compound.
-- **Floors:** campus floors at y = 0.5 (Hab-1's ground floor level), so the link needs no ramp.
+- **World:** `WORLD` 150 to 270 (a 540 m square). The campus sits south of Hab-1, so the sites were placed afresh
+  round the rover garage's door rather than scaled: every trip is about 1.25 times its v6 length, and the rover is
+  1.25 times faster with drain per metre divided by 1.25, so trip time and battery stay close to v6 (measured: Moon ice
+  round trip 44% battery and 5.7 h, was about 40% and 5.3 h). Landforms move with their sites (the ice crater, the
+  Martian mesa and dunes, the lunar skylight pit). Craters (70) and rocks (1100) are regenerated around the campus.
+- **Campus:** data-driven (`src/sim/base.ts`): rectangular buildings in world metres (origin at Hab-1's centre, x east,
+  z south, y up), rooms (cells), openings (portals: doors, archways, airlock doors, the garage's vehicle door), floors
+  and the HQ stair, stage gating, module bindings, outdoor solids, porches. The v6 round home stays as **Hab-1**
+  (building B). One edge list per room (`cellEdges`) drives both the walls you bump into and the 3D walls.
+- **Layout:** Hab-1 and its pad field stay in the middle. A pressurised link runs south from Hab-1's old airlock to the
+  command HQ (A, 28 x 22 m, double-height hall and mezzanine). Two spines run west and east from the HQ; the west wing
+  has life support (C), the clinic (F), the storm shelter (K), the greenhouse (E) and logistics (J); the east wing the
+  yard lock, the science lab (D), the rover garage (I, an unpressurised hangar with both rovers' bays), the EVA
+  complex (H: suit room, dust lock, airlock) and engineering (G). The power compound (L) is outdoors to the north-east,
+  the reactor compound far to the east. 31 campus rooms plus Hab-1's 17.
+- **Floors:** campus floors at y = 0.5 (Hab-1's ground floor level), so the link needs no ramp; the HQ mezzanine is
+  floor 2 at 4.8 m, reached by an open stair in the hall.
+- **Airlocks:** a pure, tested state machine (`src/sim/airlock.ts`): the inner door opens only at full pressure, the
+  outer only at vacuum, never both, never while cycling. You suit up at a rack beside the airlock (EVA complex or yard
+  lock), pump down from the chamber's panel, walk out through the open door onto a porch (the walk switches to outside
+  there), and come back the same way. Hab-1's suit room keeps the spare suits.
 - **Staging:** stage 0 (missions 1-2), 1 (missions 3-4), 2 (Mars missions and free play). Unbuilt buildings show
-  as foundations or scaffolding with locked doors.
+  as foundations with scaffolding; their doors stay locked.
 - **Bindings:** campus buildings are support infrastructure; ones bound to modules (life support, greenhouse,
-  power, shelter) show those modules' real state. The storm shelter (Hab-1 core and K) is usable only when a
-  Shelter module is built.
-- **Lighting:** a campus version of the interior shader with a room-id map texture (no leaks through walls),
-  analytic lamps limited to the active sector, distance-to-wall AO.
-- **Saves:** version 2; version 1 saves migrate (rovers return to the garage, routes cleared).
+  power, shelter, lab) are to show those modules' real state (phase E).
+- **Lighting:** every campus vertex carries its room's index (a vertex attribute), so each surface adds up only its own
+  room's ceiling lamps and darkens towards its own walls; lamps and room boxes live in one float texture. No light
+  leaks through walls; no per-pixel lookup.
+- **Saves:** version 2; version 1 saves migrate (both rovers back in their garage bays, the crew rover docked with its
+  load, drives dropped).
 
 ## 3. Phases and status
 
@@ -57,7 +68,11 @@ v6 code does today, the decisions taken, and what is done. The final report is w
   95 deg on tall screens), pitch +-83 deg, E needs a clear line of sight (`home.ts:lineClear`; comms console moved
   to the reachable desk), re-entry checkpoint per mission run, blur listener cleanup, long-frame and line-of-sight
   tests (123 tests).
-- [ ] C. World scale, campus data, collision (walker and rovers), garage dock, EVA complex, terrain plateau, tests.
+- [x] C. World and campus foundations: 540 m world with sites re-placed round the garage (trips measured), graded
+  plateau, campus data and wall generation, walker collision over the whole campus (wall grid), HQ stair and
+  mezzanine, rover and suited-walker collision against buildings (rectangles, doorway notches, porches), garage
+  bays, interlocked airlocks with walk-through outer doors, minimap campus, save v2 migration, proxy 3D campus with
+  per-room lighting. Tests: 142 (campus plan, routes, stairs, airlock interlock, outdoor collision, migration).
 - [ ] B. Benchmark slice: Hab-1 link, south concourse, EVA complex, command HQ at final quality.
 - [ ] D. Remaining buildings and corridors.
 - [ ] E. Interactions tied to the sim (12+), crew walking, tour and wayfinding, sound.

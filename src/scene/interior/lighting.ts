@@ -317,7 +317,7 @@ export function inside<T extends THREE.MeshStandardMaterial>(mat: T, pattern?: P
 /* ---------- Materials for the inside ---------- */
 
 /** Surface detail seen from a step away, not across a crater: fine and quiet (no scratches catching the light). */
-const FINE = {
+export const FINE = {
   panel: { mix: [0, 0, 1, 0], scale: 1.4, bump: 0.02, rough: 0.12, grime: 0.05 },
   pad: { mix: [1, 0, 0.12, 0], scale: 2.6, bump: 0.1, rough: 0.1, grime: 0.05 },
   metal: { mix: [0, 1, 0.1, 0], scale: 3, bump: 0.05, rough: 0.4, grime: 0.06 },

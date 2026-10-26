@@ -3,7 +3,8 @@ import { ChevronDown, ChevronUp, Map as MapIcon } from "lucide-react";
 import { MODULES } from "../sim/modules";
 import { modulePos } from "../sim/rover";
 import type { Planet } from "../sim/types";
-import { DOCK, LANDER, SITES } from "../sim/world";
+import { BUILDINGS, built, stageOf } from "../sim/base";
+import { DOCK, LANDER, SITES, WORLD } from "../sim/world";
 import { MAP_SPAN, RELIEF_SIZE } from "../scene/bake";
 import { anyBaked } from "../scene/prebake";
 import { scene3d } from "../scene/anchors";
@@ -65,7 +66,7 @@ export function Minimap() {
       // Range rings every 50 m around the outpost.
       ctx.strokeStyle = "rgba(255,255,255,0.12)";
       ctx.lineWidth = 1;
-      for (const r of [50, 100]) {
+      for (const r of [50, 100, 150, 200]) {
         ctx.beginPath();
         ctx.arc(toMap(0), toMap(0), (r / (SPAN * 2)) * CSS, 0, Math.PI * 2);
         ctx.stroke();
@@ -89,6 +90,32 @@ export function Minimap() {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
+      // The campus: each building's footprint (foundations dashed until it's built), the outdoor compounds outlined.
+      const stage = stageOf(g.missionId);
+      for (const b of BUILDINGS) {
+        if (b.id === "hab") continue;
+        const r = b.rect,
+          x = toMap(r.x0),
+          y = toMap(r.z0),
+          w = Math.max(1.5, toMap(r.x1) - x),
+          h = Math.max(1.5, toMap(r.z1) - y);
+        if (b.kind === "compound") {
+          ctx.strokeStyle = "rgba(255,214,120,0.75)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([]);
+        } else if (built(b, stage)) {
+          ctx.fillStyle = b.kind === "hangar" ? "rgba(220,200,150,0.85)" : "rgba(226,232,240,0.85)";
+          ctx.fillRect(x, y, w, h);
+        } else {
+          ctx.strokeStyle = "rgba(226,232,240,0.55)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([]);
+        }
+      }
       // The lander and the dock.
       ctx.fillStyle = "#c9ced8";
       ctx.beginPath();
@@ -224,7 +251,9 @@ export function Minimap() {
       <button className="minimap-head" onClick={() => setOpen(!open)} aria-expanded={open} title={open ? "Hide the map" : "Show the map"}>
         <MapIcon size={16} />
         <b>Map</b>
-        <small>300 m × 300 m</small>
+        <small>
+          {WORLD * 2} m × {WORLD * 2} m
+        </small>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
       {open && (

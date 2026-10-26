@@ -1,3 +1,4 @@
+import { hitsCampus } from "./base";
 import { PLANETS } from "./planets";
 import type { Module, Planet, Rover } from "./types";
 import {
@@ -29,8 +30,8 @@ export const STOP: DriveInput = {
   right: false,
 };
 export const ROVER = {
-  maxSpeed: 36, // metres per training hour
-  crawl: 6, // with a flat battery
+  maxSpeed: 45, // metres per training hour
+  crawl: 7.5, // with a flat battery
   turn: 3.4, // radians per training hour
   radius: 1.2,
   /** Battery drain multiplier in the cold, dark crater. */
@@ -42,7 +43,7 @@ export const ROVER = {
  * finds the best building rock in the regolith field, so the crew's trips there bring back more.
  */
 export const SCOUT_ROVER = {
-  top: 20,
+  top: 25,
   /** Training hours for a job at a site. */
   study: 2,
   /** Science points it sends home from each science site. */
@@ -81,6 +82,8 @@ export function canOccupy(x: number, z: number, modules: Module[], margin = 0, b
   }
   if (Math.hypot(LANDER.x - x, LANDER.z - z) < LANDER.r + r) return false;
   for (const k of rocksNear(x, z)) if (Math.hypot(k.x - x, k.z - z) < k.r * 0.85 + r) return false;
+  // The colony's buildings, the garage's walls and the compounds' fences.
+  if (hitsCampus(x, z, r)) return false;
   return true;
 }
 
@@ -248,7 +251,7 @@ export function planRoute(from: Point, target: Point, modules: Module[], block: 
   cost[start] = 0;
   open.push(h(si, sj), start);
   let expanded = 0;
-  while (open.size && expanded < 60000) {
+  while (open.size && expanded < 160000) {
     const current = open.pop();
     if (closed[current]) continue;
     closed[current] = 1;

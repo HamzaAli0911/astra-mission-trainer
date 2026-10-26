@@ -495,7 +495,7 @@ async function walkAll(planet: Planet = "mars") {
       walkInput.keys.add("KeyW");
       hooks().snap!(1);
       frames++;
-      if (walker.where !== "stair") seen.add(`${walker.where}:${roomAt(walker.x, walker.z, walker.where).id}`);
+      if (walker.where === 0 || walker.where === 1) seen.add(`${walker.where}:${roomAt(walker.x, walker.z, walker.where).id}`);
       else seen.add("stair");
       await wait(4);
     }

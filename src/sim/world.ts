@@ -1,17 +1,20 @@
+import { BUILDINGS, type Rect } from "./base";
 import type { ModuleType, Planet } from "./types";
 
 /**
  * Shared surface geography: the renderer, the rover and the simulation all read
  * from here, so the rover always drives on the ground the player sees.
- * Metres. North is −z, east is +x. The outpost is at the origin.
+ * Metres. North is −z, east is +x. Hab-1 (the first home) is at the origin, the
+ * colony campus south of it (see base.ts), and the sites out on the plains around.
  */
-export const WORLD = 150; // drivable half-width (a 300 m square)
-export const FLAT = 27; // radius of the levelled outpost area
+export const WORLD = 270; // drivable half-width (a 540 m square)
+export const FLAT = 27; // radius of the levelled pad field round Hab-1
 
-export const DOCK = { x: 0, z: 14 };
+/** The crew rover's charging bay, inside the rover garage (base.ts, building I), nose to the vehicle door. */
+export const DOCK = { x: 27.5, z: 59 };
 export const DOCK_RADIUS = 2.6;
-/** Where the science rover parks, east of the dock and clear of the road and the pads. */
-export const SCOUT_HOME = { x: 6.5, z: 15.5, heading: Math.PI };
+/** Where the science rover parks: its own bay in the garage, beside the crew rover's. */
+export const SCOUT_HOME = { x: 38.5, z: 59, heading: Math.PI };
 /** The two-storey home's footprint: its shell (5.2 m) plus the regolith shield. See home.ts. */
 export const HABITAT_RADIUS = 5.8;
 
@@ -32,16 +35,16 @@ const ring = (r: number, degrees: number[], from: number): Pad[] =>
   }));
 
 /**
- * Build pads: three rings around the habitat (the south is kept clear for the
- * rover's road), a pad on the edge of the icy crater and a far pad for a reactor.
+ * Build pads: three rings around Hab-1 (the south is kept clear for its link to the campus), a pad on the edge of
+ * the icy crater and a far pad for a reactor, in its fenced compound well away from where people live.
  * A pad's id is its index.
  */
 export const PADS: Pad[] = [
   ...ring(10.5, [30, 90, 150, 210, 270, 330], 0),
   ...ring(17, [0, 60, 120, 240, 300], 6),
   ...ring(22.5, [35, 95, 265, 325], 11),
-  { id: 15, x: -45.5, z: -30.5, kind: "ice" },
-  { id: 16, x: 36, z: 27, kind: "far" },
+  { id: 15, x: -8, z: 142, kind: "ice" },
+  { id: 16, x: 162, z: -68, kind: "far" },
 ];
 
 /** Which pad kinds a module may use. */
@@ -52,7 +55,7 @@ export function padFits(type: ModuleType, kind: PadKind) {
 }
 
 /** The big crater whose floor never sees the Sun: the ice is down there. */
-export const CRATER = { x: -72, z: -48, r: 28, depth: 9 };
+export const CRATER = { x: -30, z: 175, r: 35, depth: 11 };
 
 export interface Crater {
   x: number;
@@ -62,7 +65,7 @@ export interface Crater {
 }
 
 /** A fixed lander that brought the crew: scenery, and the rover drives around it. */
-export const LANDER = { x: -16, z: 27, r: 4.2 };
+export const LANDER = { x: -40, z: 105, r: 4.2 };
 
 export type SiteKind = "ice" | "regolith" | "science";
 export interface Site {
@@ -90,8 +93,8 @@ export const SITES: Site[] = [
   {
     id: "regolith",
     kind: "regolith",
-    x: 78,
-    z: -42,
+    x: 110,
+    z: 172,
     name: { moon: "Boulder Field", mars: "Rock Garden" },
     fact: {
       moon: "Regolith is the loose rock and dust covering the Moon. Builders can pile it up, sinter it or 3D-print it into parts.",
@@ -101,8 +104,8 @@ export const SITES: Site[] = [
   {
     id: "layers",
     kind: "science",
-    x: -26,
-    z: -112,
+    x: -106,
+    z: 160,
     name: { moon: "Crater Wall Layers", mars: "Layered Mesa" },
     fact: {
       moon: "Each layer in a crater wall was laid down by a different impact or lava flow, like pages in a history book.",
@@ -112,8 +115,8 @@ export const SITES: Site[] = [
   {
     id: "boulder",
     kind: "science",
-    x: 104,
-    z: 60,
+    x: 174,
+    z: 105,
     name: { moon: "Rolling Boulder", mars: "Blueberry Patch" },
     fact: {
       moon: "This boulder rolled downhill and left a track behind it. Moonquakes and impacts can set rocks in motion.",
@@ -123,8 +126,8 @@ export const SITES: Site[] = [
   {
     id: "ray",
     kind: "science",
-    x: -98,
-    z: 68,
+    x: -106,
+    z: 97,
     name: { moon: "Bright Ray", mars: "Dust Devil Tracks" },
     fact: {
       moon: "Bright rays are fresh rock blasted out by an impact. Sunlight and space weather slowly darken them over time.",
@@ -134,8 +137,8 @@ export const SITES: Site[] = [
   {
     id: "skylight",
     kind: "science",
-    x: 38,
-    z: 116,
+    x: 33,
+    z: 216,
     name: { moon: "Lava Tube Skylight", mars: "Dune Field" },
     fact: {
       moon: "This pit is a skylight into an old lava tube. Tubes like this could one day shelter astronauts from radiation and wild temperature swings.",
@@ -145,8 +148,8 @@ export const SITES: Site[] = [
   {
     id: "far",
     kind: "science",
-    x: 126,
-    z: -118,
+    x: 231,
+    z: 195,
     name: { moon: "Earthrise Ridge", mars: "Ancient Riverbed" },
     fact: {
       moon: "From high ridges near the south pole, Earth hangs low on the horizon. Seeing Earth matters: it means direct radio contact with Mission Control.",
@@ -156,6 +159,12 @@ export const SITES: Site[] = [
 ];
 export const site = (id: string) => SITES.find((s) => s.id === id);
 export const SITE_REACH = 4.5;
+
+/** Landforms that belong to sites (Mars): the layered mesa behind the layers site, the dunes round the dune field. */
+export const MESA = { x: -127, z: 172.5 };
+export const DUNES = { x: 35.5, z: 211 };
+/** The Moon's lava tube skylight: a small steep pit beside its site. */
+export const PIT = { x: 40.5, z: 222, r: 6 };
 
 /** What one rover trip collects. */
 export const HAUL = {
@@ -182,6 +191,34 @@ export const FOOTPRINT: Record<ModuleType, number> = {
 
 /* ---------- Terrain ---------- */
 
+/**
+ * The graded ground the colony stands on: levelled like a building site under the campus and its aprons, the pad
+ * field round Hab-1, the two outdoor compounds and the lander. `graded` is how far a point is outside it (0 inside):
+ * the natural ground comes back over the next 24 m.
+ */
+const LEVELLED: { rects: Rect[]; circles: { x: number; z: number; r: number }[] } = (() => {
+  const campus = BUILDINGS.filter((b) => b.kind !== "compound" && b.id !== "hab");
+  const rects: Rect[] = [
+    {
+      x0: Math.min(...campus.map((b) => b.rect.x0)) - 4,
+      z0: Math.min(...campus.map((b) => b.rect.z0)) - 4,
+      x1: Math.max(...campus.map((b) => b.rect.x1)) + 4,
+      // (The aprons in front of the garage and the EVA complex reach further south.)
+      z1: Math.max(...campus.map((b) => b.rect.z1)) + 12,
+    },
+    ...BUILDINGS.filter((b) => b.kind === "compound").map((b) => ({ x0: b.rect.x0 - 4, z0: b.rect.z0 - 4, x1: b.rect.x1 + 4, z1: b.rect.z1 + 4 })),
+  ];
+  return { rects, circles: [{ x: 0, z: 0, r: FLAT - 0.5 }] };
+})();
+export function graded(x: number, z: number) {
+  let d = Infinity;
+  for (const c of LEVELLED.circles) d = Math.min(d, Math.max(0, Math.hypot(x - c.x, z - c.z) - c.r));
+  for (const r of LEVELLED.rects) d = Math.min(d, Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1)));
+  return d;
+}
+/** The levelled area's bounds (for scattering things outside it). */
+export const LEVELLED_AREAS = LEVELLED;
+
 const smooth = (a: number, b: number, v: number) => {
   const x = Math.min(1, Math.max(0, (v - a) / (b - a)));
   return x * x * (3 - 2 * x);
@@ -205,17 +242,18 @@ export function noise(x: number, y: number) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 
-/** Scattered smaller craters (deterministic), kept away from the outpost, the sites and the roads. */
+/** Scattered smaller craters (deterministic), kept away from the colony, the sites, the pads and the lander. */
 export const CRATERS: Crater[] = (() => {
   const out: Crater[] = [CRATER];
   let seed = 9173;
   const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
-  for (let i = 0; out.length < 26 && i < 600; i++) {
+  for (let i = 0; out.length < 70 && i < 2000; i++) {
     const x = (rand() * 2 - 1) * (WORLD - 8),
       z = (rand() * 2 - 1) * (WORLD - 8);
-    const r = 3 + rand() ** 2 * 11;
-    if (Math.hypot(x, z) < FLAT + r + 12) continue;
+    const r = 3 + rand() ** 2 * 13;
+    if (graded(x, z) < r * 2.2 + 6) continue;
     if (SITES.some((s) => Math.hypot(s.x - x, s.z - z) < r + 9)) continue;
+    if (PADS.some((p) => Math.hypot(p.x - x, p.z - z) < r * 2.2 + 4)) continue;
     if (out.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + r + 4)) continue;
     if (Math.hypot(x - LANDER.x, z - LANDER.z) < r + 10) continue;
     out.push({ x, z, r, depth: r * (0.18 + rand() * 0.12) });
@@ -269,12 +307,12 @@ export function terrainHeight(x: number, z: number, planet: Planet = "moon") {
     (noise(x * 0.035 + 3 + p, z * 0.035 - 2) - 0.5) * 3.2 +
     (noise(x * 0.11 - p, z * 0.11 + 5) - 0.5) * 0.7;
   if (mars) {
-    // Dunes to the north-east, a layered mesa to the south.
-    const dunes = smooth(70, 30, Math.hypot(x - 40, z - 112));
+    // Dunes round the dune field, a layered mesa behind the layers site.
+    const dunes = smooth(87, 37, Math.hypot(x - DUNES.x, z - DUNES.z));
     y += dunes * (Math.sin(x * 0.32 + z * 0.12) * 0.75 + Math.sin(x * 0.11 - z * 0.05) * 0.5);
     // The mesa: an eroded, irregular outline and stepped sides where harder layers stand out as ledges.
-    const ma = Math.atan2(z + 132, (x + 30) * 0.8);
-    const edge = Math.hypot((x + 30) * 0.8, z + 132) + (noise(Math.cos(ma) * 2.2 + 40, Math.sin(ma) * 2.2 + 40) - 0.5) * 7;
+    const ma = Math.atan2(z - MESA.z, (x - MESA.x) * 0.8);
+    const edge = Math.hypot((x - MESA.x) * 0.8, z - MESA.z) + (noise(Math.cos(ma) * 2.2 + 40, Math.sin(ma) * 2.2 + 40) - 0.5) * 7;
     const mesa = smooth(31, 21, edge);
     const strata = mesa * 7.5,
       layer = 1.25,
@@ -282,16 +320,14 @@ export function terrainHeight(x: number, z: number, planet: Planet = "moon") {
       frac = strata / layer - steps;
     y += (steps + smooth(0.45, 1, frac)) * layer * 0.8 + strata * 0.2;
   }
-  const r = Math.hypot(x, z);
-  // Level out past the outer ring of pads, so every pad sits flat.
-  y *= smooth(FLAT - 0.5, FLAT + 18, r);
-  // Level ground under the lander.
+  // Graded flat under the colony (so every building and pad sits level), and under the lander.
+  y *= smooth(0, 24, graded(x, z));
   y *= smooth(5, 13, Math.hypot(x - LANDER.x, z - LANDER.z));
   for (const c of cratersNear(x, z)) y = crater(y, x, z, c);
   // Skylight pit (Moon): a small steep hole beside the site.
   if (!mars) {
-    const s = Math.hypot(x - 44, z - 121);
-    if (s < 6) y -= 5 * (1 - (s / 6) ** 2);
+    const s = Math.hypot(x - PIT.x, z - PIT.z);
+    if (s < PIT.r) y -= 5 * (1 - (s / PIT.r) ** 2);
   }
   // Mountains rise past the edge of the drivable area (a rounded square, with a wandering foot).
   const ax = Math.abs(x) / WORLD,
@@ -325,12 +361,14 @@ export const ROCKS: Rock[] = (() => {
     PADS.every((s) => Math.hypot(s.x - x, s.z - z) > r + 4) &&
     Math.hypot(x - LANDER.x, z - LANDER.z) > r + 6 &&
     Math.hypot(x - CRATER.x, z - CRATER.z) > CRATER.r * 0.55;
-  for (let i = 0; rocks.length < 460 && i < 8000; i++) {
+  for (let i = 0; rocks.length < 1100 && i < 20000; i++) {
     const x = (rand() * 2 - 1) * (WORLD + 30),
       z = (rand() * 2 - 1) * (WORLD + 30);
-    if (Math.hypot(x, z) < FLAT + 4) continue;
-    // Keep the rover's road south of the dock clear.
-    if (Math.abs(x) < 6 && z > 10 && z < 40) continue;
+    // None on the graded ground (it was cleared), and few just beyond it.
+    const g = graded(x, z);
+    if (g < 4 || (g < 14 && rand() < 0.7)) continue;
+    // Keep the rover's road out of the garage clear.
+    if (Math.abs(x - DOCK.x - 5.5) < 12 && z > 60 && z < 104) continue;
     const r = 0.25 + rand() ** 2.6 * 2.6;
     if (!clear(x, z, r)) continue;
     rocks.push({ x, z, r, solid: r > 1.3 });

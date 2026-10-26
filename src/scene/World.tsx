@@ -30,8 +30,11 @@ import { pressTyre, seat, squashableTyres, Wheel } from "./drive";
 import { buildScout, poseArm, poseScout, SCOUT } from "./models/scout";
 import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData, type Interior } from "./interior";
 import { HOME as HOME_PLAN } from "../sim/home";
-import { insideEnvironment } from "./interior/lighting";
+import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
+import { buildCampus } from "./campus/structure";
+import { campusLight } from "./campus/lighting";
+import { building, PORTALS, rectDistance, stageOf } from "../sim/base";
 import { useWalk, walker } from "../state/walk";
 import { interiorState } from "../sim/interior";
 
@@ -342,6 +345,11 @@ export function World() {
       const dock = buildDock(planet);
       dock.position.set(DOCK.x, terrainHeight(DOCK.x, DOCK.z, planet), DOCK.z);
       scene.add(dock);
+      // The colony campus round Hab-1: each building's outside, and its inside (drawn only near where you walk).
+      const campus = buildCampus(planet, stageOf(useGame.getState().game.missionId));
+      for (const p of campus.parts.values()) p.inside.traverse((o) => o.layers.set(INSIDE_LAYER));
+      scene.add(campus.group);
+      let garageDoor = 0;
 
       if (!(await slice())) return;
       const pads = PADS.map((p) => {
@@ -407,7 +415,7 @@ export function World() {
       useWalk.getState().set({ ready: false });
       const homeAt = modulePos({ pad: -1 });
       const homeOrigin = new THREE.Vector3(homeAt.x, terrainHeight(homeAt.x, homeAt.z, planet), homeAt.z);
-      const walkCtl = walkController(renderer.domElement, planet, () => interior, (x, z) => Math.max(heightAt(x, z), bumps.top(x, z)));
+      const walkCtl = walkController(renderer.domElement, planet, () => interior, (x, z) => Math.max(heightAt(x, z), bumps.top(x, z)), () => campus.doors);
       const baseExposure = renderer.toneMappingExposure;
       let exposure = baseExposure,
         screensAt = -1;
@@ -1314,6 +1322,22 @@ export function World() {
         const homeState = view === "walk" || interior?.group.visible ? interiorState(g) : null;
         walkCtl.update(dt, view === "walk", !!(ui.modal || ui.briefing || ui.debrief || st.alert || g.choice), homeState);
         runCamera(g, dt);
+        // The campus: a building's inside is drawn while you walk near it, or look in from close by; its lamps follow Hab-1's.
+        {
+          const ex = view === "walk" ? walker.x : camera.position.x,
+            ez = view === "walk" ? walker.z : camera.position.z;
+          for (const [id, part] of campus.parts) part.inside.visible = rectDistance(building(id).rect, ex, ez).d < (view === "walk" ? 42 : 14);
+          campusLight.uCampusLampColor.value.copy(insideLight.uLampColor.value);
+          campusLight.uCampusEnvTint.value.copy(insideLight.uEnvTint.value);
+          campusLight.uCampusFill.value = insideLight.uFill.value * 1.2;
+          campus.lit.emissive.copy(insideLight.uEnvTint.value);
+          // The garage's big door rolls up as either rover comes near it.
+          const v = PORTALS.find((p) => p.id === "garage-vehicle")!;
+          const close = [g.rover, g.scout].some((r) => r && Math.hypot(r.x - v.x, r.z - v.z) < 15);
+          const was = garageDoor;
+          garageDoor = THREE.MathUtils.clamp(garageDoor + (close ? dt : -dt) / 3, 0, 1);
+          if (garageDoor !== was) campus.doors.find((d) => d.id === v.id)?.set(garageDoor * garageDoor * (3 - 2 * garageDoor));
+        }
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
         const near = !!interior && (view === "walk" || camera.position.distanceTo(homeOrigin) < 24);
         if (interior) interior.group.visible = near;
@@ -1490,10 +1514,11 @@ export function World() {
             return;
           }
           insideEnv = insideEnvironment(renderer);
-          built.group.traverse((o) => {
-            const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-            if (m?.isMeshStandardMaterial) m.envMap = insideEnv!.texture;
-          });
+          for (const root of [built.group, ...[...campus.parts.values()].map((p) => p.inside)])
+            root.traverse((o) => {
+              const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+              if (m?.isMeshStandardMaterial && !m.transparent) m.envMap = insideEnv!.texture;
+            });
           placeInterior(built, homeOrigin.x, homeOrigin.y, homeOrigin.z);
           built.group.visible = false;
           scene.add(built.group);

@@ -6,7 +6,6 @@ import { INSPECTS } from "../sim/inspect";
 import { activeHazard } from "../sim/core";
 import { SUIT_HOURS, WALKER } from "../sim/engine";
 import { PLANETS } from "../sim/planets";
-import { AIRLOCK_SECONDS } from "../scene/walk";
 import { HOUR_SECONDS, useGame } from "../state/game";
 import { useUI } from "../state/ui";
 import { leaveWalk, useWalk, walker, walkInput } from "../state/walk";
@@ -191,26 +190,19 @@ function SuitHud({ outside }: { outside: boolean }) {
   );
 }
 
-/** The airlock cycling: the pressure falls to vacuum (or rises back to a breathable 101 kPa); it can be skipped. */
+/** An airlock cycling round you: the pressure falls to vacuum (or rises back to a breathable 101 kPa); it can be hurried. */
 function Airlock() {
   const lock = useWalk((s) => s.airlock);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!lock) return;
-    const t = setInterval(() => tick((n) => n + 1), 100);
-    return () => clearInterval(t);
-  }, [lock]);
   if (!lock) return null;
-  const k = Math.min(1, (performance.now() / 1000 - lock.t0) / AIRLOCK_SECONDS);
-  const kpa = Math.round(lock.dir === "out" ? 101 * (1 - k) : 101 * k);
+  const kpa = lock.kpa;
   return (
-    <div className="airlock" role="dialog" aria-label="Airlock">
+    <div className="airlock" role="status" aria-label="Airlock">
       <b>{lock.dir === "out" ? "Airlock: pumping the air out" : "Airlock: letting the air back in"}</b>
       <div className="gauge">
         <span style={{ width: `${(kpa / 101) * 100}%` }} />
       </div>
       <p>
-        {kpa} kPa {lock.dir === "out" ? "→ 0 (the outside)" : "→ 101 (like home)"}
+        {kpa} kPa {lock.dir === "out" ? "→ 0 (the outside)" : "→ 101 (like home)"} · {lock.status}
       </p>
       {lock.dir === "out" && (
         <p className="airlock-note">
@@ -224,7 +216,7 @@ function Airlock() {
           walkInput.use = true;
         }}
       >
-        Skip
+        Hurry it
       </button>
     </div>
   );

@@ -42,7 +42,7 @@ export const PLANETS: Record<Planet, PlanetSpec> = {
     habitatNight: 2.5,
     oxygenPower: 1.5,
     oxygenWater: 0.23,
-    roverDrain: 0.16,
+    roverDrain: 0.128,
     gravity: 1.62,
   },
   mars: {
@@ -56,7 +56,7 @@ export const PLANETS: Record<Planet, PlanetSpec> = {
     habitatNight: 2,
     oxygenPower: 3.5,
     oxygenWater: 0,
-    roverDrain: 0.18,
+    roverDrain: 0.144,
     gravity: 3.71,
   },
 };

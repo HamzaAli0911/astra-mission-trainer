@@ -56,8 +56,8 @@ export interface WalkStore {
   locked: boolean;
   /** The inspect card open now (an id from sim/inspect), or null. */
   card: string | null;
-  /** The airlock cycling (out to the surface, or back in), and when it started (seconds). */
-  airlock: { dir: "out" | "in"; t0: number } | null;
+  /** An airlock cycling round you (pumping down for the surface, or filling with air): its pressure and what it's doing. */
+  airlock: { id: string; dir: "out" | "in"; kpa: number; status: string } | null;
   /** The home tour's step (0–5), or null. */
   tour: number | null;
   /** The inside has been built (it's put together in the background once the mission is on screen). */
@@ -121,7 +121,7 @@ useUI.subscribe((s, prev) => {
     if (checkpoint?.mission === here) Object.assign(walker, { x: checkpoint.x, z: checkpoint.z, where: checkpoint.where, yaw: checkpoint.yaw, pitch: checkpoint.pitch });
     if (speed !== 1) useGame.setState({ speed: 1 });
   } else if (prev.view === "walk") {
-    if (!walker.outside && walker.where !== "stair")
+    if (!walker.outside && walker.where !== "stair" && walker.where !== "hq-stair")
       checkpoint = { mission: useGame.getState().game.missionId, x: walker.x, z: walker.z, where: walker.where, yaw: walker.yaw, pitch: walker.pitch };
     const back = useWalk.getState().back;
     if (back && useGame.getState().speed === 1) useGame.setState({ speed: back.speed });

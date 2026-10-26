@@ -1,6 +1,7 @@
 import { MISSIONS } from "../sim/missions";
 import type { GameState } from "../sim/types";
 import type { Point } from "../sim/rover";
+import { DOCK, SCOUT_HOME } from "../sim/world";
 import { useGame, type Speed } from "./game";
 import { useUI } from "./ui";
 
@@ -12,7 +13,8 @@ import { useUI } from "./ui";
 const KEY = "astra-trainer-save-v1";
 
 export interface SavedMission {
-  v: 1;
+  /** 1: the first outpost's map; 2: the colony campus's (sites, dock and far pads moved). */
+  v: 1 | 2;
   at: number;
   game: GameState;
   route: Point[];
@@ -21,12 +23,26 @@ export interface SavedMission {
   tutorial: number | null;
 }
 
+/**
+ * Bring a save from an older version up to date. Version 1 saves come from the smaller map before the campus was
+ * built: positions there mean nothing now, so both rovers go back to their bays in the garage (the crew rover docks,
+ * keeping its charge and any load it was carrying, which it unloads there), and any planned drive is dropped. Modules
+ * stay on their pads (a pad keeps its number when it moves).
+ */
+export function migrate(save: SavedMission): SavedMission {
+  if (save.v === 2) return save;
+  const g = save.game;
+  g.rover = { ...g.rover, x: DOCK.x, z: DOCK.z, heading: Math.PI, speed: 0, docked: true, task: null };
+  if (g.scout) g.scout = { ...g.scout, x: SCOUT_HOME.x, z: SCOUT_HOME.z, heading: SCOUT_HOME.heading, speed: 0, task: null };
+  return { ...save, v: 2, game: g, route: [], target: null };
+}
+
 export function readSave(): SavedMission | null {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as SavedMission | null;
-    if (!raw || raw.v !== 1 || !raw.game || raw.game.status !== "playing") return null;
+    if (!raw || (raw.v !== 1 && raw.v !== 2) || !raw.game || raw.game.status !== "playing") return null;
     if (!MISSIONS.some((m) => m.id === raw.game.missionId)) return null;
-    return raw;
+    return migrate(raw);
   } catch {
     return null;
   }
@@ -44,7 +60,7 @@ export function saveNow() {
   const st = useGame.getState(),
     ui = useUI.getState();
   if (ui.screen !== "game" || ui.briefing || st.game.status !== "playing") return;
-  const save: SavedMission = { v: 1, at: Date.now(), game: st.game, route: st.route, target: st.target, speed: st.speed, tutorial: ui.tutorial };
+  const save: SavedMission = { v: 2, at: Date.now(), game: st.game, route: st.route, target: st.target, speed: st.speed, tutorial: ui.tutorial };
   try {
     localStorage.setItem(KEY, JSON.stringify(save));
   } catch {

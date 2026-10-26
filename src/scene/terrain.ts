@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Planet } from "../sim/types";
-import { CRATER, FLAT, noise, ROCKS, terrainHeight, WORLD } from "../sim/world";
+import { hitsCampus } from "../sim/base";
+import { CRATER, graded, MESA, noise, ROCKS, terrainHeight, WORLD } from "../sim/world";
 import { DETAIL_SIZE, HORIZON, PALETTE, type Baked, type MeshArrays } from "./bake";
 import { addDetail, DETAIL, detailTexture } from "./surface";
 import { rng } from "./kit";
@@ -95,7 +96,7 @@ export function buildTerrain(baked: Baked) {
         float rocky = smoothstep(0.12, 0.42, 1.0 - tn.y);
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * rockTint, rocky * 0.75);
         #ifdef MARS
-          float mesaBands = smoothstep(46.0, 24.0, length((vTPos.xz - vec2(-30.0, -132.0)) * vec2(0.8, 1.0))) * rocky;
+          float mesaBands = smoothstep(46.0, 24.0, length((vTPos.xz - vec2(${MESA.x.toFixed(1)}, ${MESA.z.toFixed(1)})) * vec2(0.8, 1.0))) * rocky;
           float bandPhase = vTPos.y * 3.2 + sin(vTPos.x * 0.07) * 0.8;
           vec3 bandCol = mix(vec3(0.78, 0.55, 0.4), vec3(1.12, 0.92, 0.74), smoothstep(0.3, 0.7, fract(bandPhase * 0.5)));
           diffuseColor.rgb *= mix(vec3(1.0), bandCol, mesaBands * 0.8);
@@ -115,7 +116,7 @@ export function buildTerrain(baked: Baked) {
           float h = (rk.a * 0.6 + rk.b * 0.4) * rocky * 0.06 * fade;
           #ifdef MARS
             // The mesa's flanks: sedimentary layers as alternating bands and small ledges.
-            float mesa = smoothstep(46.0, 24.0, length((vTPos.xz - vec2(-30.0, -132.0)) * vec2(0.8, 1.0))) * rocky;
+            float mesa = smoothstep(46.0, 24.0, length((vTPos.xz - vec2(${MESA.x.toFixed(1)}, ${MESA.z.toFixed(1)})) * vec2(0.8, 1.0))) * rocky;
             float layerPhase = vTPos.y * 3.2 + sin(vTPos.x * 0.07) * 0.8;
             h += smoothstep(0.35, 0.65, fract(layerPhase)) * 0.05 * mesa * fade;
             float dune = smoothstep(72.0, 28.0, length(vTPos.xz - vec2(40.0, 112.0)));
@@ -284,7 +285,7 @@ export function buildRocks(baked: Baked, pebbles = true, fine = false) {
   });
   if (pebbles) {
     // Two sizes: small pebbles are simple (20 triangles), larger ones get more shape and cast shadows on Ultra.
-    const count = fine ? 7000 : 3600;
+    const count = fine ? 10000 : 5200;
     const small = new THREE.InstancedMesh(rockGeometry(66, 0, 0.65, 2), mat, count),
       large = new THREE.InstancedMesh(rockGeometry(71, 1, 0.7, 3), mat, Math.ceil(count * 0.45));
     const smallSize = reach(small.geometry),
@@ -292,10 +293,12 @@ export function buildRocks(baked: Baked, pebbles = true, fine = false) {
     let ns = 0,
       nl = 0;
     for (let i = 0; i < count * 3 && ns + nl < count; i++) {
-      const x = (r() * 2 - 1) * (WORLD + 40),
-        z = (r() * 2 - 1) * (WORLD + 40);
-      const d = Math.hypot(x, z);
-      if (d < 9 || (d < FLAT && r() < 0.75)) continue;
+      // Most of them round the colony and out to its nearer sites, where you see the ground up close.
+      const near = r() < 0.55;
+      const x = near ? (r() * 2 - 1) * 150 : (r() * 2 - 1) * (WORLD + 40),
+        z = near ? 40 + (r() * 2 - 1) * 150 : (r() * 2 - 1) * (WORLD + 40);
+      // Swept off the graded ground (mostly), and never under a building.
+      if ((graded(x, z) < 1 && r() < 0.8) || hitsCampus(x, z, 0.4)) continue;
       const size = 0.05 + r() ** 3 * 0.32;
       e.set(r() * 0.6, r() * 6, r() * 0.6);
       q.setFromEuler(e);
