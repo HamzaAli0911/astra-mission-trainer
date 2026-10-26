@@ -29,7 +29,7 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 | Parts printer | spares printed in the lab | The ISS printed its first part in 2014 ([NASA](https://www.nasa.gov/missions/station/open-for-business-3-d-printer-creates-first-object-in-space-on-international-space-station/)) |
 | Science rover power | a nuclear generator (RTG): works day and night, never needs charging | Curiosity and Perseverance run on an MMRTG, which turns the heat of decaying plutonium-238 into about 110 W ([NASA fact sheet](https://www.nasa.gov/wp-content/uploads/2015/04/mmrtg.pdf)) |
 | Rocker-bogie suspension | six wheels stay on the ground over rocks; the body tilts only a little | The design used on every NASA Mars rover; Curiosity's wheels are 50 cm across and each has its own motor ([NASA JPL](https://www.jpl.nasa.gov/images/pia13236-new-wheels/), [Perseverance's wheels](https://mars.nasa.gov/mars2020/spacecraft/rover/wheels/)) |
-| Rovers on rocks | wheels climb rocks up to about 0.4 m; bigger boulders block the way | A rocker-bogie can roll over obstacles about as tall as its wheels' diameter ([NASA](https://mars.nasa.gov/mars2020/spacecraft/rover/wheels/)) |
+| Rovers on rocks | they drive over rocks up to about 0.5 m tall (the crew rover's wheels are almost 1 m across); only big boulders block the way | A rocker-bogie can roll over obstacles about as tall as its wheels' diameter ([NASA](https://mars.nasa.gov/mars2020/spacecraft/rover/wheels/)) |
 
 ## Deliberate simplifications
 

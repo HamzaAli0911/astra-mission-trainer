@@ -221,8 +221,11 @@ export class Bumps {
     return best;
   }
 }
-/** The tallest rock a rover drives over (metres above the ground); bigger rocks block it (sim/world.ts). */
-const CLIMBABLE = 0.38;
+/**
+ * The tallest rock the rovers drive over (metres above the ground): about a crew rover wheel's radius, and under
+ * its belly (0.57 m). Only big boulders block them (sim/world.ts).
+ */
+const CLIMBABLE = 0.5;
 /** How far a rock shape reaches sideways and up from its centre (before scaling). */
 function reach(g: THREE.BufferGeometry) {
   const p = g.attributes.position;

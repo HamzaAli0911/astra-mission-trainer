@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createState, updateDock } from "./engine";
 import { approachPoint, canOccupy, clearLine, drive, followRoute, forwardOf, planRoute, ROVER, STOP, tripCost } from "./rover";
 import type { Rover } from "./types";
-import { DOCK, HABITAT_RADIUS, SITES, SITE_REACH } from "./world";
+import { DOCK, HABITAT_RADIUS, rocksNear, ROCKS, SITES, SITE_REACH } from "./world";
 
 const fwd = { ...STOP, forward: true };
 const rover = (x = 0, z = 30, heading = 0): Rover => ({ ...createState("free-moon").rover, x, z, heading, docked: false });
@@ -25,6 +25,21 @@ describe("driving", () => {
     const used = (r: Rover) => 100 - r.battery;
     expect(used(open)).toBeGreaterThan(0);
     expect(used(crater) / used(open)).toBeGreaterThan(2);
+  });
+  it("drives over rocks, but not big boulders", () => {
+    // Head straight at a rock from 6 m away (on open ground, with nothing else solid on the way).
+    const clearRun = (k: { x: number; z: number }) =>
+      [0, 1, 2, 3, 4, 5, 6, 7, 8].every((d) => rocksNear(k.x, k.z + 6 - d).every((o) => o === k || Math.hypot(o.x - k.x, o.z - (k.z + 6 - d)) > o.r + 3));
+    const rock = ROCKS.find((k) => !k.solid && k.r > 0.9 && Math.abs(k.x) < 120 && Math.abs(k.z) < 110 && clearRun(k))!;
+    const boulder = ROCKS.find((k) => k.solid && k.r > 1.5 && Math.abs(k.x) < 120 && Math.abs(k.z) < 110 && clearRun(k))!;
+    expect(rock && boulder).toBeTruthy();
+    const over = (k: { x: number; z: number }) => {
+      let r = rover(k.x, k.z + 6, 0);
+      for (let i = 0; i < 60; i++) r = drive(r, fwd, 0.02, [], "mars");
+      return r;
+    };
+    expect(over(rock).z).toBeLessThan(rock.z - 2);
+    expect(over(boulder).z).toBeGreaterThan(boulder.z + boulder.r * 0.85);
   });
   it("cannot drive through the habitat", () => {
     const s = createState("free-moon");

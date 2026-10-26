@@ -31,8 +31,13 @@ export interface RoverView {
   group: THREE.Group;
   /** The sprung body (everything but the wheels): it bobs a little over bumps. */
   body: THREE.Object3D;
+  /** The spinning wheels, each inside a knuckle that rides up and down (with its fender) as the suspension works. */
   wheels: THREE.Object3D[];
-  /** Resting height of the wheel centres; the scene moves each wheel up or down to meet the ground. */
+  knuckles: THREE.Object3D[];
+  /** Suspension arms (two per wheel, pivoting on the frame) and coil springs (one per wheel), in wheel order. */
+  arms: THREE.Object3D[];
+  springs: THREE.Object3D[];
+  /** Resting height of the wheel centres; the scene moves each knuckle up or down to meet the ground. */
   wheelY: number;
   /** The tyres' rolling radius (to the tread lugs) and their rubber, which squashes where it meets the ground. */
   wheelRadius: number;
@@ -335,37 +340,50 @@ export function buildRover(): RoverView {
     for (const z of [0.66, 1.33]) rbox(body, 0.03, 0.08, 0.05, 0.01, frame, lx + sx * 0.06, 1.62, z);
     pipe(body, [[sx * 1.08, 2.18, 0.4], [sx * 1.14, 2.22, 0.45], [sx * 1.14, 2.22, 1.55], [sx * 1.08, 2.18, 1.6]], 0.018, frame, 5);
   }
-  // Fenders over each wheel (arched), suspension arms, shock absorbers with springs.
+  // Each wheel hangs on a knuckle that rides up and down with the suspension, carrying its arched fender and the
+  // hub carrier; two arms swing up from the frame to it, and a coil spring compresses above it.
   const wheelY = 0.47;
+  const wheels: THREE.Object3D[] = [],
+    knuckles: THREE.Object3D[] = [],
+    arms: THREE.Object3D[] = [],
+    springs: THREE.Object3D[] = [];
+  const coil = metal("#d9a441", 0.35);
   for (const z of [-1.3, 0, 1.3])
     for (const sx of [-1, 1]) {
-      const fender = torus(body, 0.6, 0.06, dark, sx * 1.2, wheelY, z, Math.PI * 0.8);
+      const k = keep(new THREE.Group());
+      k.position.set(sx * 1.2, wheelY, z);
+      g.add(k);
+      knuckles.push(k);
+      const fender = torus(k, 0.6, 0.06, dark, 0, 0, 0, Math.PI * 0.8);
       fender.rotation.set(0, Math.PI / 2, Math.PI * 0.1);
-      const fenderTop = box(body, 0.5, 0.05, 1.05, dark, sx * 1.2, 1.06, z);
-      fenderTop.position.y = 1.07;
-      strut(body, sx * 0.8, 0.86, z - 0.35, sx * 1.05, wheelY, z, 0.04, frame);
-      strut(body, sx * 0.8, 0.86, z + 0.35, sx * 1.05, wheelY, z, 0.04, frame);
+      box(k, 0.5, 0.05, 1.05, dark, 0, 0.6, 0);
+      rbox(k, 0.16, 0.24, 0.24, 0.04, chassisMat, -sx * 0.2, 0, 0);
+      // The arms pivot on the frame and reach the hub carrier.
+      for (const dz of [-0.35, 0.35]) {
+        const arm = keep(new THREE.Group());
+        arm.position.set(sx * 0.8, 0.86, z + dz);
+        body.add(arm);
+        strut(arm, 0, 0, 0, sx * 0.25, wheelY - 0.86, -dz, 0.04, frame);
+        arms.push(arm);
+      }
       cyl(body, 0.06, 0.06, 0.28, chassisMat, sx * 1.02, 0.86, z + 0.18, 10);
-      const spring = pipe(
-        body,
-        Array.from({ length: 13 }, (_, k): [number, number, number] => {
-          const a = k * 1.2;
-          return [sx * 1.02 + Math.cos(a) * 0.075, 0.62 + k * 0.03, z + 0.18 + Math.sin(a) * 0.075];
+      const spring = keep(new THREE.Group());
+      spring.position.set(sx * 1.02, 0.98, z + 0.18);
+      body.add(spring);
+      pipe(
+        spring,
+        Array.from({ length: 13 }, (_, n): [number, number, number] => {
+          const a = n * 1.2;
+          return [Math.cos(a) * 0.075, -0.36 + n * 0.03, Math.sin(a) * 0.075];
         }),
         0.012,
-        metal("#d9a441", 0.35),
+        coil,
         4,
-      );
-      spring.castShadow = false;
-      rbox(body, 0.16, 0.24, 0.24, 0.04, chassisMat, sx * 1.0, wheelY, z);
-    }
-  // Wheels: their own groups so they can spin, and rise or fall to meet the ground.
-  const wheels: THREE.Object3D[] = [];
-  for (const z of [-1.3, 0, 1.3])
-    for (const sx of [-1, 1]) {
+      ).castShadow = false;
+      springs.push(spring);
+      // The wheel spins inside its knuckle.
       const w = keep(new THREE.Group());
-      w.position.set(sx * 1.2, wheelY, z);
-      g.add(w);
+      k.add(w);
       buildWheel(w, sx);
       wheels.push(w);
     }
@@ -385,6 +403,6 @@ export function buildRover(): RoverView {
   }
   cone(arm, 0.04, 0.05, visor("#0a0e16"), 0.06, -0.06, -0.62, 10);
   finalize(g);
-  return { group: g, body, wheels, wheelY, wheelRadius: 0.49, tyre: rubber(TYRE), glass: glassList, heads, tail, beacon, arm };
+  return { group: g, body, wheels, knuckles, arms, springs, wheelY, wheelRadius: 0.49, tyre: rubber(TYRE), glass: glassList, heads, tail, beacon, arm };
 }
 

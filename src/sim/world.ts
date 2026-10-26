@@ -315,7 +315,7 @@ export interface Rock {
   solid: boolean;
 }
 
-/** Deterministic boulders. Big rocks block the rover; pebbles are scenery. */
+/** Deterministic rocks. Only big boulders block the rovers; they drive over the rest (as in the 3D scene). */
 export const ROCKS: Rock[] = (() => {
   const rocks: Rock[] = [];
   let seed = 4111;
@@ -333,7 +333,7 @@ export const ROCKS: Rock[] = (() => {
     if (Math.abs(x) < 6 && z > 10 && z < 40) continue;
     const r = 0.25 + rand() ** 2.6 * 2.6;
     if (!clear(x, z, r)) continue;
-    rocks.push({ x, z, r, solid: r > 0.8 });
+    rocks.push({ x, z, r, solid: r > 1.3 });
   }
   // A cluster of boulders makes the regolith field look like one.
   const field = SITES[1];

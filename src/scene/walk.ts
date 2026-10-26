@@ -39,7 +39,16 @@ interface Usable {
  * dragging if the browser won't), move with the keys or the touch stick, and doors slide open as you come near.
  * Movement is in real seconds, whatever the mission's speed.
  */
-export function walkController(canvas: HTMLCanvasElement, planet: Planet, home: () => Interior | null) {
+export function walkController(
+  canvas: HTMLCanvasElement,
+  planet: Planet,
+  home: () => Interior | null,
+  /** The ground outside, rocks included (a suited walker steps up onto them). */
+  ground: (x: number, z: number) => number = (x, z) => terrainHeight(x, z, planet),
+) {
+  // Outside, the feet follow the ground and climb onto rocks over a moment rather than in a jump.
+  let feet = Number.NaN,
+    feetAt = 0;
   const gravity = PLANETS[planet].gravity;
   const step = stepLength(gravity);
   const open = new Map<string, number>();
@@ -294,8 +303,16 @@ export function walkController(canvas: HTMLCanvasElement, planet: Planet, home: 
       const pace = Math.min(1, Math.hypot(walker.vx, walker.vz) / PACE.walk);
       // One rise and fall per step; low gravity makes for a longer, floatier stride (a real lope outside on the Moon).
       const bob = s.bob && !reduced ? Math.abs(Math.sin(walker.stride * Math.PI)) * 0.018 * Math.sqrt(9.81 / gravity) * pace * (walker.outside ? 1.6 : 1) : 0;
-      if (walker.outside) pos.set(walker.x, terrainHeight(walker.x, walker.z, planet) + SUIT.eye + bob, walker.z);
-      else pos.set(origin.x + walker.x, origin.y + floorY(walker) + HOME.eye - 0.012 + bob, origin.z + walker.z);
+      if (walker.outside) {
+        const now = performance.now() / 1000,
+          to = ground(walker.x, walker.z);
+        feet = !Number.isFinite(feet) || now - feetAt > 0.5 ? to : feet + (to - feet) * Math.min(1, (now - feetAt) * 7);
+        feetAt = now;
+        pos.set(walker.x, feet + SUIT.eye + bob, walker.z);
+      } else {
+        feet = Number.NaN;
+        pos.set(origin.x + walker.x, origin.y + floorY(walker) + HOME.eye - 0.012 + bob, origin.z + walker.z);
+      }
       euler.set(walker.pitch, -walker.yaw, 0, "YXZ");
       quat.setFromEuler(euler);
     },

@@ -403,7 +403,7 @@ export function World() {
       useWalk.getState().set({ ready: false });
       const homeAt = modulePos({ pad: -1 });
       const homeOrigin = new THREE.Vector3(homeAt.x, terrainHeight(homeAt.x, homeAt.z, planet), homeAt.z);
-      const walkCtl = walkController(renderer.domElement, planet, () => interior);
+      const walkCtl = walkController(renderer.domElement, planet, () => interior, (x, z) => Math.max(heightAt(x, z), bumps.top(x, z)));
       const baseExposure = renderer.toneMappingExposure;
       let exposure = baseExposure,
         screensAt = -1;
@@ -1109,7 +1109,7 @@ export function World() {
           left = 0,
           right = 0,
           all = 0;
-        rover.wheels.forEach((w, i) => {
+        rover.knuckles.forEach((w, i) => {
           const lx = w.position.x,
             lz = w.position.z;
           const y = roverWheels[i].update(seat(heightAt, bumps, rv.x + sx * lx - fx * lz, rv.z + sz * lx - fz * lz, fx, fz, rover.wheelRadius), moved > 12 ? 1 : dt);
@@ -1136,11 +1136,16 @@ export function World() {
         rover.group.rotateX(roverBody.pitch);
         rover.group.rotateZ(roverBody.roll);
         if (moved < 12) for (const w of rover.wheels) w.rotation.x -= (moved / rover.wheelRadius) * Math.sign(rv.speed || 1);
-        // The suspension takes up whatever the body's tilt doesn't.
+        // The suspension takes up whatever the body's tilt doesn't: each knuckle rides up or down, its two arms
+        // swing on the frame to follow it, and its spring compresses or stretches.
         rover.group.updateMatrixWorld();
-        rover.wheels.forEach((w, i) => {
-          wheelAt.set(w.position.x, rover.wheelY, w.position.z).applyMatrix4(rover.group.matrixWorld);
-          w.position.y = rover.wheelY + THREE.MathUtils.clamp(hubY[i] - wheelAt.y, -0.22, 0.14);
+        rover.knuckles.forEach((k, i) => {
+          wheelAt.set(k.position.x, rover.wheelY, k.position.z).applyMatrix4(rover.group.matrixWorld);
+          const travel = THREE.MathUtils.clamp(hubY[i] - wheelAt.y, -0.25, 0.42);
+          k.position.y = rover.wheelY + travel;
+          const dx = Math.sign(k.position.x) * 0.25;
+          rover.arms[i * 2].rotation.z = rover.arms[i * 2 + 1].rotation.z = Math.atan2(-0.39 + travel, dx) - Math.atan2(-0.39, dx);
+          rover.springs[i].scale.y = THREE.MathUtils.clamp((0.36 - travel) / 0.36, 0.25, 1.7);
         });
         rover.group.updateMatrixWorld();
         rover.wheels.forEach((w, i) => pressTyre(tyres[i], w, rover.wheelRadius, roverWheels[i].squash));
