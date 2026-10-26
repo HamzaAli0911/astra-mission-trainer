@@ -36,13 +36,20 @@ export const ROVER = {
   /** Battery drain multiplier in the cold, dark crater. */
   shadowDrain: 2.5,
 };
-/** The science rover: slower than the crew rover, studies a site for longer, and radios the data home. */
+/**
+ * The science rover: slower than the crew rover, and with no cargo bay. It has a job at every site: it studies the
+ * rocks at a science site (and radios the data home), maps the buried ice at the ice site with its radar, and
+ * finds the best building rock in the regolith field, so the crew's trips there bring back more.
+ */
 export const SCOUT_ROVER = {
   top: 20,
-  /** Training hours to study a site. */
+  /** Training hours for a job at a site. */
   study: 2,
-  /** Science points it sends home from each site. */
+  /** Science points it sends home from each science site. */
   science: 8,
+  /** Extra water (L) on each crew ice trip once it has mapped the ice; extra materials once it has prospected. */
+  iceBonus: 20,
+  rockBonus: 15,
   /** How far apart the two rovers keep (their centres). */
   gap: 2.5,
 };

@@ -7,7 +7,7 @@ import { useUI } from "../state/ui";
 import { World } from "../scene/World";
 import { play } from "../lib/sound";
 import { hush } from "../lib/speech";
-import { Atmosphere, Capcom, Crew, Dock, DrivePad, Goals, nextView, openPause, QuickActions, Toasts, TopBar, useAdvisorHints, ViewSwitcher, WorldLabels, MastcamFrame } from "./hud";
+import { Atmosphere, Capcom, Crew, Dock, DrivePad, Goals, nextView, openPause, openRover, QuickActions, Toasts, TopBar, useAdvisorHints, ViewSwitcher, WorldLabels, MastcamFrame } from "./hud";
 import { Drawer, usePadGuard } from "./panels";
 import { AlertCard, Briefing, ChoiceCard, Debrief } from "./overlays";
 import { Coach } from "./Coach";
@@ -128,7 +128,10 @@ export default function App() {
           panel("power");
           break;
         case "KeyR":
-          panel("rover");
+          openRover("rover");
+          break;
+        case "KeyG":
+          if (st.game.scout && ui.tutorial === null) openRover("scout");
           break;
         case "KeyH": {
           const shelter = st.game.modules.some((m) => m.type === "shelter" && m.built >= 3);

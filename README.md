@@ -28,7 +28,7 @@ The core loop:
 - **Build** modules on pads around the habitat: solar arrays, batteries, an oxygen maker, a water recycler, greenhouses, an ice drill, a storm shelter, a lab and a fission reactor. Every card says what the module does and **its catch**.
 - **Power** panel: what you make vs. what you use, a battery forecast ("at this rate the battery runs out at 03:40"), and a switch for every machine. Turning things off saves power, but they stop working.
 - **Rover**: send it to sites (or drive with WASD/arrows or the on-screen pad) to bring back ice, regolith for building, and science samples. It drains its battery (faster in the cold, dark crater) and recharges on the dock from the outpost's power.
-- **Science rover**: a robotic explorer with rocker-bogie suspension and nuclear power. Pick it in the Rover panel, drive it or send it to a science site, and it studies the rocks and radios the results home. It never needs charging and keeps working through solar storms, but it is slower than the crew rover and can't carry ice or regolith.
+- **Science rover (Scout)**: a robotic explorer with rocker-bogie suspension and nuclear power, with its own **Scout** button (G). Drive it or send it out, and it does a job at every site: it studies the rocks at science sites (+8 science, radioed home), maps the buried ice with radar (crew ice trips then bring 65 L instead of 45) and finds the best building rock in the regolith field (crew trips then bring 45 materials instead of 30). It never needs charging and keeps working through solar storms, but it is slower than the crew rover and can't carry anything home.
 - **Shelter**: during solar storms, move the crew into the shelter. Research and building pause while they hide.
 - **Decisions**: event cards in the middle of every mission where every option costs something (cargo lander, leaks, a sick crew member, meteor showers, dust devils, an overheating battery, a damaged solar array). Some choices come back later: a battery or array left running may fail and need repairs before nightfall. A card shows what you have, and an option you can't afford is greyed out.
 - **CAPCOM** (Jo, at Mission Control) explains, warns before trouble and offers one button that helps. Messages can be read aloud.
@@ -77,7 +77,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Look around | drag; scroll or pinch to zoom; right-drag to slide | |
 | Build · Power · Rover · Shelter | dock buttons | B · P · R · H |
 | Drive the rover | pick a site and press Go, click the ground, or the on-screen pad | W A S D / arrows |
-| Choose which rover you drive | **Crew rover / Science rover** at the top of the Rover panel, or click a rover | |
+| Crew rover · science rover (pick which one you drive) | **Rover** and **Scout** buttons, the switch at the top of the Rover panel, or click a rover | R · G |
 | Pause · speed | top-right buttons | Space · 1 2 3 |
 | Camera on base · rover | Camera button in the Rover panel | C · F |
 | Look somewhere else · plan a trip | click the map (top right) | |

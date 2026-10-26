@@ -38,6 +38,8 @@ export interface ScoutView {
   arm: THREE.Object3D[];
   /** Where the mast camera looks from (in the tilt frame). */
   eye: THREE.Vector3;
+  /** The wheels' aluminium: thin enough to flex a little where they meet the ground. */
+  wheelMetal: THREE.Material;
 }
 
 const mats = () => ({
@@ -385,6 +387,7 @@ export function buildScout(): ScoutView {
     tilt,
     arm: [azimuth, shoulder, elbow, wrist, turret],
     eye: new THREE.Vector3(0, 0.06, -0.2),
+    wheelMetal: m.alu,
   };
 }
 

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { capacity, demandOf, DOSE_LIMIT, flows, isBuilt, isWorking, shieldDone, solarFactor } from "../sim/core";
 import { forecast } from "../sim/advisor";
-import { freePad } from "../sim/engine";
+import { freePad, haulFor } from "../sim/engine";
 import { mission } from "../sim/missions";
 import { BUILD_ORDER, CREW_NEEDS, DAMAGED, MODULES, RATES, REPAIR_COST, SHIELD_COST, SHIELD_TIME, spec } from "../sim/modules";
 import { clockOf, PLANETS } from "../sim/planets";
@@ -461,10 +461,37 @@ function LightSwitch({ m }: { m: Module }) {
 
 /* ---------- Rover ---------- */
 
-function siteInfo(s: Site, planet: "moon" | "mars") {
-  if (s.kind === "ice") return { gives: `+${HAUL.ice.water} L water`, about: planet === "moon" ? "Always dark and very cold: the battery drains faster here." : "Ice hides under the dust here." };
-  if (s.kind === "regolith") return { gives: `+${HAUL.regolith.materials} materials`, about: "Loose rock you can build with." };
+function siteInfo(s: Site, g: GameState) {
+  const planet = g.planet;
+  const scouted = !!g.scout?.studied.includes(s.id);
+  if (s.kind === "ice")
+    return {
+      gives: `+${haulFor(g, "ice")} L water${scouted ? " (ice mapped by the science rover)" : ""}`,
+      about: planet === "moon" ? "Always dark and very cold: the battery drains faster here." : "Ice hides under the dust here.",
+    };
+  if (s.kind === "regolith") return { gives: `+${haulFor(g, "regolith")} materials${scouted ? " (best rock found by the science rover)" : ""}`, about: "Loose rock you can build with." };
   return { gives: `+${HAUL.science.science} science (once)`, about: s.fact[planet] };
+}
+
+/** The science rover's job at a site: what it does there and what that brings. */
+function scoutJob(s: Site, planet: "moon" | "mars") {
+  if (s.kind === "ice")
+    return {
+      verb: "Map the ice",
+      doing: "Mapping the ice at",
+      gives: `Radar map: crew ice trips bring ${HAUL.ice.water + SCOUT_ROVER.iceBonus} L instead of ${HAUL.ice.water}`,
+      about: "Its ground-penetrating radar sees ice buried under the dust, so the crew know exactly where to dig.",
+      Icon: IconIce,
+    };
+  if (s.kind === "regolith")
+    return {
+      verb: "Find the best rock",
+      doing: "Prospecting",
+      gives: `Crew regolith trips bring ${HAUL.regolith.materials + SCOUT_ROVER.rockBonus} materials instead of ${HAUL.regolith.materials}`,
+      about: "It tests the rocks with its arm's tools and finds the best building material.",
+      Icon: IconRock,
+    };
+  return { verb: "Study the rocks", doing: "Studying", gives: `+${SCOUT_ROVER.science} science, radioed home`, about: s.fact[planet], Icon: IconSample };
 }
 
 /** The Rover drawer: pick which rover to drive and send (when the mission has the science rover too). */
@@ -507,7 +534,7 @@ function ScoutPanel() {
   const parked = Math.hypot(sc.x - SCOUT_HOME.x, sc.z - SCOUT_HOME.z) < 3;
   const studying = sc.task ? siteById(sc.task.site) : null;
   const status = studying
-    ? `Studying ${studying.name[g.planet]}… ${Math.round((1 - sc.task!.left / SCOUT_ROVER.study) * 100)}%`
+    ? `${scoutJob(studying, g.planet).doing} ${studying.name[g.planet]}… ${Math.round((1 - sc.task!.left / SCOUT_ROVER.study) * 100)}%`
     : routeLen
       ? target === "home"
         ? "Driving back to its parking spot"
@@ -517,8 +544,12 @@ function ScoutPanel() {
         : near
           ? `At ${near.name[g.planet]}`
           : "Stopped outside";
-  const science = SITES.filter((w) => w.kind === "science").sort(
-    (a, b) => Number(b.id === selected) - Number(a.id === selected) || Math.hypot(sc.x - a.x, sc.z - a.z) - Math.hypot(sc.x - b.x, sc.z - b.z),
+  // Every site has a job: the selected one first, then the jobs still to do, nearest first.
+  const jobs = [...SITES].sort(
+    (a, b) =>
+      Number(b.id === selected) - Number(a.id === selected) ||
+      Number(sc.studied.includes(a.id)) - Number(sc.studied.includes(b.id)) ||
+      Math.hypot(sc.x - a.x, sc.z - a.z) - Math.hypot(sc.x - b.x, sc.z - b.z),
   );
   return (
     <div className="rover-panel scout-panel">
@@ -529,7 +560,7 @@ function ScoutPanel() {
         <div>
           <b>{status}</b>
           <small>
-            Nuclear power (an RTG): it never needs charging · {sc.studied.length} of {science.length} sites studied
+            Nuclear power (an RTG): it never needs charging · {sc.studied.length} of {jobs.length} jobs done
           </small>
         </div>
       </section>
@@ -549,15 +580,16 @@ function ScoutPanel() {
           <Crosshair size={16} /> Camera
         </button>
       </div>
-      <h3 className="section-title">Science sites</h3>
+      <h3 className="section-title">Jobs for the science rover</h3>
       <div className="site-list">
-        {science.map((w) => (
+        {jobs.map((w) => (
           <ScoutSiteCard key={w.id} s={w} g={g} selected={selected === w.id} active={target === w.id} />
         ))}
       </div>
       <p className="hint drive-hint">
-        <Navigation size={14} /> A robot needs no air, food or shelter, so it can keep exploring through a solar storm. It is slower than the crew rover
-        ({SCOUT_ROVER.top} instead of 36 m an hour) and has no cargo bay: it studies rocks where they lie and radios the results home. Drive it with{" "}
+        <Navigation size={14} /> A robot needs no air, food or shelter, so it can keep working through a solar storm. It is slower than the crew rover
+        ({SCOUT_ROVER.top} instead of 36 m an hour) and has no cargo bay: it studies rocks where they lie, maps buried ice with radar and finds the best
+        building rock, so the crew's trips bring back more. Drive it with{" "}
         <kbd className="kbd">W</kbd>
         <kbd className="kbd">A</kbd>
         <kbd className="kbd">S</kbd>
@@ -569,12 +601,12 @@ function ScoutPanel() {
 
 function StudyButton({ site, g }: { site: Site; g: GameState }) {
   const sc = g.scout!;
-  if (sc.task) return <span className="collecting">Studying… {Math.round((1 - sc.task.left / SCOUT_ROVER.study) * 100)}%</span>;
-  if (site.kind !== "science") return <span className="collecting done">No cargo bay: send the crew rover</span>;
-  if (sc.studied.includes(site.id)) return <span className="collecting done">Studied</span>;
+  const job = scoutJob(site, g.planet);
+  if (sc.task) return <span className="collecting">{job.doing}… {Math.round((1 - sc.task.left / SCOUT_ROVER.study) * 100)}%</span>;
+  if (sc.studied.includes(site.id)) return <span className="collecting done">Done here</span>;
   return (
     <button className="btn primary" data-act="study" onClick={() => useGame.getState().act({ type: "study" }) && play("click")}>
-      <IconSample size={17} /> Study here
+      <job.Icon size={17} /> {job.verb}
     </button>
   );
 }
@@ -584,15 +616,18 @@ function ScoutSiteCard({ s, g, selected, active }: { s: Site; g: GameState; sele
   const done = sc.studied.includes(s.id);
   const dist = Math.hypot(sc.x - s.x, sc.z - s.z);
   const here = dist <= SITE_REACH;
+  const job = scoutJob(s, g.planet);
   return (
-    <article className={`site-card science ${selected ? "selected" : ""} ${active ? "active" : ""} ${done ? "done" : ""}`} data-site={s.id}>
+    <article className={`site-card ${s.kind} ${selected ? "selected" : ""} ${active ? "active" : ""} ${done ? "done" : ""}`} data-site={s.id}>
       <span className="site-icon">
-        <IconSample size={22} />
+        <job.Icon size={22} />
       </span>
       <div className="site-info">
-        <h4>{s.name[g.planet]}</h4>
-        <p className="gives">+{SCOUT_ROVER.science} science, radioed home</p>
-        <p className="about">{s.fact[g.planet]}</p>
+        <h4>
+          {s.name[g.planet]} · {job.verb}
+        </h4>
+        <p className="gives">{job.gives}</p>
+        <p className="about">{job.about}</p>
         <div className="chips">
           <span className="chip">{Math.round(dist)} m</span>
           <span className="chip">~{Math.max(1, Math.round((dist / SCOUT_ROVER.top) * 10) / 10)} h away</span>
@@ -714,7 +749,7 @@ function CollectButton({ site, g }: { site: Site; g: GameState }) {
 
 function SiteCard({ s, g, selected, active }: { s: Site; g: GameState; selected: boolean; active: boolean }) {
   const rv = g.rover;
-  const info = siteInfo(s, g.planet);
+  const info = siteInfo(s, g);
   const done = s.kind === "science" && (g.stats.sites.includes(s.id) || rv.cargo.samples.includes(s.id));
   const dist = Math.hypot(rv.x - s.x, rv.z - s.z);
   const [cost, setCost] = useState<{ there: number; back: number } | null>(null);

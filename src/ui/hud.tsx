@@ -40,7 +40,7 @@ import { mission } from "../sim/missions";
 import { MODULES, spec } from "../sim/modules";
 import { clockOf, dayOf, hoursToSunChange, isDaytime, PLANETS } from "../sim/planets";
 import { SITES } from "../sim/world";
-import { useGame, SPEEDS } from "../state/game";
+import { useGame, SPEEDS, type Vehicle } from "../state/game";
 import { useUI, type View } from "../state/ui";
 import { follow } from "../scene/anchors";
 import { enterWalk } from "../state/walk";
@@ -49,7 +49,7 @@ import { speak } from "../lib/speech";
 import { duration } from "./common";
 import { runFix } from "./fixes";
 import { finish } from "./Coach";
-import { IconCapcom, IconDose, IconIce, IconRock, IconRover, IconSample, IconShelter, MODULE_ICON, RESOURCE_ICON } from "./icons";
+import { IconCapcom, IconDose, IconIce, IconRock, IconRover, IconSample, IconScout, IconShelter, MODULE_ICON, RESOURCE_ICON } from "./icons";
 
 /* ---------- Top bar ---------- */
 
@@ -441,6 +441,23 @@ export function Crew() {
 
 /* ---------- Dock (main actions) ---------- */
 
+/** Open the Rover drawer for one rover (and drive that one), or close it if it's already showing that rover. */
+export function openRover(v: Vehicle) {
+  const ui = useUI.getState(),
+    st = useGame.getState();
+  ui.select(null);
+  if (ui.panel === "rover" && st.vehicle === v) {
+    ui.openPanel(null);
+    play("close");
+    return;
+  }
+  st.setVehicle(v);
+  ui.openPanel("rover");
+  play("open");
+  // Show the science rover when you pick it (the crew rover usually sits on the dock in view).
+  if (v === "scout" && useGame.getState().vehicle === "scout") ui.cam("rover");
+}
+
 export function Dock() {
   const d = useGame(
     useShallow((s) => {
@@ -456,11 +473,16 @@ export function Dock() {
         shelter,
         storm: !!activeHazard(g, "storm"),
         hasShelterBuild: mission(g.missionId).build.includes("shelter"),
+        scout: !!g.scout,
+        scoutBusy: !!g.scout?.task,
+        vehicle: s.vehicle,
       };
     }),
   );
   const panel = useUI((s) => s.panel);
-  const toggle = (p: "build" | "power" | "rover") => {
+  // (Tutorials teach the crew rover: the science rover's button waits until they're done.)
+  const tutorial = useUI((s) => s.tutorial !== null);
+  const toggle = (p: "build" | "power") => {
     const ui = useUI.getState();
     ui.select(null);
     ui.togglePanel(p);
@@ -479,12 +501,32 @@ export function Dock() {
         <kbd className="kbd">P</kbd>
         {d.short && <i className="badge danger" aria-label="Power problem" />}
       </button>
-      <button className={`dock-btn ${panel === "rover" ? "on" : ""}`} data-dock="rover" onClick={() => toggle("rover")} aria-pressed={panel === "rover"}>
+      <button
+        className={`dock-btn ${panel === "rover" && (d.vehicle === "rover" || tutorial) ? "on" : ""}`}
+        data-dock="rover"
+        onClick={() => openRover("rover")}
+        aria-pressed={panel === "rover" && d.vehicle === "rover"}
+        title="The crew rover: fetch ice, regolith and samples"
+      >
         <IconRover size={26} />
         <span>Rover</span>
         <kbd className="kbd">R</kbd>
         {d.roverOut && <i className="badge info">{d.task ? "…" : `${d.battery}%`}</i>}
       </button>
+      {d.scout && !tutorial && (
+        <button
+          className={`dock-btn ${panel === "rover" && d.vehicle === "scout" ? "on" : ""}`}
+          data-dock="scout"
+          onClick={() => openRover("scout")}
+          aria-pressed={panel === "rover" && d.vehicle === "scout"}
+          title="The science rover: a robot that studies rocks, maps ice and finds the best building rock"
+        >
+          <IconScout size={26} />
+          <span>Scout</span>
+          <kbd className="kbd">G</kbd>
+          {d.scoutBusy && <i className="badge info">…</i>}
+        </button>
+      )}
       {(d.hasShelterBuild || d.shelter) && (
         <button
           className={`dock-btn shelter ${d.sheltering ? "on" : ""} ${d.storm && !d.sheltering ? "urgent" : ""}`}
@@ -809,7 +851,7 @@ export function Atmosphere() {
 
 export function DrivePad() {
   const setting = useUI((s) => s.settings.pad);
-  const show = useGame((s) => !s.game.rover.docked || useUI.getState().panel === "rover");
+  const show = useGame((s) => !s.game.rover.docked || s.vehicle === "scout" || useUI.getState().panel === "rover");
   const panel = useUI((s) => s.panel);
   const touch = useMemo(() => typeof matchMedia !== "undefined" && matchMedia("(hover: none) and (pointer: coarse)").matches, []);
   if (setting === "off" || (setting === "auto" && !touch)) return null;

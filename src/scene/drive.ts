@@ -33,13 +33,15 @@ export class Wheel {
     readonly sag: number,
     /** The most the tyre can give before the rim would touch. */
     readonly give: number,
+    /** How much of a small rock the tyre swallows (0: none, the wheel rides right up on it). */
+    readonly wrap = 0.45,
   ) {}
   /**
    * Move toward `seat` (where the unsquashed wheel would rest) over dt seconds; returns the centre's height. On a
    * small rock the tyre wraps round some of it, so the wheel rises less than the rock is tall.
    */
   update(seat: { on: number; bare: number }, dt: number) {
-    const target = seat.on - this.sag - Math.min(this.give - this.sag - 0.01, (seat.on - seat.bare) * 0.45);
+    const target = seat.on - this.sag - Math.min(this.give - this.sag - 0.01, (seat.on - seat.bare) * this.wrap);
     if (!Number.isFinite(this.y) || dt <= 0 || dt > 0.5) {
       this.y = target;
       this.v = 0;
@@ -66,9 +68,9 @@ export class Wheel {
  * Give each wheel its own copy of the tyre material that squashes the tread flat where it meets the ground and
  * bulges the sidewalls (one shader program for all of them). The wheel's axle runs along its local x.
  */
-export function squashableTyres(wheels: THREE.Object3D[], tyre: THREE.Material, radius: number) {
+export function squashableTyres(wheels: THREE.Object3D[], tyre: THREE.Material, radius: number, bulge = 0.55) {
   return wheels.map((w) => {
-    const uniforms = { uDown: { value: new THREE.Vector3(0, -1, 0) }, uFlat: { value: radius }, uBulge: { value: 0.55 } };
+    const uniforms = { uDown: { value: new THREE.Vector3(0, -1, 0) }, uFlat: { value: radius }, uBulge: { value: bulge } };
     const mat = (tyre as THREE.MeshStandardMaterial).clone();
     const base = tyre.onBeforeCompile;
     const key = tyre.customProgramCacheKey.bind(tyre);

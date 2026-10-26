@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { SIM_STEP } from "./core";
-import { act, createState, step } from "./engine";
+import { act, createState, haulFor, step } from "./engine";
 import { canOccupy, drive, followRoute, planRoute, ROVER, SCOUT_ROVER } from "./rover";
 import type { GameState } from "./types";
-import { SCOUT_HOME, site, SITES } from "./world";
+import { HAUL, SCOUT_HOME, site } from "./world";
 
 const run = (s: GameState, hours: number) => {
   for (let i = 0; i < Math.round(hours / SIM_STEP); i++) step(s, SIM_STEP);
@@ -80,13 +80,31 @@ describe("the science rover", () => {
     expect(again.message).toMatch(/already studied/);
   });
 
-  it("refuses away from sites and at ice or regolith (it has no cargo bay), and stops if it drives off", () => {
+  it("maps the ice and prospects the regolith, so the crew's trips there bring back more", () => {
+    const ice = site("ice")!,
+      field = site("regolith")!;
+    let s = createState("free-mars", 9);
+    expect(haulFor(s, "ice")).toBe(HAUL.ice.water);
+    Object.assign(s.scout!, { x: ice.x + 1, z: ice.z + 1 });
+    s = act(s, { type: "study" }).state;
+    run(s, SCOUT_ROVER.study + 0.1);
+    expect(haulFor(s, "ice")).toBe(HAUL.ice.water + SCOUT_ROVER.iceBonus);
+    expect(s.feed.at(-1)?.text).toMatch(/mapped the buried ice/);
+    Object.assign(s.scout!, { x: field.x + 1, z: field.z + 1 });
+    s = act(s, { type: "study" }).state;
+    run(s, SCOUT_ROVER.study + 0.1);
+    expect(haulFor(s, "regolith")).toBe(HAUL.regolith.materials + SCOUT_ROVER.rockBonus);
+    expect(act(s, { type: "study" }).message).toMatch(/already done its job/);
+    // A crew trip to the mapped ice brings the bigger load home.
+    Object.assign(s.rover, { x: ice.x + 2, z: ice.z + 2, docked: false });
+    s = act(s, { type: "collect", site: "ice" }).state;
+    run(s, 1.2);
+    expect(s.rover.cargo.water).toBe(HAUL.ice.water + SCOUT_ROVER.iceBonus);
+  });
+
+  it("refuses away from sites, and stops if it drives off", () => {
     const home = createState("free-mars", 9);
     expect(act(home, { type: "study" }).ok).toBe(false);
-    const ice = SITES.find((w) => w.kind === "ice")!;
-    const s = createState("free-mars", 9);
-    Object.assign(s.scout!, { x: ice.x + 1, z: ice.z + 1 });
-    expect(act(s, { type: "study" }).message).toMatch(/no cargo bay/);
     let t = act(atSite(), { type: "study" }).state;
     Object.assign(t.scout!, { x: t.scout!.x + 20 });
     t = run(t, 0.2);

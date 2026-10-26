@@ -366,8 +366,9 @@ export function World() {
       rover.group.traverse((o) => (o.userData.rover = true));
       scene.add(rover.group);
       // Each wheel on its own spring, with a tyre that squashes where it meets the ground; the body rides on them.
-      const tyres = squashableTyres(rover.wheels, rover.tyre, rover.wheelRadius);
-      const roverWheels = rover.wheels.map(() => new Wheel(0.03, 0.12));
+      // (Rubber: it sags a little under the rover's weight, and swallows much of a small rock before the wheel rises.)
+      const tyres = squashableTyres(rover.wheels, rover.tyre, rover.wheelRadius, 0.95);
+      const roverWheels = rover.wheels.map(() => new Wheel(0.035, 0.17, 0.62));
       const hubY = rover.wheels.map(() => 0);
       const roverBody = { y: Number.NaN, pitch: 0, roll: 0 };
       const headlight = new THREE.SpotLight("#fff1d6", 0, 45, 0.6, 0.55, 1.2);
@@ -380,7 +381,9 @@ export function World() {
       scout.group.traverse((o) => (o.userData.scout = true));
       scout.group.position.set(SCOUT_HOME.x, 0, SCOUT_HOME.z);
       scene.add(scout.group);
-      const scoutWheels = scout.spin.map(() => new Wheel(0, 0.015));
+      // Its thin aluminium wheels flex a little over rocks (much less than rubber).
+      const scoutWheels = scout.spin.map(() => new Wheel(0.006, 0.045, 0.3));
+      const scoutTyres = squashableTyres(scout.spin, scout.wheelMetal, SCOUT.R, 0.25);
       const scoutHub = scout.spin.map(() => 0);
       const scoutTracks = trackSystem(planet, 1600);
       scene.add(scoutTracks.mesh);
@@ -1173,6 +1176,8 @@ export function World() {
           scout.group.rotation.set(0, sc.heading, 0);
           poseScout(scout, scoutHub);
           if (!jump) for (const w of scout.spin) w.rotation.x -= (went / SCOUT.R) * Math.sign(sc.speed || 1);
+          scout.group.updateMatrixWorld(true);
+          scout.spin.forEach((w, i) => pressTyre(scoutTyres[i], w, SCOUT.R, scoutWheels[i].squash));
           // Steering: front corners into the turn, rear corners the other way (it can turn on the spot).
           const yaw = jump || dt <= 0 ? 0 : wrap(sc.heading - scoutMotion.heading) / dt;
           scoutMotion.heading = sc.heading;

@@ -45,6 +45,12 @@ export const EVA_CREW = ["maya", "noor"];
 export const WALKER = "alex";
 export const SUIT_HOURS = 8;
 
+/** What one crew rover trip brings back from the ice or the regolith field (more once the science rover has scouted it). */
+export function haulFor(s: GameState, kind: "ice" | "regolith") {
+  const scouted = !!s.scout?.studied.includes(kind);
+  return kind === "ice" ? HAUL.ice.water + (scouted ? SCOUT_ROVER.iceBonus : 0) : HAUL.regolith.materials + (scouted ? SCOUT_ROVER.rockBonus : 0);
+}
+
 /** The site a rover is parked at (within reach of its marker), if any. */
 const siteNear = (r: { x: number; z: number }) => SITES.find((w) => Math.hypot(r.x - w.x, r.z - w.z) <= SITE_REACH);
 
@@ -418,8 +424,8 @@ export function step(s: GameState, dt: number) {
     } else {
       rv.task.left -= dt;
       if (rv.task.left <= 0) {
-        if (where.kind === "ice") rv.cargo.water += HAUL.ice.water;
-        else if (where.kind === "regolith") rv.cargo.materials += HAUL.regolith.materials;
+        if (where.kind === "ice") rv.cargo.water += haulFor(s, "ice");
+        else if (where.kind === "regolith") rv.cargo.materials += haulFor(s, "regolith");
         else {
           rv.cargo.science += HAUL.science.science;
           rv.cargo.samples.push(where.id);
@@ -429,9 +435,9 @@ export function step(s: GameState, dt: number) {
           s,
           "good",
           where.kind === "ice"
-            ? `Ice collected: ${HAUL.ice.water} L of water on board. Drive back to the dock to unload it.`
+            ? `Ice collected: ${haulFor(s, "ice")} L of water on board. Drive back to the dock to unload it.`
             : where.kind === "regolith"
-              ? `Regolith loaded: ${HAUL.regolith.materials} materials on board. Drive back to the dock to unload.`
+              ? `Regolith loaded: ${haulFor(s, "regolith")} materials on board. Drive back to the dock to unload.`
               : `Sample collected at ${where.name[s.planet]}! Bring it home for ${HAUL.science.science} science.`,
         );
       }
@@ -449,8 +455,12 @@ export function step(s: GameState, dt: number) {
       if (sc.task.left <= 0) {
         sc.task = null;
         sc.studied.push(where.id);
-        s.res.science += SCOUT_ROVER.science;
-        feed(s, "good", `The science rover radioed home its study of ${where.name[s.planet]}: +${SCOUT_ROVER.science} science.`);
+        if (where.kind === "science") {
+          s.res.science += SCOUT_ROVER.science;
+          feed(s, "good", `The science rover radioed home its study of ${where.name[s.planet]}: +${SCOUT_ROVER.science} science.`);
+        } else if (where.kind === "ice")
+          feed(s, "good", `The science rover mapped the buried ice at ${where.name[s.planet]} with its radar. Crew trips there now bring back ${haulFor(s, "ice")} L of water.`);
+        else feed(s, "good", `The science rover found the best rock in ${where.name[s.planet]}. Crew trips there now bring back ${haulFor(s, "regolith")} materials.`);
       }
     }
   }
@@ -748,13 +758,21 @@ export function act(prev: GameState, a: Action): Result {
       const sc = s.scout;
       if (!sc) return no("There's no science rover on this mission.");
       const where = siteNear(sc);
-      if (!where) return no("Drive the science rover to a science site first.");
-      if (where.kind !== "science") return no("The science rover has no cargo bay: send the crew rover for ice and regolith.");
-      if (sc.task) return no("The science rover is already studying.");
-      if (sc.studied.includes(where.id)) return no("The science rover has already studied this site.");
+      if (!where) return no("Drive the science rover to a site first.");
+      if (sc.task) return no("The science rover is already busy.");
+      if (sc.studied.includes(where.id))
+        return no(where.kind === "science" ? "The science rover has already studied this site." : "The science rover has already done its job here.");
       sc.task = { site: where.id, left: SCOUT_ROVER.study };
       sc.speed = 0;
-      feed(s, "info", `The science rover unfolds its arm at ${where.name[s.planet]} and starts studying the rocks.`);
+      feed(
+        s,
+        "info",
+        where.kind === "science"
+          ? `The science rover unfolds its arm at ${where.name[s.planet]} and starts studying the rocks.`
+          : where.kind === "ice"
+            ? `The science rover starts mapping the ice under ${where.name[s.planet]} with its ground-penetrating radar.`
+            : `The science rover starts testing the rocks of ${where.name[s.planet]} for the best building material.`,
+      );
       break;
     }
     case "clean": {

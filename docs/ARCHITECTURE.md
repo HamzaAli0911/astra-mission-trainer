@@ -18,7 +18,7 @@ sim (pure)  →  state (Zustand)  →  scene (Three.js) + ui (React)
   - `inspect.ts`: the 14 things you can look at closely inside, each with live rows from the game state and a fact from `library.ts` (the science library, shared with the in-game library).
   - `outside.ts`: walking outside in a suit: ground following, collision with buildings, the lander, the rover and boulders, a 25° slope limit, the map edge.
   - EVA rules live in the engine: the `"eva"` action, the walker's place `"eva"` (full outdoor dose), the suit timer and its warnings.
-  - The science rover (`GameState.scout`) is a second `Rover`, with its own top speed and RTG power (no drain); `rover.ts` drives and routes both, each treating the other as an obstacle (`Block`). The engine's `"study"` action and step handle its studies; the store (`state/game.ts`) keeps which rover you drive (`vehicle`) and an autopilot route for each.
+  - The science rover (`GameState.scout`) is a second `Rover`, with its own top speed and RTG power (no drain); `rover.ts` drives and routes both, each treating the other as an obstacle (`Block`). The engine's `"study"` action and step handle its job at each site (study the rocks for science; map the ice or prospect the regolith, which `haulFor()` turns into bigger crew loads); the store (`state/game.ts`) keeps which rover you drive (`vehicle`) and an autopilot route for each.
 - **`src/state`**
   - `game.ts`: the frame loop. Each animation frame converts real time to training time (3.5 s per hour at 1×, forced to 1× while steering by hand), moves the rover, then advances the simulation in fixed steps. New feed lines become toasts, CAPCOM messages or pausing alerts.
   - `ui.ts`: screens, panels, selection, camera commands, settings and progress (persisted).
