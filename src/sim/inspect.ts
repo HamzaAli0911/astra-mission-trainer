@@ -14,6 +14,8 @@ export interface Inspect {
   level: Level;
   x: number;
   z: number;
+  /** The piece of furniture it is on, if any (its own edges don't hide it). */
+  block?: string;
   /** Live readings: label, value, and whether it's a worry. */
   live: (g: GameState) => Row[];
   fact: (g: GameState) => Fact;
@@ -22,7 +24,7 @@ export type Row = [label: string, value: string, warn?: boolean];
 
 const at = (block: string) => {
   const k = BLOCKS.find((b) => b.id === block)!;
-  return { level: k.level, ...polar(k.bearing, k.r) };
+  return { level: k.level, block, ...polar(k.bearing, k.r) };
 };
 const perDay = (perHour: number) => perHour * 24;
 const fmt = (n: number, d = 0) => (Math.abs(n) < 1e-9 ? "0" : n.toFixed(d));
@@ -163,7 +165,8 @@ export const INSPECTS: Inspect[] = [
   {
     id: "comms",
     title: "Comms console",
-    ...at("command-desk-2"),
+    // (The desk by the door: the middle one can't be reached from anywhere you can stand.)
+    ...at("command-desk-3"),
     live: (g) => [
       ["Signal to Earth", g.planet === "mars" ? "3 to 22 min each way (now about 12)" : "about 1.3 s each way"],
       ["Last message", g.feed.filter((f) => f.kind === "capcom").at(-1)?.text.slice(0, 60) ?? "–"],

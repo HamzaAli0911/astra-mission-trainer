@@ -212,9 +212,10 @@ export function World() {
         const half = THREE.MathUtils.degToRad(21);
         const base = camera.aspect >= 1.2 ? 42 : Math.min(78, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(half) * 1.2) / camera.aspect)));
         if (v === "walk") {
-          // The walking field of view is a setting; on a tall phone screen it widens to show as much side to side.
-          const want = useUI.getState().settings.fov;
-          return camera.aspect >= 1.2 ? want : Math.min(100, THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(THREE.MathUtils.degToRad(want / 2)) * 1.2) / camera.aspect)));
+          // The walking field of view is set side to side (three.js wants the vertical angle): the same width of
+          // view on any screen, up to 95 degrees top to bottom on a tall phone, where it narrows instead.
+          const h = THREE.MathUtils.degToRad(useUI.getState().settings.fovH);
+          return Math.min(95, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(h / 2) / camera.aspect)));
         }
         return v === "cockpit" ? Math.max(base, 62) : v === "chase" ? Math.max(base, 50) : base;
       };

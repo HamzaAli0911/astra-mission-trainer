@@ -33,6 +33,20 @@ export function respawn() {
   clearWalkInput();
 }
 
+/**
+ * Where you were when you last stopped walking indoors (on a floor, not the stair), in this run of the mission:
+ * walking again picks up there rather than back at the start. A restart or another mission forgets it.
+ */
+let checkpoint: { mission: string; x: number; z: number; where: Where; yaw: number; pitch: number } | null = null;
+export const walkCheckpoint = {
+  get: () => checkpoint,
+  forget: () => (checkpoint = null),
+};
+useGame.subscribe((s, prev) => {
+  // (A new run: another mission, the clock going backwards, or a fresh state's single history snapshot.)
+  if (s.game.missionId !== prev.game.missionId || s.game.t < prev.game.t || (s.game !== prev.game && s.game.history.length === 1 && prev.game.history.length > 1)) checkpoint = null;
+});
+
 export interface WalkStore {
   /** The room you are in, for the HUD. */
   room: string;
@@ -103,8 +117,12 @@ useUI.subscribe((s, prev) => {
     const speed = useGame.getState().speed;
     useWalk.setState({ back: { view: prev.view === "walk" ? "orbit" : prev.view, speed }, prompt: null, card: null });
     respawn();
+    const here = useGame.getState().game.missionId;
+    if (checkpoint?.mission === here) Object.assign(walker, { x: checkpoint.x, z: checkpoint.z, where: checkpoint.where, yaw: checkpoint.yaw, pitch: checkpoint.pitch });
     if (speed !== 1) useGame.setState({ speed: 1 });
   } else if (prev.view === "walk") {
+    if (!walker.outside && walker.where !== "stair")
+      checkpoint = { mission: useGame.getState().game.missionId, x: walker.x, z: walker.z, where: walker.where, yaw: walker.yaw, pitch: walker.pitch };
     const back = useWalk.getState().back;
     if (back && useGame.getState().speed === 1) useGame.setState({ speed: back.speed });
     useWalk.setState({ back: null, prompt: null, locked: false, card: null, airlock: null, tour: null });

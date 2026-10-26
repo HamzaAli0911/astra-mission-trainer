@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { blockAxes, BLOCKS, floorY, HOME, PACE, polar, roomAt, stepLength, stride, type Level } from "../sim/home";
+import { blockAxes, BLOCKS, floorY, HOME, lineClear, PACE, polar, roomAt, stepLength, stride, type Level } from "../sim/home";
 import { OUTER_HATCH, SUIT, walkOutside } from "../sim/outside";
 import { REPAIR_COST, spec } from "../sim/modules";
 import { modulePos } from "../sim/rover";
@@ -32,6 +32,8 @@ interface Usable {
   z: number;
   label: string;
   use: () => void;
+  /** The furniture it sits on (its own edges don't hide it from you). */
+  block?: string;
 }
 
 /**
@@ -70,7 +72,7 @@ export function walkController(
     { ...suitSpot, label: "", use: () => (suited() ? act({ type: "eva", on: false }) : act({ type: "eva", on: true })) },
     { ...hatchSpot, label: "", use: () => (suited() ? startAirlock("out") : useGame.getState().toast("Suit up first: Alex's suit is on the rack by the stair.", "info")) },
     // Equipment you can look at closely: live readings and a fact.
-    ...INSPECTS.map((p) => ({ level: p.level, x: p.x, z: p.z, label: `Look at the ${p.title.toLowerCase()}`, use: () => useWalk.getState().set({ card: useWalk.getState().card === p.id ? null : p.id }) })),
+    ...INSPECTS.map((p) => ({ level: p.level, x: p.x, z: p.z, block: p.block, label: `Look at the ${p.title.toLowerCase()}`, use: () => useWalk.getState().set({ card: useWalk.getState().card === p.id ? null : p.id }) })),
   ];
   // The storm drill: inside the shelter, the same shelter action as the HUD's (same rules, same costs).
   const shelterSpot = { level: 0 as Level, ...polar(70, 0.4) };
@@ -187,7 +189,8 @@ export function walkController(
         const s = useUI.getState().settings;
         const k = (walkInput.look.touch ? 0.0045 : 0.0022) * s.look;
         walker.yaw += walkInput.look.x * k;
-        walker.pitch = THREE.MathUtils.clamp(walker.pitch - walkInput.look.y * k * (s.invert ? -1 : 1), -1.3, 1.3);
+        // (Nearly straight down at your feet, or up at the ceiling; never over the top.)
+        walker.pitch = THREE.MathUtils.clamp(walker.pitch - walkInput.look.y * k * (s.invert ? -1 : 1), -1.45, 1.45);
         let ahead = walkInput.stick.y,
           side = walkInput.stick.x,
           turn = 0;
@@ -280,8 +283,9 @@ export function walkController(
           dz = u.z - walker.z;
         const d = Math.hypot(dx, dz);
         const off = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, -dz) - walker.yaw), Math.cos(Math.atan2(dx, -dz) - walker.yaw)));
-        // Outside, things are bigger and further: a longer reach.
-        if (d < (walker.outside ? 2.2 : REACH) && off < (walker.outside ? 0.8 : AIM) && d + off < bestScore) {
+        // Outside, things are bigger and further: a longer reach. Inside, only what you can actually see: not
+        // through a wall, a closed door or another cabinet.
+        if (d < (walker.outside ? 2.2 : REACH) && off < (walker.outside ? 0.8 : AIM) && d + off < bestScore && (u.level === -1 || lineClear(u.level, walker, u, isOpen, u.block))) {
           best = u;
           bestScore = d + off;
         }

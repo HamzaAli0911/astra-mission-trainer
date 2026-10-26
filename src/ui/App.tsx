@@ -73,12 +73,17 @@ export default function App() {
       if (document.hidden && useUI.getState().screen === "game" && !st.paused && !st.held && st.game.status === "playing") st.pause("hidden");
       if (document.hidden) hush();
     };
-    document.addEventListener("visibilitychange", vis);
-    window.addEventListener("blur", () => {
+    // Keys held when the window loses focus would otherwise stay "down".
+    const blur = () => {
       held.clear();
       clearWalkInput();
-    });
-    return () => document.removeEventListener("visibilitychange", vis);
+    };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("blur", blur);
+    return () => {
+      document.removeEventListener("visibilitychange", vis);
+      window.removeEventListener("blur", blur);
+    };
   }, []);
 
   // Keyboard shortcuts. Text fields keep their keys; buttons keep Space and Enter.

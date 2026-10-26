@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createState } from "./engine";
-import { HOME, walls } from "./home";
+import { HOME, lineClear, walls } from "./home";
 import { INSPECTS } from "./inspect";
 
 describe("things to look at inside the home", () => {
@@ -31,7 +31,7 @@ describe("things to look at inside the home", () => {
     expect(INSPECTS.find((p) => p.id === "medical")!.live(g)[0][1]).toContain("dose 7.3 mSv");
   });
 
-  it("can be reached: somewhere to stand within arm's reach of each one", () => {
+  it("can be reached: somewhere to stand within arm's reach of each one, with nothing in the way", () => {
     for (const p of INSPECTS) {
       const segs = walls(p.level);
       let ok = false;
@@ -46,9 +46,18 @@ describe("things to look at inside the home", () => {
             const t = Math.max(0, Math.min(1, ((x - s.ax) * vx + (z - s.az) * vz) / (vx * vx + vz * vz || 1e-9)));
             return Math.hypot(x - s.ax - vx * t, z - s.az - vz * t) >= HOME.body;
           });
-          if (clear) ok = true;
+          // ...and in plain sight of it (doors open), so E reaches it.
+          if (clear && lineClear(p.level, { x, z }, p, () => true, p.block)) ok = true;
         }
       expect(ok, p.id).toBe(true);
     }
+  });
+
+  it("can't be reached through a wall or a closed door", () => {
+    // The oxygen rack, from the galley across the hall: the life-support room's wall and door are in the way.
+    const o2 = INSPECTS.find((p) => p.id === "o2")!;
+    expect(lineClear(0, { x: -3.6, z: 1.2 }, o2, () => false, o2.block)).toBe(false);
+    // From in front of it, it's in plain sight.
+    expect(lineClear(0, { x: o2.x * 0.78, z: o2.z * 0.78 }, o2, () => false, o2.block)).toBe(true);
   });
 });

@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SPAWN } from "../sim/home";
 import { useGame } from "./game";
 import { useUI } from "./ui";
-import { enterWalk, leaveWalk, useWalk, walker, walkInput } from "./walk";
+import { enterWalk, leaveWalk, useWalk, walkCheckpoint, walker, walkInput } from "./walk";
 
 describe("walking inside the home", () => {
   beforeEach(() => {
     useUI.setState({ screen: "game", briefing: false, debrief: false, view: "orbit" });
     useGame.getState().start("red-planet", 7);
     useGame.setState({ paused: false, reason: null });
+    walkCheckpoint.forget();
   });
 
   it("won't start during the briefing, the debrief, or after the mission ends", () => {
@@ -50,6 +51,20 @@ describe("walking inside the home", () => {
     useUI.getState().setView("orbit");
     expect(useGame.getState().speed).toBe(2);
     expect(useGame.getState().paused).toBe(true);
+  });
+
+  it("picks up where you stopped walking indoors, in the same mission; a new mission starts at the airlock", () => {
+    enterWalk();
+    Object.assign(walker, { x: 3.2, z: 1.5, where: 0, yaw: 1.1 });
+    leaveWalk();
+    enterWalk();
+    expect(walker.x).toBeCloseTo(3.2);
+    expect(walker.yaw).toBeCloseTo(1.1);
+    leaveWalk();
+    useGame.getState().start("mars-colony", 3);
+    enterWalk();
+    expect(walker.x).toBeCloseTo(SPAWN.x);
+    leaveWalk();
   });
 
   it("stops walking when you go back to the title screen", () => {

@@ -421,6 +421,22 @@ export function walls(where: Where): Seg[] {
   cache.set(where, segs);
   return segs;
 }
+/**
+ * Can you see (and reach) from a to b without anything solid in between? Closed doors block, open ones don't;
+ * `through` names a piece of furniture you are looking at, whose own edges don't count.
+ */
+export function lineClear(where: Where, a: { x: number; z: number }, b: { x: number; z: number }, open: (door: string) => boolean = () => false, through?: string) {
+  const cross = (ox: number, oz: number, px: number, pz: number, qx: number, qz: number) => (px - ox) * (qz - oz) - (pz - oz) * (qx - ox);
+  for (const s of walls(where)) {
+    if ((s.door && open(s.door)) || (through && s.block === through)) continue;
+    const d1 = cross(a.x, a.z, b.x, b.z, s.ax, s.az),
+      d2 = cross(a.x, a.z, b.x, b.z, s.bx, s.bz),
+      d3 = cross(s.ax, s.az, s.bx, s.bz, a.x, a.z),
+      d4 = cross(s.ax, s.az, s.bx, s.bz, b.x, b.z);
+    if (d1 * d2 < 0 && d3 * d4 < 0) return false;
+  }
+  return true;
+}
 /** Forget the cached walls (after the interior plan adds furniture blocks). */
 export function resetWalls() {
   cache = null;

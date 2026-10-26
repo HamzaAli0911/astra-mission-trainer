@@ -28,8 +28,11 @@ export interface Settings {
   graphics: "auto" | "ultra" | "high" | "low";
   /** Show the map in the corner. */
   minimap: boolean;
-  /** Walking inside: field of view (degrees, 60–90), look speed (0.5–2), invert up and down, head bob. */
-  fov: number;
+  /**
+   * Walking: field of view measured side to side (degrees, 70–100; the camera works out the vertical angle for the
+   * screen's shape), look speed (0.5–2), invert up and down, head bob.
+   */
+  fovH: number;
   look: number;
   invert: boolean;
   bob: boolean;
@@ -53,7 +56,7 @@ const defaults: Settings = {
   pad: "auto",
   graphics: "auto",
   minimap: true,
-  fov: 70,
+  fovH: 85,
   look: 1,
   invert: false,
   bob: true,
@@ -89,7 +92,8 @@ function readSettings(): Settings {
     pad: r.pad === "on" || r.pad === "off" ? r.pad : "auto",
     graphics: r.graphics === "ultra" || r.graphics === "high" || r.graphics === "low" ? r.graphics : "auto",
     minimap: bool(r.minimap, defaults.minimap),
-    fov: num(r.fov, defaults.fov, 60, 90),
+    // (v6 stored a vertical angle as `fov`; it is not carried over.)
+    fovH: num(r.fovH, defaults.fovH, 70, 100),
     look: num(r.look, defaults.look, 0.5, 2),
     invert: bool(r.invert, defaults.invert),
     bob: bool(r.bob, defaults.bob),

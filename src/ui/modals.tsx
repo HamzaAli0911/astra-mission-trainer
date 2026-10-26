@@ -101,7 +101,7 @@ function SettingsDialog({ close }: { close: () => void }) {
       <Toggle label="Larger text" text="Makes all writing bigger." on={s.bigText} set={(v) => set("bigText", v)} />
       <Toggle label="High contrast" text="Solid panels, brighter text and stronger outlines." on={s.contrast} set={(v) => set("contrast", v)} />
       <Toggle label="Reduce motion" text="Fewer animations and camera moves." on={s.motion} set={(v) => set("motion", v)} />
-      <Slider label="Walking: field of view" text="How wide you see while walking inside the home." value={s.fov} min={60} max={90} step={5} unit="°" set={(v) => set("fov", v)} />
+      <Slider label="Walking: field of view" text="How wide you see from side to side while walking." value={s.fovH} min={70} max={100} step={5} unit="°" set={(v) => set("fovH", v)} />
       <Slider label="Walking: look speed" text="How fast the view turns with the mouse or a finger." value={s.look} min={0.5} max={2} step={0.1} unit="×" set={(v) => set("look", v)} />
       <Toggle label="Walking: invert up and down" text="Push the mouse or your finger up to look down, as in a flight simulator." on={s.invert} set={(v) => set("invert", v)} />
       <Toggle label="Walking: head bob" text="A gentle rise and fall with each step (always off with Reduce motion)." on={s.bob} set={(v) => set("bob", v)} />

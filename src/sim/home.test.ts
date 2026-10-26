@@ -155,6 +155,13 @@ describe("the Mars home floor plan", () => {
     expect(Math.abs(v.vz)).toBeLessThan(0.05);
   });
 
+  it("can't tunnel through a wall however long a frame is (a stalled tab, 1 s or more)", () => {
+    // Sprinting straight at the padded wall from the middle of the galley, one huge frame at a time.
+    let w: Stroller = { x: -3.4, z: 1.0, where: 0, vx: -PACE.fast, vz: 0 };
+    for (let i = 0; i < 6; i++) w = stride(w, { x: -1, z: 0 }, PACE.fast, 1.2);
+    expect(Math.hypot(w.x, w.z)).toBeLessThanOrEqual(HOME.lining - HOME.body + 1e-6);
+  });
+
   it("takes longer, slower steps in lower gravity", () => {
     expect(stepLength(9.81)).toBeCloseTo(0.75);
     expect(stepLength(3.71)).toBeGreaterThan(1.1);
