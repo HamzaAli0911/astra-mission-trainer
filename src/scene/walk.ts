@@ -12,7 +12,7 @@ import type { InteriorState } from "../sim/interior";
 import { useGame } from "../state/game";
 import { PLANETS } from "../sim/planets";
 import type { Planet } from "../sim/types";
-import { airlockSound, chime, doorSound, footstep, klaxon } from "../lib/sound";
+import { airlockSound, chime, doorSound, footstep, stormAlarm } from "../lib/sound";
 import { useUI } from "../state/ui";
 import { lockState, useWalk, walker, walkInput } from "../state/walk";
 import type { Interior } from "./interior";
@@ -350,14 +350,14 @@ export function walkController(
 
       // What room you're in, and what you could use.
       if (!walking) return;
-      // Alarms you hear inside: the storm klaxon every few seconds, a chime when the battery or oxygen runs low.
+      // Alarms you hear inside: the storm alarm every few seconds, a chime when the battery or oxygen runs low.
       const alarm = st?.alarm ?? null;
       const now = performance.now() / 1000;
       const heard = `${alarm}|${!!st?.batteryLow}`;
       if (alarm === "storm") {
-        if (now - alarmAt > 2.6) {
+        if (now - alarmAt > 4.2) {
           alarmAt = now;
-          klaxon();
+          stormAlarm();
         }
       } else if (heard !== lastAlarm && (alarm || st?.batteryLow)) chime(alarm === "o2");
       lastAlarm = heard;

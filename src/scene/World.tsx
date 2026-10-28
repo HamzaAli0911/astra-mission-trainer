@@ -34,7 +34,7 @@ import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
 import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
-import { building, PORTALS, rectDistance, stageOf } from "../sim/base";
+import { building, cellAt, PORTALS, rectDistance, stageOf } from "../sim/base";
 import { useWalk, walker } from "../state/walk";
 import { interiorState } from "../sim/interior";
 
@@ -1296,11 +1296,13 @@ export function World() {
         // Storm effects and Geiger clicks.
         streaks.update(clock, controls.target.x, controls.target.z, 0);
         if (storm && ui.settings.sound && !st.paused) {
+          // The dosimeter ticks at random (as particles arrive): a few times a second out in the open, now and then
+          // behind the shelter's shielding.
           const exposed = !g.sheltering || !rv.docked;
           geigerAt -= dt;
           if (geigerAt <= 0) {
             tick();
-            geigerAt = (exposed ? 0.05 : 0.35) + Math.random() * (exposed ? 0.15 : 0.6);
+            geigerAt = -Math.log(1 - Math.random()) / (exposed ? 3.5 : 0.6);
           }
         }
 
@@ -1308,9 +1310,13 @@ export function World() {
         if (clock - ambienceAt > 0.2) {
           ambienceAt = clock;
           const walking = view === "walk";
-          // Inside, the life-support room's machines are loud; the rest of the home is quieter.
-          const machines = walking && !walker.outside && walker.where === 0 && Math.hypot(walker.x, walker.z) > HOME_PLAN.hall && (Math.atan2(walker.x, -walker.z) * 180) / Math.PI > -30 && (Math.atan2(walker.x, -walker.z) * 180) / Math.PI < 30 ? 1.5 : 0;
-          ambience({ on: true, planet, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva, machines });
+          // Inside, the life-support machinery is loud (Hab-1's room, the campus's plant), the server racks and the
+          // workshop less so; the rest of the base is quieter.
+          const indoors = walking && !walker.outside && walker.where === 0;
+          const cell = indoors ? cellAt(walker.x, walker.z, 0) : null;
+          const hab1Eclss = indoors && !cell && Math.hypot(walker.x, walker.z) > HOME_PLAN.hall && Math.abs((Math.atan2(walker.x, -walker.z) * 180) / Math.PI) < 30;
+          const machines = hab1Eclss || cell?.building === "lifesupport" ? 1.5 : cell?.building === "engineering" ? 0.8 : cell?.id === "hq-equipment" ? 0.6 : 0;
+          ambience({ on: true, planet, view, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva, machines });
         }
         // The motors' hum: a faint shiver in the body while it drives (the bumps come from the suspension).
         const bump = reduced ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed);
@@ -1533,7 +1539,7 @@ export function World() {
         });
 
       teardown = () => {
-        ambience({ on: false, planet, dust: 0, drive: 0, time: 0 });
+        ambience({ on: false, planet, view: "orbit", dust: 0, drive: 0, time: 0 });
         cancelAnimationFrame(raf);
         ro.disconnect();
         renderer.domElement.removeEventListener("pointerdown", onDown);

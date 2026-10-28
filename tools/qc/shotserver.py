@@ -25,6 +25,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ext = ".png" if body.startswith("data:image/png") else ".jpg"
             with open(os.path.join(OUT, "shots", name + ext), "wb") as f:
                 f.write(base64.b64decode(body.split(",", 1)[1]))
+        elif body.startswith("data:audio"):
+            # The sound check's renders (src/dev/soundcheck.ts).
+            os.makedirs(os.path.join(OUT, "sounds"), exist_ok=True)
+            with open(os.path.join(OUT, "sounds", name + ".wav"), "wb") as f:
+                f.write(base64.b64decode(body.split(",", 1)[1]))
         else:
             # Numbers (timings, overlap scans, memory): pretty-printed JSON.
             with open(os.path.join(OUT, name + ".json"), "w") as f:

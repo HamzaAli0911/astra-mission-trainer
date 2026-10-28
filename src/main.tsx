@@ -13,7 +13,10 @@ import { startAutosave } from "./state/save";
 const debug = new URLSearchParams(location.search).has("debug");
 if (import.meta.env.DEV || debug) Object.assign(window, { __astra: { useGame, useUI, useWalk } });
 // The quality-control harness (review shots, timing, overlap and memory checks) loads only with ?debug.
-if (debug) void import("./dev/qc");
+if (debug) {
+  void import("./dev/qc");
+  void import("./dev/soundcheck");
+}
 
 class Boundary extends React.Component<{ children: React.ReactNode }, { error: boolean }> {
   state = { error: false };

@@ -1,6 +1,12 @@
 import { useUI } from "../state/ui";
 
-/** Synthesized interface sounds: no audio files are shipped or downloaded. */
+/**
+ * Synthesized sound: no audio files are shipped or downloaded. Interface notes, doors, footsteps and the airlock;
+ * the alarms; and the background: the base's air handling and machinery, the thin Martian wind, the rovers' motors
+ * and the breathing inside a suit. Physics rules: on the Moon nothing outside makes a sound (there's no air), so
+ * outdoors you only hear your own suit, the rover through its cabin, and the radio; on Mars the air is so thin that
+ * the wind is soft and muffled.
+ */
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 
@@ -49,12 +55,8 @@ const SOUNDS: Record<string, Note[]> = {
     [440, 0.12, "triangle", 0.06],
     [370, 0.16, "triangle", 0.06],
   ],
-  danger: [
-    [660, 0.14, "square", 0.035],
-    [440, 0.14, "square", 0.035],
-    [660, 0.14, "square", 0.035],
-    [440, 0.2, "square", 0.035],
-  ],
+  // (An emergency: played with the alarm voice below, not as plain notes.)
+  danger: [],
   toggle: [[880, 0.04, "sine", 0.04]],
   off: [[440, 0.05, "sine", 0.04]],
   rover: [
@@ -87,6 +89,7 @@ export type Sound = keyof typeof SOUNDS;
 export function play(kind: Sound) {
   const a = audio();
   if (!a || !master) return;
+  if (kind === "danger") return synth.alarm(a, master, a.currentTime + 0.01, 2, 0.045);
   let t = a.currentTime + 0.01;
   for (const [freq, length, type = "sine", gain = 0.05] of SOUNDS[kind]) {
     const osc = a.createOscillator(),
@@ -102,24 +105,6 @@ export function play(kind: Sound) {
     osc.stop(t + length + 0.02);
     t += length * 0.85;
   }
-}
-
-/** One Geiger-counter click (radiation storms). */
-export function tick() {
-  const a = audio();
-  if (!a || !master) return;
-  const t = a.currentTime,
-    len = 0.012;
-  const buf = a.createBuffer(1, Math.ceil(a.sampleRate * len), a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 3;
-  const src = a.createBufferSource(),
-    g = a.createGain();
-  g.gain.value = 0.18;
-  src.buffer = buf;
-  src.connect(g);
-  g.connect(master);
-  src.start(t);
 }
 
 /** A short burst of filtered noise, swept from one pitch to another. */
@@ -160,28 +145,6 @@ export function footstep(weight = 1, surface: "floor" | "stair" | "ground" = "fl
 export function airlockSound(out: boolean) {
   burst(6.5, out ? 1400 : 300, out ? 200 : 1300, 0.7, 0.05);
 }
-/** The storm klaxon inside the home: a falling two-tone wail. */
-export function klaxon() {
-  const a = audio();
-  if (!a || !master) return;
-  const t = a.currentTime;
-  for (let i = 0; i < 2; i++) {
-    const o = a.createOscillator(),
-      g = a.createGain();
-    o.type = "sawtooth";
-    o.frequency.setValueAtTime(760, t + i * 0.55);
-    o.frequency.linearRampToValueAtTime(520, t + i * 0.55 + 0.5);
-    g.gain.setValueAtTime(0.0001, t + i * 0.55);
-    g.gain.exponentialRampToValueAtTime(0.035, t + i * 0.55 + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.55 + 0.52);
-    const lp = a.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 1800;
-    o.connect(lp).connect(g).connect(master);
-    o.start(t + i * 0.55);
-    o.stop(t + i * 0.55 + 0.56);
-  }
-}
 /** A soft two-note chime (the battery's getting low; the oxygen's short). */
 export function chime(urgent = false) {
   const a = audio();
@@ -200,110 +163,302 @@ export function chime(urgent = false) {
   });
 }
 
-/* ---------- Background sound ---------- */
+/* ---------- Alarms and the dosimeter ---------- */
 
-type Ambience = {
-  breath: GainNode;
-  hum: GainNode;
-  wind: GainNode;
-  windTone: BiquadFilterNode;
-  motor: GainNode;
-  motorOsc: OscillatorNode;
-};
-let amb: Ambience | null = null;
-
-/** A looping buffer of noise: white, or "brown" (smoothed, deeper) for machinery. */
-function noise(a: AudioContext, seconds: number, brown: boolean) {
-  const buf = a.createBuffer(1, Math.ceil(a.sampleRate * seconds), a.sampleRate);
-  const d = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < d.length; i++) {
-    const w = Math.random() * 2 - 1;
-    last = brown ? (last + 0.02 * w) / 1.02 : w;
-    d[i] = brown ? last * 3.5 : w;
-  }
-  const src = a.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-  return src;
+/** The radiation-storm alarm inside the base: the same calm high-low call as an emergency, every few seconds. */
+export function stormAlarm() {
+  const a = audio();
+  if (a && master) synth.alarm(a, master, a.currentTime + 0.01, 2, 0.03);
+}
+/** One click of the dosimeter's counter (radiation storms): a tiny, crisp tick. */
+export function tick() {
+  const a = audio();
+  if (a && master) synth.click(a, master, a.currentTime, 0.75 + Math.random() * 0.5);
 }
 
-function startAmbience(a: AudioContext, out: GainNode): Ambience {
-  // Life support: fans and pumps, a low rumble with a faint electrical hum.
-  const hum = a.createGain();
-  hum.gain.value = 0;
-  hum.connect(out);
-  const fans = noise(a, 4, true);
-  const low = a.createBiquadFilter();
-  low.type = "lowpass";
-  low.frequency.value = 220;
-  fans.connect(low).connect(hum);
-  fans.start();
-  const mains = a.createOscillator();
-  mains.frequency.value = 58;
-  const mainsLevel = a.createGain();
-  mainsLevel.gain.value = 0.25;
-  mains.connect(mainsLevel).connect(hum);
-  mains.start();
-  // Wind (Mars only: the Moon has no air to carry sound or move dust).
-  const wind = a.createGain();
-  wind.gain.value = 0;
+/* ---------- Background sound ---------- */
+
+/**
+ * The building blocks, written against any audio context and output (the live one, or an offline one for the
+ * sound check in src/dev/soundcheck.ts).
+ */
+const clicks = new WeakMap<BaseAudioContext, AudioBuffer>();
+const loops = new WeakMap<BaseAudioContext, { pink: AudioBuffer; brown: AudioBuffer }>();
+export const synth = {
+  /**
+   * An alarm call: `pairs` of a high and a low tone, each a soft organ-like voice (a sine with quiet overtones), so
+   * it's clear and urgent without the rasp of a saw or square wave.
+   */
+  alarm(a: BaseAudioContext, out: AudioNode, t: number, pairs: number, level: number) {
+    const tone = (f: number, at: number, len: number) => {
+      const g = a.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(level, at + 0.012);
+      g.gain.setValueAtTime(level, at + len - 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+      g.connect(out);
+      [
+        [1, 1],
+        [2, 0.28],
+        [3, 0.1],
+      ].forEach(([k, amp]) => {
+        const o = a.createOscillator(),
+          og = a.createGain();
+        o.frequency.value = f * k;
+        og.gain.value = amp;
+        o.connect(og).connect(g);
+        o.start(at);
+        o.stop(at + len + 0.02);
+      });
+    };
+    for (let i = 0; i < pairs; i++) {
+      tone(988, t + i * 0.56, 0.24);
+      tone(740, t + i * 0.56 + 0.28, 0.24);
+    }
+  },
+  /** A counter's tick: a very short ring at about 3 kHz with a breath of noise, made once and reused. */
+  click(a: BaseAudioContext, out: AudioNode, t: number, loud = 1) {
+    let buf = clicks.get(a);
+    if (!buf) {
+      const n = Math.ceil(a.sampleRate * 0.006);
+      buf = a.createBuffer(1, n, a.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) {
+        const s = i / a.sampleRate;
+        d[i] = Math.exp(-s / 0.0007) * (0.75 * Math.sin(2 * Math.PI * 3100 * s) + 0.25 * (Math.random() * 2 - 1) * Math.exp(-s / 0.0002));
+      }
+      clicks.set(a, buf);
+    }
+    const src = a.createBufferSource(),
+      g = a.createGain();
+    src.buffer = buf;
+    g.gain.value = 0.07 * loud;
+    src.connect(g).connect(out);
+    src.start(t);
+  },
+  /** Ten seconds of pink and of brown noise that loop without a seam (the ends cross-fade into the start). */
+  noise(a: BaseAudioContext) {
+    let n = loops.get(a);
+    if (!n) {
+      n = { pink: loopNoise(a, "pink"), brown: loopNoise(a, "brown") };
+      loops.set(a, n);
+    }
+    return n;
+  },
+};
+
+function loopNoise(a: BaseAudioContext, colour: "pink" | "brown") {
+  const len = Math.ceil(a.sampleRate * 10),
+    fade = Math.ceil(a.sampleRate * 0.5);
+  const raw = new Float32Array(len + fade);
+  let b0 = 0,
+    b1 = 0,
+    b2 = 0,
+    last = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const w = Math.random() * 2 - 1;
+    if (colour === "pink") {
+      // Paul Kellet's economy pink filter: equal energy per octave, the natural sound of moving air.
+      b0 = 0.99765 * b0 + w * 0.099046;
+      b1 = 0.963 * b1 + w * 0.2965164;
+      b2 = 0.57 * b2 + w * 1.0526913;
+      raw[i] = b0 + b1 + b2 + w * 0.1848;
+    } else {
+      // Brown: deeper still (rumble), leaky so it never drifts.
+      last = (last + 0.02 * w) / 1.02;
+      raw[i] = last;
+    }
+  }
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  let peak = 1e-9;
+  for (let i = 0; i < len; i++) {
+    // The first half-second blends from what would have come after the end, so the loop point is seamless.
+    const k = i < fade ? i / fade : 1;
+    d[i] = i < fade ? raw[i] * Math.sqrt(k) + raw[len + i] * Math.sqrt(1 - k) : raw[i];
+    peak = Math.max(peak, Math.abs(d[i]));
+  }
+  for (let i = 0; i < len; i++) d[i] *= 0.9 / peak;
+  return buf;
+}
+
+/** The live background mix: each layer its own level, with the filters that colour it. */
+export interface Ambience {
+  /** The base's air handling: soft moving air and a fan's rumble (room tone). */
+  room: GainNode;
+  /** Pumps and compressors near life support: a slow working rhythm. */
+  pump: GainNode;
+  /** Mars's wind: a muffled body of air, and a faint whistle in the gusts. */
+  wind: GainNode;
+  windTone: BiquadFilterNode;
+  whistle: GainNode;
+  whistleTone: BiquadFilterNode;
+  /** A rover's drive: the electric motors' whine and the wheels' rumble. */
+  whine: GainNode;
+  whineOsc: OscillatorNode;
+  whineOsc2: OscillatorNode;
+  roll: GainNode;
+  /** In a suit: its fan, and your breathing. */
+  fan: GainNode;
+  breath: GainNode;
+  breathTone: BiquadFilterNode;
+  /** Gusts wander rather than repeat: where the gust is now, and where it's heading. */
+  gust: number;
+  gustTo: number;
+  gustAt: number;
+}
+
+export function buildAmbience(a: BaseAudioContext, out: AudioNode): Ambience {
+  const { pink, brown } = synth.noise(a);
+  const source = (buf: AudioBuffer, offset: number) => {
+    const s = a.createBufferSource();
+    s.buffer = buf;
+    s.loop = true;
+    s.start(0, offset);
+    return s;
+  };
+  const filter = (type: BiquadFilterType, f: number, q = 0.7) => {
+    const b = a.createBiquadFilter();
+    b.type = type;
+    b.frequency.value = f;
+    b.Q.value = q;
+    return b;
+  };
+  const level = (v = 0) => {
+    const g = a.createGain();
+    g.gain.value = v;
+    return g;
+  };
+  // Room tone: moving air (pink, rolled off above 900 Hz), a fan's rumble round 120 Hz, a whisper of airflow at the vents.
+  const room = level();
+  room.connect(out);
+  source(pink, 0).connect(filter("highpass", 70)).connect(filter("lowpass", 900)).connect(room);
+  source(brown, 2.3).connect(filter("bandpass", 120, 1.2)).connect(level(0.7)).connect(room);
+  source(pink, 4.1).connect(filter("bandpass", 2600, 0.8)).connect(level(0.12)).connect(room);
+  // Pumps: a low churn that swells and eases a little over a second or two.
+  const pump = level();
+  pump.connect(out);
+  const churn = level(0.55);
+  source(brown, 6.7).connect(filter("bandpass", 170, 1.6)).connect(churn).connect(pump);
+  const beat = a.createOscillator();
+  beat.frequency.value = 0.6;
+  beat.connect(level(0.4)).connect(churn.gain);
+  beat.start();
+  // Mars's wind: thin air carries little, so a soft, low body of moving air, and a faint whistle in the gusts.
+  const wind = level();
   wind.connect(out);
-  const air = noise(a, 6, false);
-  const windTone = a.createBiquadFilter();
-  windTone.type = "bandpass";
-  windTone.frequency.value = 380;
-  windTone.Q.value = 0.7;
-  air.connect(windTone).connect(wind);
-  air.start();
-  // Rover drive motors: a soft whine that rises with speed.
-  const motor = a.createGain();
-  motor.gain.value = 0;
-  motor.connect(out);
-  const motorOsc = a.createOscillator();
-  motorOsc.type = "sawtooth";
-  motorOsc.frequency.value = 70;
-  const motorTone = a.createBiquadFilter();
-  motorTone.type = "lowpass";
-  motorTone.frequency.value = 520;
-  motorOsc.connect(motorTone).connect(motor);
-  motorOsc.start();
-  // Breathing inside a helmet: soft noise, swelling and falling with each breath (set from the scene's clock).
-  const breath = a.createGain();
-  breath.gain.value = 0;
+  const windTone = filter("lowpass", 380, 0.5);
+  source(brown, 1.1).connect(windTone).connect(wind);
+  const whistle = level();
+  whistle.connect(out);
+  const whistleTone = filter("bandpass", 600, 3.5);
+  source(pink, 7.9).connect(whistleTone).connect(whistle);
+  // A rover's drive: two close electric whines (a slow beat between them, as real motors have) and the rumble of the wheels.
+  const whine = level();
+  whine.connect(out);
+  const whineTone = filter("bandpass", 1100, 0.6);
+  whineTone.connect(whine);
+  const whineOsc = a.createOscillator();
+  whineOsc.type = "triangle";
+  whineOsc.frequency.value = 150;
+  whineOsc.connect(whineTone);
+  whineOsc.start();
+  const whineOsc2 = a.createOscillator();
+  whineOsc2.frequency.value = 302;
+  whineOsc2.connect(level(0.35)).connect(whineTone);
+  whineOsc2.start();
+  const roll = level();
+  roll.connect(out);
+  source(brown, 3.3).connect(filter("lowpass", 260)).connect(roll);
+  // In a suit: its fan (soft, steady), and breathing through the helmet's air (a cycle set from the clock).
+  const fan = level();
+  fan.connect(out);
+  source(pink, 5.2).connect(filter("lowpass", 1300)).connect(fan);
+  const breath = level();
   breath.connect(out);
-  const air2 = noise(a, 3, false);
-  const breathTone = a.createBiquadFilter();
-  breathTone.type = "bandpass";
-  breathTone.frequency.value = 900;
-  breathTone.Q.value = 0.6;
-  air2.connect(breathTone).connect(breath);
-  air2.start();
-  return { breath, hum, wind, windTone, motor, motorOsc };
+  const breathTone = filter("bandpass", 800, 1.1);
+  source(pink, 8.6).connect(breathTone).connect(breath);
+  return { room, pump, wind, windTone, whistle, whistleTone, whine, whineOsc, whineOsc2, roll, fan, breath, breathTone, gust: 0.3, gustTo: 0.3, gustAt: 0 };
+}
+
+export interface AmbienceState {
+  planet: "moon" | "mars";
+  /** How thick the dust storm is, 0 to 1. */
+  dust: number;
+  /** The crew rover's speed, 0 to 1. */
+  drive: number;
+  /** Seconds (the scene's clock), for breathing and gusts. */
+  time: number;
+  /** Where you're listening from: the overview, behind the rover, its cab, or on foot. */
+  view: "orbit" | "chase" | "cockpit" | "walk";
+  /** On foot inside the base, or outside in a suit. */
+  inside?: boolean;
+  suit?: boolean;
+  /** Near loud machinery (0 none, 1 or more by the life-support plant). */
+  machines?: number;
+}
+
+/** Breathing in a suit: a slower breath in, a longer breath out, a pause (0 to 1, and whether it's the breath in). */
+function breathAt(time: number) {
+  const p = (((time % 4.8) + 4.8) % 4.8) / 4.8;
+  if (p < 0.34) return { k: Math.sin((p / 0.34) * Math.PI) ** 2, inhale: true };
+  if (p < 0.4) return { k: 0, inhale: false };
+  if (p < 0.88) return { k: Math.sin(((p - 0.4) / 0.48) * Math.PI) ** 1.6, inhale: false };
+  return { k: 0, inhale: false };
 }
 
 /**
- * Keep the background sound in step with the scene (call a few times a second): life support always,
- * wind on Mars that rises in a dust storm, and the rover's motors while it drives (0 to 1).
+ * Set the background mix for a moment (`t`, the audio clock), from where you are and what's happening. Values glide
+ * to their targets, so calling it a few times a second is smooth.
  */
-export function ambience(s: { on: boolean; planet: "moon" | "mars"; dust: number; drive: number; time: number; inside?: boolean; suit?: boolean; machines?: number }) {
+export function updateAmbience(amb: Ambience, t: number, s: AmbienceState) {
+  const glide = (p: AudioParam, v: number, tau = 0.35) => p.setTargetAtTime(v, t, tau);
+  const mars = s.planet === "mars";
+  const walk = s.view === "walk";
+  const indoors = walk && !!s.inside;
+  const suit = walk && !!s.suit && !indoors;
+  const cab = s.view === "cockpit";
+  // Gusts drift towards a new random strength every few seconds (a dust storm makes them stronger and more frequent).
+  if (s.time >= amb.gustAt) {
+    amb.gustTo = Math.random() ** (s.dust > 0.3 ? 0.6 : 1.4);
+    amb.gustAt = s.time + 1.5 + Math.random() * (s.dust > 0.3 ? 2 : 4);
+  }
+  amb.gust += (amb.gustTo - amb.gust) * 0.12;
+  const gust = amb.gust;
+
+  // Inside: the base's air handling, louder by the machinery; much quieter in the rover's cab; nothing outside.
+  glide(amb.room.gain, indoors ? 0.052 * (1 + 0.5 * (s.machines ?? 0)) : cab ? 0.022 : 0, 0.6);
+  glide(amb.pump.gain, indoors ? 0.022 * Math.min(1.5, s.machines ?? 0) : 0, 0.8);
+  // Mars's wind: muffled through the walls and the rover's cab, a little through a helmet; none on the Moon.
+  const through = indoors ? 0.18 : cab ? 0.3 : suit ? 0.75 : walk ? 1 : 0.85;
+  const wind = mars ? (0.008 + 0.012 * gust + s.dust * (0.022 + 0.03 * gust)) * through : 0;
+  glide(amb.wind.gain, wind, 0.5);
+  glide(amb.windTone.frequency, indoors || cab ? 200 : 280 + 260 * gust + 220 * s.dust, 0.6);
+  glide(amb.whistle.gain, mars && !indoors ? (0.0015 + 0.006 * s.dust) * gust * gust * through : 0, 0.6);
+  glide(amb.whistleTone.frequency, 450 + 500 * gust + 200 * s.dust, 0.8);
+  // The rover: through its own frame in the cab; on Mars faintly through the air from outside; never through vacuum.
+  const heard = cab ? 1 : mars && !walk ? 0.35 : 0;
+  glide(amb.whine.gain, 0.02 * s.drive * heard, 0.25);
+  glide(amb.roll.gain, 0.05 * s.drive * heard, 0.25);
+  glide(amb.whineOsc.frequency, 120 + 480 * s.drive, 0.3);
+  glide(amb.whineOsc2.frequency, (120 + 480 * s.drive) * 2.013, 0.3);
+  // A suit: its fan, and your breath (aimed a moment ahead, so the glide lands on the breath's shape).
+  glide(amb.fan.gain, suit ? 0.013 : 0, 0.5);
+  const b = breathAt(s.time + 0.15);
+  glide(amb.breath.gain, suit ? 0.0028 + (b.inhale ? 0.024 : 0.03) * b.k : 0, 0.12);
+  glide(amb.breathTone.frequency, b.inhale ? 1050 : 620, 0.3);
+}
+
+let amb: Ambience | null = null;
+/** Keep the background sound in step with the scene (call a few times a second). */
+export function ambience(s: AmbienceState & { on: boolean }) {
   const want = s.on && !document.hidden && useUI.getState().settings.sound;
   if (!want) {
-    if (amb && ctx) for (const g of [amb.hum, amb.wind, amb.motor, amb.breath]) g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+    if (amb && ctx) for (const g of [amb.room, amb.pump, amb.wind, amb.whistle, amb.whine, amb.roll, amb.fan, amb.breath]) g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
     return;
   }
   const a = audio();
   if (!a || !master) return;
-  if (!amb) amb = startAmbience(a, master);
-  const t = a.currentTime;
-  // Inside the home the machines are close and the wind is behind the shell; in a suit on the Moon there's no air
-  // to carry any sound at all, only your own breathing and the suit's fans.
-  const vacuum = s.suit && s.planet === "moon";
-  amb.hum.gain.setTargetAtTime(s.suit ? 0.012 : s.inside ? 0.05 * (1 + (s.machines ?? 0)) : 0.03, t, 0.5);
-  const gust = 0.5 + 0.5 * Math.sin(s.time * 0.7) * Math.sin(s.time * 0.23 + 1);
-  amb.wind.gain.setTargetAtTime(s.planet === "mars" ? (0.012 + s.dust * 0.08 + gust * 0.01) * (s.inside ? 0.3 : s.suit ? 0.6 : 1) : 0, t, 0.4);
-  amb.windTone.frequency.setTargetAtTime(300 + s.dust * 450 + gust * 160, t, 0.4);
-  amb.motor.gain.setTargetAtTime(vacuum || s.inside ? 0 : s.drive * 0.035, t, 0.2);
-  amb.breath.gain.setTargetAtTime(s.suit ? 0.006 + 0.03 * Math.max(0, Math.sin(s.time * 1.4)) ** 2 : 0, t, 0.15);
-  amb.motorOsc.frequency.setTargetAtTime(65 + s.drive * 120, t, 0.2);
+  if (!amb) amb = buildAmbience(a, master);
+  updateAmbience(amb, a.currentTime, s);
 }
