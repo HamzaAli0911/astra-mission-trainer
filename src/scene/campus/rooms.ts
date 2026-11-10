@@ -685,6 +685,20 @@ export function dressRooms(id: BuildingId, g: THREE.Group, ctx: Ctx) {
     case "shelter": {
       doorSign(g, "w1", "s", -27, "STORM SHELTER", "#1d222b", "#e8b425");
       hangingSign(g, "shelter", -27, 51.5, "s", ["STORM SHELTER", "WATER WALLS · 4 SEATS"], 2.0);
+      // Amber beacons by its door, out in the spine and inside: they turn while a solar storm is warned or on.
+      for (const [cell, side] of [
+        ["w1", "s"],
+        ["shelter", "n"],
+      ] as const) {
+        const mat = new THREE.MeshStandardMaterial({ color: "#5a3d10", emissive: "#ffb020", emissiveIntensity: 0, roughness: 0.4 });
+        const b = onWall(g, cell, side, -25.4, 2.5, 0.08);
+        cyl(b, 0.07, 0.08, 0.05, P.dark(), 0, -0.08, 0, 14);
+        const dome = keep(new THREE.Group());
+        b.add(dome);
+        dome.add(new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat));
+        box(dome, 0.12, 0.035, 0.01, ipaint("#ffffff", 0.3), 0, 0.035, 0.05);
+        ctx.out.beacons.push({ airlock: "storm", o: dome, mat });
+      }
       break;
     }
     case "garage": {

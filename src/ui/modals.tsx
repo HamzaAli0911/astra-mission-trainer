@@ -246,6 +246,18 @@ function Guide({ close }: { close: () => void }) {
                 </td>
               </tr>
               <tr>
+                <td>Walk inside · use · floor plan</td>
+                <td>
+                  <Kbd>V</Kbd> · <Kbd>E</Kbd> (then <Kbd>1</Kbd>–<Kbd>9</Kbd> for a console's buttons) · <Kbd>M</Kbd>
+                </td>
+              </tr>
+              <tr>
+                <td>Hide the controls (screenshots)</td>
+                <td>
+                  <Kbd>U</Kbd>
+                </td>
+              </tr>
+              <tr>
                 <td>Close · menu</td>
                 <td>
                   <Kbd>Esc</Kbd>

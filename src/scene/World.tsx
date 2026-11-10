@@ -33,12 +33,13 @@ import { HOME as HOME_PLAN, type Where } from "../sim/home";
 import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
 import { crewWalkers, type CrewWalkers } from "./crewwalk";
+import { CREW_COLOR } from "./interior/parts";
 import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
 import { dressCampus, keepInStep, type CampusDressing } from "./campus/dress";
 import { campusScreenData } from "./campus/screens";
 import { building, buildingAt, cellAt, NEIGHBOURS, PORTALS, rectDistance, stageOf } from "../sim/base";
-import { useWalk, walker } from "../state/walk";
+import { crewDots, useWalk, walker } from "../state/walk";
 import { interiorState } from "../sim/interior";
 
 const HOME = new THREE.Vector3(0, 0, 3);
@@ -352,6 +353,20 @@ export function World() {
       const campus = buildCampus(planet, stageOf(useGame.getState().game.missionId));
       for (const p of campus.parts.values()) p.inside.traverse((o) => o.layers.set(INSIDE_LAYER));
       scene.add(campus.group);
+      // The tour's beacon: an orange marker turning over the stop the guide is leading to.
+      const tourBeacon = new THREE.Group();
+      {
+        const mat = new THREE.MeshBasicMaterial({ color: "#ff8a3d", transparent: true, opacity: 0.92, toneMapped: false, depthWrite: false });
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.32, 4), mat);
+        tip.rotation.x = Math.PI;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.022, 6, 32), mat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 0.32;
+        tourBeacon.add(tip, ring);
+        tourBeacon.visible = false;
+        tourBeacon.traverse((o) => o.layers.set(INSIDE_LAYER));
+        scene.add(tourBeacon);
+      }
       let garageDoor = 0,
         habVisible = true;
       // The campus's furniture, fittings and screens (built in the background after the home's inside).
@@ -1324,7 +1339,12 @@ export function World() {
           const indoors = walking && !walker.outside && walker.where === 0;
           const cell = indoors ? cellAt(walker.x, walker.z, 0) : null;
           const hab1Eclss = indoors && !cell && Math.hypot(walker.x, walker.z) > HOME_PLAN.hall && Math.abs((Math.atan2(walker.x, -walker.z) * 180) / Math.PI) < 30;
-          const machines = hab1Eclss || cell?.building === "lifesupport" ? 1.5 : cell?.building === "engineering" ? 0.8 : cell?.id === "hq-equipment" ? 0.6 : 0;
+          // The machines run down with the power: the plant room's hum follows its oxygen and water plants, and
+          // everything slows in a blackout (the fans spin down).
+          const fans = interiorState(g).fans;
+          const plants = g.modules.filter((m) => (m.type === "oxygen" || m.type === "recycler") && isBuilt(m));
+          const running = plants.length ? plants.filter((m) => m.on && m.health >= 50).length / plants.length : 0;
+          const machines = (hab1Eclss ? 1.5 : cell?.building === "lifesupport" ? 0.5 + 1.0 * running : cell?.building === "engineering" ? 0.8 : cell?.id === "hq-equipment" ? 0.6 : 0) * Math.max(0.15, fans);
           ambience({ on: true, planet, view, dust: dustLevel, drive: st.paused ? 0 : Math.min(1, Math.abs(rv.speed) / ROVER.maxSpeed), time: clock, inside: walking && !walker.outside, suit: walking && !!g.eva, machines });
         }
         // The motors' hum: a faint shiver in the body while it drives (the bumps come from the suspension).
@@ -1368,8 +1388,10 @@ export function World() {
             // lights over their doors say which door may open; the servers blink; the screens show the mission.
             const locks = walkCtl.lockState();
             if (dressing.alexSuit) dressing.alexSuit.visible = !g.eva;
+            const stormOn = (homeState ?? interiorState(g)).storm !== "none";
             for (const b of dressing.beacons) {
-              const on = (locks[b.airlock]?.cycle ?? "none") !== "none";
+              // (An airlock's while it cycles; the storm shelter's while a solar storm is warned or on.)
+              const on = b.airlock === "storm" ? stormOn : (locks[b.airlock]?.cycle ?? "none") !== "none";
               b.mat.emissiveIntensity = on ? (reduced ? 2.5 : 1.5 + Math.max(0, Math.sin(clock * 9)) * 2.5) : 0;
               if (on && !reduced) b.o.rotation.y += dt * 6;
             }
@@ -1411,6 +1433,13 @@ export function World() {
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
         const near = !!interior && ((view === "walk" && habVisible) || camera.position.distanceTo(homeOrigin) < 24);
         if (interior) interior.group.visible = near;
+        // The tour's beacon over the stop it's leading to.
+        const stopAt = view === "walk" ? walkCtl.beacon() : null;
+        tourBeacon.visible = !!stopAt;
+        if (stopAt) {
+          tourBeacon.position.set(stopAt.x, stopAt.y + (reduced ? 0 : Math.sin(clock * 2.2) * 0.08), stopAt.z);
+          if (!reduced) tourBeacon.rotation.y += dt * 1.4;
+        }
         // The crew walk between their places (seen stretches at a walking pace; the rest skipped).
         if (crew) {
           const seen = (x: number, z: number, w: Where) => {
@@ -1420,6 +1449,11 @@ export function World() {
           };
           const anyInView = near || [...campus.parts.values()].some((p) => p.inside.visible);
           crew.update(dt, (homeState ?? interiorState(g)).crew, stageOf(g.missionId), seen, near, anyInView, clock, reduced);
+          // (For the floor plan.)
+          crewDots.length = 0;
+          for (const p of crew.people)
+            if (p.state !== "out")
+              crewDots.push({ id: p.id, name: g.crew.find((c) => c.id === p.id)?.name ?? p.id, color: CREW_COLOR[p.id] ?? "#ffffff", x: p.x, z: p.z, floor: p.where === 1 || p.where === "stair" ? 1 : p.where === 2 ? 2 : 0 });
         }
         if (interior && near && homeState) {
           interior.apply(homeState, dt, clock, reduced);

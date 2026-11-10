@@ -126,7 +126,7 @@ export const STATIONS: Station[] = [
   /* ---- Command HQ ---- */
   {
     id: "hq-power",
-    title: "Operations: power board",
+    title: "Power board (operations hall)",
     furniture: "hq-console-aw",
     live: (g) => {
       const f = flows(g);

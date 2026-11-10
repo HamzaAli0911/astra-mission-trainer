@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { AIRLOCKS, cellAt, cellById, doorLocked, doorSlab, LOCK_PANELS, portalById, porchY, stageOf, SUIT_RACKS, WALL, type Airlock, type Portal } from "../sim/base";
+import { AIRLOCKS, cellAt, cellById, doorLocked, doorSlab, LOCK_PANELS, MEZZANINE, portalById, porchY, stageOf, SUIT_RACKS, WALL, type Airlock, type Portal } from "../sim/base";
 import { lockStatus, mayOpen, newLock, startCycle, stepLock, type Lock } from "../sim/airlock";
 import { blockAxes, BLOCKS, floorY, HOME, lineClear, PACE, placeName, stepLength, stride, type Floor } from "../sim/home";
 import { SUIT, walkOutside } from "../sim/outside";
@@ -9,6 +9,8 @@ import { FOOTPRINT, terrainHeight } from "../sim/world";
 import { isBuilt } from "../sim/core";
 import { INSPECTS } from "../sim/inspect";
 import { nearestOn, stationById, stationsFor, stationSpot, type Station } from "../sim/stations";
+import { cardSpot, colonyTour } from "../sim/tour";
+import { navPath, pathLength, type NavPoint } from "../sim/nav";
 import type { InteriorState } from "../sim/interior";
 import { useGame } from "../state/game";
 import { PLANETS } from "../sim/planets";
@@ -193,6 +195,82 @@ export function walkController(
     }
     return out;
   };
+  // The tour's guide: the way on foot to the current stop (worked out again every second or so as you walk), the
+  // direction of its next turn for the HUD's arrow, and the stop itself for the beacon over it.
+  let way: NavPoint[] | null = null,
+    wayLeg = 1,
+    wayAt = -1e9,
+    wayKey = "",
+    wayFrom = { x: 0, z: 0 },
+    beacon: { x: number; y: number; z: number } | null = null,
+    shownGuide = "";
+  const steer = (now: number) => {
+    const tour = useWalk.getState().tour;
+    const stop = tour === null ? null : colonyTour(stage())[tour];
+    const spot = stop ? cardSpot(stop.card) : null;
+    if (!stop || !spot) {
+      beacon = null;
+      if (shownGuide) {
+        shownGuide = "";
+        useWalk.getState().set({ guide: null });
+      }
+      return;
+    }
+    const g = useGame.getState().game;
+    // Where to head now: the stop; or for the garage, first the suits and the airlock; from outside, back in.
+    let target = { x: spot.x, z: spot.z, level: spot.level },
+      hint = "";
+    if (spot.level === -1 && !walker.outside) {
+      const rack = SUIT_RACKS[0],
+        panel = LOCK_PANELS.find((p) => p.airlock === AIRLOCKS[0].id)!.inside;
+      target = g.eva ? { ...panel, level: 0 } : { x: rack.x, z: rack.z, level: 0 };
+      hint = g.eva ? "Cycle the airlock and go out" : "Suit up at the rack first";
+    } else if (spot.level !== -1 && walker.outside) {
+      const a = AIRLOCKS.reduce((b, x) => (Math.hypot(walker.x - x.outside.x, walker.z - x.outside.z) < Math.hypot(walker.x - b.outside.x, walker.z - b.outside.z) ? x : b));
+      target = { x: a.outside.x, z: a.outside.z, level: -1 };
+      hint = "Back inside through an airlock";
+    }
+    const floorOf = (lv: number) => (lv === 2 ? MEZZANINE : lv === 1 ? HOME.floor[1] : lv === -1 ? porchY(target.x, target.z) || ground(target.x, target.z) : HOME.floor[0]);
+    beacon = { x: spot.x, y: (spot.level === -1 ? ground(spot.x, spot.z) : floorOf(spot.level)) + 2.3, z: spot.z };
+    // Outdoors it's open ground: straight there. Indoors, the real way round (redone as you go).
+    let next = { x: target.x, z: target.z },
+      dist = Math.hypot(target.x - walker.x, target.z - walker.z),
+      stairs = "";
+    if (target.level !== -1 && !walker.outside) {
+      const key = `${stop.card}|${target.x},${target.z}`;
+      const onStair = walker.where === "stair" || walker.where === "hq-stair";
+      if (!onStair && (key !== wayKey || now - wayAt > 1.2 || Math.hypot(walker.x - wayFrom.x, walker.z - wayFrom.z) > 2)) {
+        way = navPath({ x: walker.x, z: walker.z, floor: walker.where as Floor }, { x: target.x, z: target.z, floor: target.level as Floor }, stage());
+        wayKey = key;
+        wayAt = now;
+        wayFrom = { x: walker.x, z: walker.z };
+        wayLeg = 1;
+      }
+      if (way && way.length > 1) {
+        while (wayLeg < way.length - 1 && Math.hypot(way[wayLeg].x - walker.x, way[wayLeg].z - walker.z) < 0.9) wayLeg++;
+        next = way[Math.min(wayLeg, way.length - 1)];
+        dist = Math.hypot(next.x - walker.x, next.z - walker.z) + pathLength(way.slice(wayLeg));
+        const ahead = way.slice(wayLeg, wayLeg + 3);
+        const st = ahead.find((q) => q.where === "stair" || q.where === "hq-stair");
+        if (st) {
+          const after = way.slice(wayLeg).find((q) => typeof q.where === "number" && q !== st && way!.indexOf(q) > way!.indexOf(st));
+          const up = typeof after?.where === "number" && (after.where as number) > (typeof walker.where === "number" ? (walker.where as number) : 0);
+          stairs = up ? "Up the stairs" : "Down the stairs";
+        }
+      }
+    }
+    const bearing = Math.atan2(next.x - walker.x, -(next.z - walker.z));
+    let rel = bearing - walker.yaw;
+    rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+    const near = Math.hypot(spot.x - walker.x, spot.z - walker.z) < 2.6 && (spot.level === -1) === walker.outside;
+    const text = near ? "It's here: look at it and press E" : hint || stairs;
+    const g2 = { angle: Math.round((rel * 180) / Math.PI / 4) * 4, dist: Math.round(dist), hint: text, near };
+    const key2 = JSON.stringify(g2);
+    if (key2 !== shownGuide) {
+      shownGuide = key2;
+      useWalk.getState().set({ guide: g2 });
+    }
+  };
   let active = false,
     drag: { x: number; y: number } | null = null;
 
@@ -244,6 +322,10 @@ export function walkController(
   return {
     get active() {
       return active;
+    },
+    /** The tour stop being guided to (a point above it, for its beacon), or null. */
+    beacon() {
+      return active && useWalk.getState().tour !== null ? beacon : null;
     },
     /** Each airlock's chamber (pressure, cycle) and which of its doors may open now, for its screens and lights. */
     lockState() {
@@ -359,7 +441,16 @@ export function walkController(
         }
         if (Math.floor(walker.stride) !== Math.floor(before) && speed > 0.4)
           // (Outside on the Moon, only through your own suit.)
-          footstep(Math.min(1, 0.55 + gravity / 9.81) * (walker.outside && planet === "moon" ? 0.5 : 1), walker.outside ? "ground" : walker.where === "stair" ? "stair" : "floor");
+          footstep(
+            Math.min(1, 0.55 + gravity / 9.81) * (walker.outside && planet === "moon" ? 0.5 : 1),
+            (() => {
+              const c = cellAt(walker.x, walker.z, 0);
+              // (The garage's concrete under a suit; the EVA complex's dust lock and airlock are open grating.)
+              if (walker.outside) return c?.id === "garage" ? "floor" : "ground";
+              if (walker.where === "stair" || walker.where === "hq-stair") return "stair";
+              return walker.where === 0 && (c?.id === "eva-dust" || c?.id === "eva-lock" || c?.id === "yard-lock") ? "grating" : "floor";
+            })(),
+          );
       } else {
         walker.vx = walker.vz = 0;
       }
@@ -377,7 +468,7 @@ export function walkController(
         // (The shelter's hatch stands open while a storm is coming or on.)
         const near =
           (walking && level === d.level && Math.hypot(walker.x - d.x, walker.z - d.z) < DOOR_REACH) ||
-          (d.id === "shelter" && !!st?.shelterOpen) ||
+          ((d.id === "shelter" || d.id === "shelter-door") && !!st?.shelterOpen) ||
           crewNear.some((o) => o.level === d.level && Math.hypot(o.x - d.x, o.z - d.z) < DOOR_REACH + 0.35);
         const was = open.get(d.id) ?? 0;
         const now = THREE.MathUtils.clamp(was + (near ? dt : -dt) / DOOR_TIME, 0, 1);
@@ -439,6 +530,7 @@ export function walkController(
           bestScore = d + off;
         }
       }
+      steer(now);
       const label = best?.label ?? null;
       if (here !== room || label !== prompt) {
         room = here;

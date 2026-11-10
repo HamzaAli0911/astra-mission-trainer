@@ -133,6 +133,8 @@ export interface UIStore {
   looked: number;
   settings: Settings;
   progress: Progress;
+  /** Screenshot mode: the HUD steps aside (U); danger alerts and suit readings still show. */
+  hideUi: boolean;
   setScreen: (s: Screen) => void;
   openPanel: (p: Panel | null) => void;
   togglePanel: (p: Panel) => void;
@@ -165,7 +167,8 @@ export const useUI = create<UIStore>((set, get) => ({
   looked: 0,
   settings: readSettings(),
   progress: readProgress(),
-  setScreen: (screen) => set({ screen, panel: null, selected: null, modal: null, placing: null, view: "orbit" }),
+  hideUi: false,
+  setScreen: (screen) => set({ screen, panel: null, selected: null, modal: null, placing: null, view: "orbit", hideUi: false }),
   openPanel: (panel) => set({ panel, placing: panel === "build" ? get().placing : null }),
   togglePanel: (p) => {
     const open = get().panel === p ? null : p;

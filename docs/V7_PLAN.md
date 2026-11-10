@@ -83,6 +83,25 @@ v6 code does today, the decisions taken, and what is done. The final report is w
   commander works at the flight director's desk (shown only there); sector culling indoors (your building and its
   doorway neighbours). Phase F to-dos found here: one texture per console's screens (44 screens = 44 draws), terrain
   in chunks (the 600-segment mesh is drawn whole), measured comparison against v6.
-- [ ] D. Remaining buildings and corridors.
-- [ ] E. Interactions tied to the sim (12+), crew walking, tour and wayfinding, sound.
+- [x] D. Remaining buildings: every building furnished from `FURNITURE` (life support's plants and tanks, the
+  greenhouse's eight hydroponic racks with modelled crops, the water-walled shelter, the garage, the lab's
+  instruments, the clinic, engineering, the stores); machines bound to the mission (status lamps from module state,
+  tank gauges and shelf stock from the stores, crops grown with the greenhouse modules and its grow lights, the
+  shelter's water walls only once a Shelter is built). Not done: the outdoor power compound is still simple boxes,
+  and there are no outdoor walkways or conduits between buildings (connector type 2).
+- [x] E. Function and life:
+  - 21 stations (`sim/stations.ts`): live numbers, a cause-and-effect sentence, a sourced fact; 12 with controls that
+    are the game's own actions (toggle, grow lights, repair, shelter, send either rover) or open the build planner.
+    E then click or 1-9. Equipment doors open while inspected (oxygen plant, sample freezer).
+  - A walking grid (`sim/nav.ts`: walls and furniture grown by a body's width, A*, both stairs, airlocks and unbuilt
+    wings closed). The crew walk the base on it (`scene/crewwalk.ts`): a jointed walk cycle, seats, bunks, the
+    treadmill and cycle, doors opening for them, keeping a step apart and to the right. Out-of-sight stretches are
+    skipped (the clock runs at 3.5 s an hour), so no one pops up in view. Reactions only to real state: storm
+    warning, flat battery, a repair under way, sheltering in the campus shelter.
+  - The colony tour (`sim/tour.ts`): nine stops in walking order (fewer wings, Hab-1's rooms instead), a guide arrow
+    along the real route with stair and airlock hints, a beacon over the stop; a floor plan (M) per floor with rooms,
+    doors, furniture, Hab-1's ring, you, the crew and the stop; "Back to HQ" (a stated simulator shortcut, refused
+    in a suit); screenshot mode (U).
+  - Sound: grating steps in the airlocks and dust lock, concrete in the garage, the plant room's hum following its
+    machines and every machine slowing in a blackout; storm beacons at the shelter, whose door stands open in a storm.
 - [ ] F. Performance, QA screenshots, docs, report.

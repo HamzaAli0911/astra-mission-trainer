@@ -23,6 +23,9 @@ export function clearWalkInput() {
   walkInput.fast = walkInput.use = false;
 }
 
+/** Where the crew on their feet are (for the floor plan), refreshed by the 3D view as they walk. */
+export const crewDots: { id: string; name: string; color: string; x: number; z: number; floor: 0 | 1 | 2 }[] = [];
+
 /** The open station card's number keys (1–9 press its controls): set by the card while it's on screen. */
 export const cardKeys: { press: ((n: number) => boolean) | null } = { press: null };
 
@@ -61,13 +64,17 @@ export interface WalkStore {
   card: string | null;
   /** An airlock cycling round you (pumping down for the surface, or filling with air): its pressure and what it's doing. */
   airlock: { id: string; dir: "out" | "in"; kpa: number; status: string } | null;
-  /** The home tour's step (0–5), or null. */
+  /** The colony tour's stop (an index into sim/tour's list), or null. */
   tour: number | null;
+  /** The way to the tour's stop: which way to turn (degrees, + right), how far (m), and a hint. */
+  guide: { angle: number; dist: number; hint: string; near: boolean } | null;
+  /** The floor plan is open. */
+  plan: boolean;
   /** The inside has been built (it's put together in the background once the mission is on screen). */
   ready: boolean;
   /** The view and sim speed to go back to when you stop walking. */
   back: { view: Exclude<View, "walk">; speed: Speed } | null;
-  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock" | "tour" | "ready">>) => void;
+  set: (p: Partial<Pick<WalkStore, "room" | "prompt" | "locked" | "card" | "airlock" | "tour" | "ready" | "guide" | "plan">>) => void;
 }
 export const useWalk = create<WalkStore>((set) => ({
   room: "",
@@ -76,6 +83,8 @@ export const useWalk = create<WalkStore>((set) => ({
   card: null,
   airlock: null,
   tour: null,
+  guide: null,
+  plan: false,
   ready: false,
   back: null,
   set: (p) => set(p),
@@ -98,6 +107,22 @@ export function enterWalk() {
     return false;
   }
   useUI.getState().setView("walk");
+  return true;
+}
+
+/**
+ * Back to the HQ's operations hall in a moment: a simulator shortcut (a real crew member would walk it; the mission
+ * clock doesn't stop). Not while suited up: from outside you walk back to an airlock.
+ */
+export function backToHub() {
+  const g = useGame.getState();
+  if (walker.outside || g.game.eva) {
+    g.toast("You're in a suit: walk back in through an airlock (the tour's arrow can show you the way).", "warn");
+    return false;
+  }
+  Object.assign(walker, { x: 0, z: 48.6, where: 0, yaw: 0, pitch: -0.05, vx: 0, vz: 0 });
+  useWalk.getState().set({ card: null, plan: false });
+  g.toast("Back in the HQ operations hall. (A simulator shortcut: a real crew member would walk it, and the mission clock kept running.)", "info");
   return true;
 }
 
@@ -128,7 +153,7 @@ useUI.subscribe((s, prev) => {
       checkpoint = { mission: useGame.getState().game.missionId, x: walker.x, z: walker.z, where: walker.where, yaw: walker.yaw, pitch: walker.pitch };
     const back = useWalk.getState().back;
     if (back && useGame.getState().speed === 1) useGame.setState({ speed: back.speed });
-    useWalk.setState({ back: null, prompt: null, locked: false, card: null, airlock: null, tour: null });
+    useWalk.setState({ back: null, prompt: null, locked: false, card: null, airlock: null, tour: null, guide: null, plan: false });
     // Stepping out of walk mode mid-walk outside brings Alex back in.
     if (useGame.getState().game.eva) useGame.getState().act({ type: "eva", on: false });
     clearWalkInput();

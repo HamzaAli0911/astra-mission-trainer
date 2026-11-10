@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { DoorOpen, ExternalLink, Hand, Map as MapIcon, X } from "lucide-react";
-import { HOME_TOUR } from "../state/tutorial";
+import { DoorOpen, ExternalLink, Hand, Landmark, Map as MapIcon, Route, X } from "lucide-react";
+import { colonyTour } from "../sim/tour";
+import { stageOf } from "../sim/base";
+import { FloorPlan } from "./floorplan";
 import { INSPECTS } from "../sim/inspect";
 import { stationById, type Control } from "../sim/stations";
 import { site } from "../sim/world";
@@ -11,7 +13,7 @@ import { SUIT_HOURS, WALKER } from "../sim/engine";
 import { PLANETS } from "../sim/planets";
 import { HOUR_SECONDS, useGame } from "../state/game";
 import { useUI } from "../state/ui";
-import { cardKeys, leaveWalk, useWalk, walker, walkInput } from "../state/walk";
+import { backToHub, cardKeys, leaveWalk, useWalk, walker, walkInput } from "../state/walk";
 
 const isTouch = () => typeof matchMedia !== "undefined" && matchMedia("(hover: none) and (pointer: coarse)").matches;
 
@@ -50,8 +52,16 @@ function WalkOverlay() {
           <DoorOpen size={17} /> Overview
         </button>
         <TourButton />
+        <button className="btn walk-exit" onClick={() => useWalk.getState().set({ plan: !useWalk.getState().plan })} title="The colony's floor plan: every building and room, where you are and where the crew are (M)">
+          <MapIcon size={17} /> Floor plan
+        </button>
+        <button className="btn walk-exit" onClick={backToHub} title="Back to the HQ's operations hall in a moment (a simulator shortcut; not while you're in a suit)">
+          <Landmark size={17} /> Back to HQ
+        </button>
       </div>
       <Tour />
+      <Guide />
+      <FloorPlan />
       {(locked || touch) && <div className="walk-cross" aria-hidden="true" />}
       {prompt && (
         <div className="walk-prompt">
@@ -114,34 +124,63 @@ function TourButton() {
   const tour = useWalk((s) => s.tour);
   if (tour !== null) return null;
   return (
-    <button className="btn walk-exit" onClick={() => useWalk.getState().set({ tour: 0 })} title="Six stops: where the air, water, food and power come from, the storm shelter and the cupola">
-      <MapIcon size={17} /> Take a tour
+    <button className="btn walk-exit" onClick={() => useWalk.getState().set({ tour: 0 })} title="A walk round the colony: housing, command, life support, the greenhouse, the shelter, the lab, engineering, the EVA complex and the garage">
+      <Route size={17} /> Take a tour
     </button>
   );
 }
 
-/** The tour: one stop at a time; looking closely at the right thing (E) moves it on. */
+/** The colony tour: one stop at a time, an arrow showing the way; using (or looking closely at) the right thing moves it on. */
 function Tour() {
   const tour = useWalk((s) => s.tour);
   const card = useWalk((s) => s.card);
+  const missionId = useGame((s) => s.game.missionId);
+  const stops = useMemo(() => colonyTour(stageOf(missionId)), [missionId]);
+  const go = (next: number) => {
+    useWalk.getState().set({ tour: next < stops.length ? next : null, guide: null });
+    if (next >= stops.length) useGame.getState().toast("Tour done! You've seen how the whole colony keeps its crew alive.", "good");
+  };
   useEffect(() => {
-    if (tour === null || card !== HOME_TOUR[tour]?.inspect) return;
-    const next = tour + 1;
-    useWalk.getState().set({ tour: next < HOME_TOUR.length ? next : null });
-    if (next >= HOME_TOUR.length) useGame.getState().toast("Tour done! You've seen where the air, water, food and power come from.", "good");
-  }, [tour, card]);
-  if (tour === null) return null;
-  const s = HOME_TOUR[tour];
+    if (tour === null || card !== stops[tour]?.card) return;
+    play("good");
+    go(tour + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tour, card, stops]);
+  if (tour === null || !stops[tour]) return null;
+  const s = stops[tour];
   return (
     <aside className="tour-card" aria-live="polite">
       <span className="eyebrow">
-        Tour {tour + 1} of {HOME_TOUR.length} · {s.title}
+        Tour {tour + 1} of {stops.length} · {s.title}
       </span>
       <p>{s.text}</p>
-      <button className="btn ghost small" onClick={() => useWalk.getState().set({ tour: null })}>
-        End the tour
-      </button>
+      <div className="tour-actions">
+        <button className="btn ghost small" onClick={() => go(tour + 1)}>
+          Skip this stop
+        </button>
+        <button className="btn ghost small" onClick={() => useWalk.getState().set({ tour: null, guide: null })}>
+          End the tour
+        </button>
+      </div>
     </aside>
+  );
+}
+
+/** The tour's arrow: which way the next turn on the way is, how far it is to walk, and a hint (stairs, the airlock). */
+function Guide() {
+  const guide = useWalk((s) => s.guide);
+  const tour = useWalk((s) => s.tour);
+  if (tour === null || !guide) return null;
+  return (
+    <div className={`walk-guide ${guide.near ? "near" : ""}`} role="status" aria-label={`Tour: ${guide.near ? "you're there" : `${guide.dist} metres to go`}${guide.hint ? `. ${guide.hint}` : ""}`}>
+      <svg viewBox="-12 -12 24 24" aria-hidden="true" style={{ transform: `rotate(${guide.angle}deg)` }}>
+        <path d="M0,-10 L7.5,6.5 L0,2.5 L-7.5,6.5 Z" />
+      </svg>
+      <span>
+        <b>{guide.near ? "Here" : `${guide.dist} m`}</b>
+        {guide.hint && <small>{guide.hint}</small>}
+      </span>
+    </div>
   );
 }
 

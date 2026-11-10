@@ -15,7 +15,7 @@ import { MissionMap, Title } from "./screens";
 import { Modals } from "./modals";
 import { Minimap } from "./Minimap";
 import { WalkHud } from "./walk";
-import { cardKeys, clearWalkInput, enterWalk, lockState, walkInput } from "../state/walk";
+import { cardKeys, clearWalkInput, enterWalk, lockState, useWalk, walkInput } from "../state/walk";
 
 /** Keys held for driving, by physical key code. */
 const held = new Set<string>();
@@ -168,10 +168,17 @@ export default function App() {
         case "KeyE":
           if (walking) walkInput.use = true;
           break;
+        case "KeyM":
+          if (walking) useWalk.getState().set({ plan: !useWalk.getState().plan });
+          break;
+        case "KeyU":
+          useUI.setState({ hideUi: !ui.hideUi });
+          break;
         case "Escape":
           // While walking, Esc first lets go of the mouse (the browser does that itself); the next press works as usual.
           if (walking && document.pointerLockElement) document.exitPointerLock();
           else if (walking && performance.now() - lockState.freedAt < 400) break;
+          else if (walking && useWalk.getState().plan) useWalk.getState().set({ plan: false });
           else if (ui.placing) ui.place(null);
           else if (ui.selected) ui.select(null);
           else if (ui.panel) ui.openPanel(null);
@@ -217,8 +224,14 @@ function Game() {
   const panel = useUI((s) => s.panel);
   const selected = useUI((s) => s.selected?.kind === "module");
   const walking = useUI((s) => s.view === "walk");
+  const hidden = useUI((s) => s.hideUi);
   return (
-    <div className={`game ${planet} ${panel || selected ? "drawer-open" : ""} ${walking ? "walking" : ""}`}>
+    <div className={`game ${planet} ${panel || selected ? "drawer-open" : ""} ${walking ? "walking" : ""} ${hidden ? "ui-hidden" : ""}`}>
+      {hidden && (
+        <button className="ui-hidden-chip" onClick={() => useUI.setState({ hideUi: false })}>
+          Screenshot mode · press U (or here) to bring the controls back
+        </button>
+      )}
       <World />
       <Atmosphere />
       <WorldLabels />

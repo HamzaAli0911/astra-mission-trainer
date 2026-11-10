@@ -135,10 +135,14 @@ export function doorSound(open: boolean, near = 1) {
   burst(0.55, open ? 700 : 1500, open ? 1500 : 650, 1.1, 0.07 * near);
 }
 /** One footstep: a soft thud on the padded floor, a ring on the stair's metal treads, a crunch of regolith outside. */
-export function footstep(weight = 1, surface: "floor" | "stair" | "ground" = "floor") {
+export function footstep(weight = 1, surface: "floor" | "stair" | "ground" | "grating" = "floor") {
   if (surface === "stair") burst(0.09, 900 + Math.random() * 200, 420, 3, 0.03 * weight);
   else if (surface === "ground") burst(0.14, 520 + Math.random() * 120, 240, 0.8, 0.03 * weight);
-  else burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
+  else if (surface === "grating") {
+    // Open metal grating: a dull step with a short ring of the bars over it.
+    burst(0.1, 230 + Math.random() * 40, 110, 1.4, 0.03 * weight);
+    burst(0.07, 2300 + Math.random() * 400, 1700, 9, 0.012 * weight);
+  } else burst(0.11, 190 + Math.random() * 50, 90, 1.4, 0.045 * weight);
 }
 
 /** The airlock cycling: a long hiss as the air is pumped out (going out) or let back in (coming home). */
