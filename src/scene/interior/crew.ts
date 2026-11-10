@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { blockAxes, BLOCKS, HOME, polar, rad, type Block, type Level } from "../../sim/home";
-import type { CrewSpot } from "../../sim/interior";
+import { CAMPUS_SPOTS, type CrewSpot } from "../../sim/interior";
 import { ball, box, capsule, cyl, geo, keep, mesh, rbox } from "../kit";
 import { ifabric, ipaint } from "./lighting";
 import { CREW_COLOR } from "./parts";
@@ -150,8 +150,17 @@ function bend(f: Figure, kind: Pose) {
 }
 
 const POSES: Pose[] = ["stand", "sit", "ride", "lie"];
+/** Each crew member's hair and skin. */
+const LOOKS: Record<string, [string, string]> = { maya: ["#2b1e18", "#d9a37f"], alex: ["#3a2a1a", "#a8714f"], sam: ["#151515", "#6b4430"], noor: ["#1d1410", "#b98563"] };
+/** One crew member in a pose, on their own (for places outside the home: the campus). Hips over the origin. */
+export function crewFigure(id: string, pose: Pose) {
+  const f = figure(CREW_COLOR[id], ...LOOKS[id]);
+  bend(f, pose);
+  f.root.name = `crew-${id}-${pose}`;
+  return f.root;
+}
 export function buildCrew(g: THREE.Group) {
-  const looks: Record<string, [string, string]> = { maya: ["#2b1e18", "#d9a37f"], alex: ["#3a2a1a", "#a8714f"], sam: ["#151515", "#6b4430"], noor: ["#1d1410", "#b98563"] };
+  const looks = LOOKS;
   // Each crew member in each pose, built once and merged (one set of draw calls per person on show).
   const figures = new Map<string, Record<Pose, THREE.Group>>();
   for (const id of ["maya", "alex", "sam", "noor"]) {
@@ -177,7 +186,8 @@ export function buildCrew(g: THREE.Group) {
         const set = figures.get(id);
         if (!set) continue;
         for (const kind of POSES) set[kind].visible = false;
-        if (!spot) continue;
+        // (Out, or somewhere in the campus: the campus shows them there.)
+        if (!spot || CAMPUS_SPOTS.includes(spot)) continue;
         const p = placeFor(id, spot);
         const root = set[p.pose];
         root.visible = true;

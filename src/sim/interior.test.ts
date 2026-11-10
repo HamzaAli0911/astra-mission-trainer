@@ -124,7 +124,8 @@ describe("the crew's day in the home", () => {
     g.t = 24 + 7.5;
     expect(Object.values(at(g)).every((s) => s?.startsWith("galley"))).toBe(true);
     g.t = 24 + 10;
-    expect(at(g)).toEqual({ maya: "command", alex: "eclss", sam: "garden", noor: "lab" });
+    // (The commander works at the flight director's desk in the command HQ, not in the home.)
+    expect(at(g)).toEqual({ maya: "hq-ops", alex: "eclss", sam: "garden", noor: "lab" });
     g.t = 24 + 23;
     expect(Object.values(at(g)).every((s) => s === "bed")).toBe(true);
     const exercising = new Set<string>();

@@ -311,6 +311,9 @@ export function inside<T extends THREE.MeshStandardMaterial>(mat: T, pattern?: P
   };
   mat.customProgramCacheKey = () => `astra-inside${pattern ?? ""}|` + key();
   mat.envMapIntensity = 0.12;
+  // (So the campus can re-light a piece built with these materials: see campus/bake.ts.)
+  mat.userData.insideLit = true;
+  mat.userData.insidePattern = pattern ?? null;
   return mat;
 }
 

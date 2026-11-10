@@ -132,7 +132,7 @@ function carcass(g: THREE.Group, W: number, H: number, D: number, m: THREE.Mater
 }
 
 /** A hanging spacesuit, its back to the rack (local frame: facing +z), with the crew member's colour stripes. */
-function suit(g: THREE.Group, x: number, color: string, name: string) {
+export function suit(g: THREE.Group, x: number, color: string, name: string, track = true) {
   const s = new THREE.Group();
   s.position.set(x, 0, 0.02);
   g.add(s);
@@ -159,7 +159,8 @@ function suit(g: THREE.Group, x: number, color: string, name: string) {
   box(s, 0.1, 0.06, 0.02, stripe, -0.12, 1.45, 0.175);
   ilabel(s, name, 0.3, 0, 2.02, -0.2, "#1d222b");
   // The engineer walks outside in Phase 2: their suit stays a separate piece so it can leave the rack.
-  if (name === "A. RIVERA") living.mySuit = keep(s);
+  if (name === "A. RIVERA" && track) living.mySuit = keep(s);
+  return s;
 }
 
 const B: Record<string, Build> = {
@@ -594,6 +595,11 @@ const builderFor = (id: string): Build | undefined => {
   if (id.startsWith("garden-rack")) return B["garden-rack"];
   return B[base];
 };
+
+/** One of the home's pieces by name (a chair, a bench...), built in a box W wide, D deep and H tall, facing +z. */
+export function homePiece(name: string, g: THREE.Group, W: number, D: number, H: number) {
+  B[name]?.(g, W, D, H, { id: name, room: "hall", level: 0, bearing: 0, r: 0, w: W, d: D, h: H });
+}
 
 /** Build a piece of furniture in its box; returns false if there's no model for it. */
 export function buildPiece(piece: THREE.Group, k: Block) {

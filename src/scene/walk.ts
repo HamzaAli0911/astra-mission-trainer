@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { AIRLOCKS, cellAt, cellById, doorLocked, doorSlab, LOCK_PANELS, portalById, porchY, stageOf, SUIT_RACKS, WALL, type Airlock, type Portal } from "../sim/base";
-import { lockStatus, newLock, startCycle, stepLock, type Lock } from "../sim/airlock";
+import { lockStatus, mayOpen, newLock, startCycle, stepLock, type Lock } from "../sim/airlock";
 import { blockAxes, BLOCKS, floorY, HOME, lineClear, PACE, placeName, stepLength, stride, type Floor } from "../sim/home";
 import { SUIT, walkOutside } from "../sim/outside";
 import { REPAIR_COST, spec } from "../sim/modules";
@@ -213,6 +213,12 @@ export function walkController(
   return {
     get active() {
       return active;
+    },
+    /** Each airlock's chamber (pressure, cycle) and which of its doors may open now, for its screens and lights. */
+    lockState() {
+      const out: Record<string, { pressure: number; cycle: string; inner: boolean; outer: boolean }> = {};
+      for (const [id, l] of locks) out[id] = { pressure: l.pressure, cycle: l.cycle, inner: mayOpen(l, "inner"), outer: mayOpen(l, "outer") };
+      return out;
     },
     /** One frame: move the walker (while walking), slide the doors, and work out what you could use. */
     update(dt: number, walking: boolean, blocked: boolean, st: InteriorState | null = null) {

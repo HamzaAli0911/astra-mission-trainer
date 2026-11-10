@@ -1,26 +1,35 @@
 import * as THREE from "three";
 import {
+  BERMS,
+  bermDepth,
   BUILDINGS,
   built,
+  CAMPUS_WINDOWS,
   cellById,
   cellEdges,
   CELLS,
   COMPOUND_PARTS,
   FLOOR,
   HQ_STAIR,
+  LOCK_PANELS,
   MEZZANINE,
   openingFaces,
+  PORCHES,
   PORTALS,
   WALL,
+  windowsOn,
+  type Berm,
   type Building,
   type BuildingId,
   type Cell,
   type Edge,
   type Portal,
   type Stage,
+  type Win,
 } from "../../sim/base";
 import type { Planet } from "../../sim/types";
-import { glass, metal, paint, soil } from "../kit";
+import { box, cyl, glass, light, metal, paint, soil, strut } from "../kit";
+import { label } from "../models/common";
 import type { DoorView } from "../walk";
 import { CAMPUS_LAMPS, CELL_INDEX, cellCeiling, cellFloor, FINISH } from "./lighting";
 import { CampusMesher } from "./mesher";
@@ -72,8 +81,31 @@ export function openingHeight(p: Portal) {
 }
 
 type V3 = [number, number, number];
+/** A rectangle (along an edge, and up) with holes cut out, as the rectangles left over. */
+function cutOut(rect: [number, number, number, number], holes: [number, number, number, number][]) {
+  let parts = [rect];
+  for (const [h0, v0, h1, v1] of holes)
+    parts = parts.flatMap(([a0, b0, a1, b1]) => {
+      if (h0 >= a1 || h1 <= a0 || v0 >= b1 || v1 <= b0) return [[a0, b0, a1, b1] as [number, number, number, number]];
+      const out: [number, number, number, number][] = [
+        [a0, b0, h0, b1],
+        [h1, b0, a1, b1],
+        [Math.max(a0, h0), b0, Math.min(a1, h1), v0],
+        [Math.max(a0, h0), v1, Math.min(a1, h1), b1],
+      ];
+      return out.filter(([p0, q0, p1, q1]) => p1 - p0 > 1e-6 && q1 - q0 > 1e-6);
+    });
+  return parts;
+}
+/** The windows in a room's edge, as holes (along the edge, and up). */
+const windowHoles = (cell: string, side: Edge["side"]) => windowsOn(cell, side).map((w): [number, number, number, number] => [w.at - w.width / 2, w.y0, w.at + w.width / 2, w.y1]);
+
 /** A vertical quad along an edge, on a room's side of it (facing into the room), from a to b and y0 to y1. */
-function edgeQuad(m: CampusMesher, mat: THREE.Material, e: Edge, a: number, b: number, y0: number, y1: number, color: string, cell: number, offset = 0) {
+function edgeQuad(m: CampusMesher, mat: THREE.Material, e: Edge, a: number, b: number, y0: number, y1: number, color: string, cell: number, offset = 0, holes: [number, number, number, number][] = []) {
+  if (holes.length) {
+    for (const [p0, q0, p1, q1] of cutOut([a, y0, b, y1], holes)) edgeQuad(m, mat, e, p0, p1, q0, q1, color, cell, offset);
+    return;
+  }
   if (b - a < 1e-6 || y1 - y0 < 1e-6) return;
   const f = e.fixed + offset;
   if (e.side === "n" || e.side === "s") {
@@ -156,22 +188,25 @@ export function buildCampus(planet: Planet, stage: Stage): CampusModel {
       // Walls: corridors have a ribbed liner, rooms painted panels; round each opening a lintel above it.
       const mat = c.kind === "corridor" ? linerMat : wallMat;
       for (const e of cellEdges(c)) {
+        const holes = windowHoles(c.id, e.side);
         const wall = (a: number, bb: number, from: number, to: number) => {
-          if (c !== hall) return edgeQuad(m, mat, e, a, bb, from, to, tone.wall, k);
+          if (c !== hall) return edgeQuad(m, mat, e, a, bb, from, to, tone.wall, k, 0, holes);
           // In the hall, the walls above the mezzanine are the mezzanine's.
           const mz = CELL_INDEX.get(mezz.id)!;
           const inMezz = (lo: number, hi: number) => {
-            edgeQuad(m, mat, e, lo, hi, from, Math.min(to, under), tone.wall, k);
-            edgeQuad(m, mat, e, lo, hi, Math.max(from, MEZZANINE), to, tone.wall, mz);
+            edgeQuad(m, mat, e, lo, hi, from, Math.min(to, under), tone.wall, k, 0, holes);
+            edgeQuad(m, mat, e, lo, hi, Math.max(from, MEZZANINE), to, tone.wall, mz, 0, holes);
           };
           if (e.side === "s") return inMezz(a, bb);
-          if (e.side === "n") return edgeQuad(m, mat, e, a, bb, from, to, tone.wall, k);
+          if (e.side === "n") return edgeQuad(m, mat, e, a, bb, from, to, tone.wall, k, 0, holes);
           const split = mezz.rect.z0;
-          if (bb <= split) return edgeQuad(m, mat, e, a, bb, from, to, tone.wall, k);
+          if (bb <= split) return edgeQuad(m, mat, e, a, bb, from, to, tone.wall, k, 0, holes);
           if (a >= split) return inMezz(a, bb);
-          edgeQuad(m, mat, e, a, split, from, to, tone.wall, k);
+          edgeQuad(m, mat, e, a, split, from, to, tone.wall, k, 0, holes);
           inMezz(split, bb);
         };
+        // Each window: its reveal through the wall, a frame and mullions inside, and the glass.
+        for (const w of windowsOn(c.id, e.side)) windowIn(m, w, e, w.y0 > MEZZANINE && c === hall ? CELL_INDEX.get(mezz.id)! : k, mat, tone, trimMat);
         for (const [a, bb] of e.runs) wall(a, bb, y0, y1);
         for (const g of e.gaps) {
           const h = openingHeight(g.portal);
@@ -283,6 +318,54 @@ function reveal(m: CampusMesher, p: Portal, y0: number, wallMat: THREE.Material,
   }
 }
 
+/** Which way is out from a room's edge (+1: towards larger x or z). */
+const outward = (side: Edge["side"]) => (side === "s" || side === "e" ? 1 : -1);
+/** A point on an edge: `u` along it, `v` out from it (positive: outside), at height y. */
+function onEdge(e: Edge, u: number, v: number, y: number): V3 {
+  const f = e.fixed + outward(e.side) * v;
+  return e.side === "n" || e.side === "s" ? [u, y, f] : [f, y, u];
+}
+/**
+ * A window: its reveal through the whole outer wall (sill, head and jambs), a metal frame with mullions on the room
+ * side, and the glass in the middle of the wall (seen from both sides). The view out is the real outside.
+ */
+function windowIn(m: CampusMesher, w: Win, e: Edge, k: number, wallMat: THREE.Material, tone: Tone, trimMat: THREE.Material) {
+  const t = WALL.outer - 0.02;
+  const a = w.at - w.width / 2,
+    b = w.at + w.width / 2;
+  const nOut = outward(e.side);
+  const along: V3 = e.side === "n" || e.side === "s" ? [1, 0, 0] : [0, 0, 1];
+  const across: V3 = e.side === "n" || e.side === "s" ? [0, 0, nOut] : [nOut, 0, 0];
+  const quad = (p: V3, q: V3, r: V3, s2: V3, n: V3, color: string) => m.quad(wallMat, p, q, r, s2, n, color, k);
+  // Sill (facing up), head (down), jambs (facing the window's middle).
+  quad(onEdge(e, a, 0, w.y0), onEdge(e, b, 0, w.y0), onEdge(e, b, t, w.y0), onEdge(e, a, t, w.y0), [0, 1, 0], tone.trim);
+  quad(onEdge(e, a, 0, w.y1), onEdge(e, b, 0, w.y1), onEdge(e, b, t, w.y1), onEdge(e, a, t, w.y1), [0, -1, 0], tone.wall);
+  quad(onEdge(e, a, 0, w.y0), onEdge(e, a, t, w.y0), onEdge(e, a, t, w.y1), onEdge(e, a, 0, w.y1), along, tone.wall);
+  quad(onEdge(e, b, 0, w.y0), onEdge(e, b, t, w.y0), onEdge(e, b, t, w.y1), onEdge(e, b, 0, w.y1), [-along[0], 0, -along[2]], tone.wall);
+  // The frame on the room side, mullions at most 1.7 m apart, and a transom.
+  const bar = (u0: number, u1: number, y0: number, y1: number, depth = 0.05) => {
+    const p = onEdge(e, u0, -0.012, y0),
+      q = onEdge(e, u1, depth, y1);
+    m.box(trimMat, Math.min(p[0], q[0]), y0, Math.min(p[2], q[2]), Math.max(p[0], q[0]), y1, Math.max(p[2], q[2]), tone.trim, k);
+  };
+  const fw = 0.06;
+  bar(a, a + fw, w.y0, w.y1);
+  bar(b - fw, b, w.y0, w.y1);
+  bar(a, b, w.y0, w.y0 + fw);
+  bar(a, b, w.y1 - fw, w.y1);
+  const panes = Math.max(1, Math.ceil(w.width / 1.7));
+  for (let i = 1; i < panes; i++) {
+    const u = a + (w.width * i) / panes;
+    bar(u - fw / 2, u + fw / 2, w.y0, w.y1, 0.12);
+  }
+  // Glass, a little in from the wall's middle (both faces, so it shows from inside and out).
+  const gm = glass("#bfd6ea", 0.14);
+  for (const s2 of [1, -1]) {
+    const v = t / 2;
+    m.quad(gm, onEdge(e, a, v, w.y0), onEdge(e, b, v, w.y0), onEdge(e, b, v, w.y1), onEdge(e, a, v, w.y1), [across[0] * s2, 0, across[2] * s2], "#ffffff", k);
+  }
+}
+
 /** A pair of leaves that part sideways into the wall's thickness. */
 function slidingDoor(parent: THREE.Group, p: Portal, y0: number, mat: THREE.Material, tone: Tone, k: number): DoorView {
   const h = openingHeight(p) - 0.01,
@@ -360,30 +443,191 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
     const outer = s === "n" ? r.z0 - t + 0.02 : s === "s" ? r.z1 + t - 0.02 : s === "w" ? r.x0 - t + 0.02 : r.x1 + t - 0.02;
     const from = s === "n" || s === "s" ? r.x0 - t : r.z0 - t,
       to = s === "n" || s === "s" ? r.x1 + t : r.z1 + t;
-    const mine = holes
-      .filter((p) => (s === "n" || s === "s" ? p.along === "x" && Math.abs(p.z - (s === "n" ? r.z0 : r.z1)) < 0.45 : p.along === "z" && Math.abs(p.x - (s === "w" ? r.x0 : r.x1)) < 0.45))
-      .map((p) => ({ at: p.along === "x" ? p.x : p.z, half: p.width / 2, h: openingHeight(p) }))
-      .sort((p, q) => p.at - q.at);
+    const edge = s === "n" ? r.z0 : s === "s" ? r.z1 : s === "w" ? r.x0 : r.x1;
+    const cut: [number, number, number, number][] = holes
+      .filter((p) => (s === "n" || s === "s" ? p.along === "x" && Math.abs(p.z - edge) < 0.45 : p.along === "z" && Math.abs(p.x - edge) < 0.45))
+      .map((p) => {
+        const at = p.along === "x" ? p.x : p.z;
+        return [at - p.width / 2, base - 1, at + p.width / 2, base + (hangar ? 0 : 0.05) + openingHeight(p)];
+      });
+    // Windows of this building's rooms that sit in this outer wall.
+    for (const w of CAMPUS_WINDOWS) {
+      const c = cellById(w.cell)!;
+      if (c.building !== b.id || w.side !== s) continue;
+      const cf = s === "n" ? c.rect.z0 : s === "s" ? c.rect.z1 : s === "w" ? c.rect.x0 : c.rect.x1;
+      if (Math.abs(cf - edge) > 0.01) continue;
+      cut.push([w.at - w.width / 2, w.y0, w.at + w.width / 2, w.y1]);
+      outsideWindow(m, w, s, edge, shell);
+    }
     const lo = Math.min(fixed, outer),
       hi = Math.max(fixed, outer);
-    const piece = (a: number, bb: number, y0: number, y1: number) => {
+    for (const [a, y0, bb, y1] of cutOut([from, base, to, b.height], cut)) {
       if (s === "n" || s === "s") m.box(shell, a, y0, lo, bb, y1, hi, "#ffffff");
       else m.box(shell, lo, y0, a, hi, y1, bb, "#ffffff");
-    };
-    let at = from;
-    for (const hole of mine) {
-      piece(at, hole.at - hole.half, base, b.height);
-      piece(hole.at - hole.half, hole.at + hole.half, base + (hangar ? 0 : 0.05) + hole.h, b.height);
-      at = hole.at + hole.half;
     }
-    piece(at, to, base, b.height);
   };
   for (const s of ["n", "s", "w", "e"] as const) side(s);
   // The roof, and over it a metre of packed regolith against radiation and micrometeoroids (kept back from the edge).
   m.box(shell, r.x0 - t, b.height - 0.3, r.z0 - t, r.x1 + t, b.height, r.z1 + t, "#ffffff", 0, "-y");
   if (b.id !== "link" && b.id !== "w1" && b.id !== "e1") m.box(roof, r.x0 + 0.2, b.height, r.z0 + 0.2, r.x1 - 0.2, b.height + 0.9, r.z1 - 0.2, "#ffffff", 0, "-y");
   else m.box(roof, r.x0 - 0.1, b.height, r.z0 - 0.1, r.x1 + 0.1, b.height + 0.6, r.z1 + 0.1, "#ffffff", 0, "-y");
+  // Regolith banked against the walls.
+  for (const bm of BERMS) if (bm.building === b.id) berm(m, bm, roof);
   for (const o of m.meshes()) g.add(o);
+  // Porches outside the airlocks, and each building's own outside details.
+  for (const q of PORCHES) if (cellById(PORTALS.find((p) => p.id === q.door)!.a)?.building === b.id) porch(g, q);
+  if (b.id === "hq") hqOutside(g, b);
+  if (b.id === "eva") evaOutside(g, b);
+}
+
+/** A window from outside: a sill that sheds dust, and a frame round the opening. */
+function outsideWindow(m: CampusMesher, w: Win, s: Edge["side"], edge: number, mat: THREE.Material) {
+  const t = WALL.outer;
+  const o = s === "s" || s === "e" ? 1 : -1;
+  const face = edge + o * t;
+  const piece = (u0: number, u1: number, y0: number, y1: number, d0: number, d1: number) => {
+    const p0 = face + o * d0,
+      p1 = face + o * d1;
+    if (s === "n" || s === "s") m.box(mat, u0, y0, Math.min(p0, p1), u1, y1, Math.max(p0, p1), "#ffffff");
+    else m.box(mat, Math.min(p0, p1), y0, u0, Math.max(p0, p1), y1, u1, "#ffffff");
+  };
+  const a = w.at - w.width / 2,
+    b = w.at + w.width / 2;
+  piece(a - 0.12, b + 0.12, w.y0 - 0.1, w.y0, -0.02, 0.14);
+  piece(a - 0.12, b + 0.12, w.y1, w.y1 + 0.1, -0.02, 0.06);
+  piece(a - 0.12, a, w.y0, w.y1, -0.02, 0.06);
+  piece(b, b + 0.12, w.y0, w.y1, -0.02, 0.06);
+}
+
+/** A bank of regolith against a wall: a flat top, sloping off at its angle of repose, the ends hipped. */
+function berm(m: CampusMesher, b: Berm, mat: THREE.Material) {
+  const d = bermDepth(b),
+    o = b.side === "s" || b.side === "e" ? 1 : -1;
+  const run = d - 0.4;
+  // In the bank's own terms: u along the wall, v out from it, y up.
+  const P = (u: number, v: number, y: number): V3 => (b.side === "n" || b.side === "s" ? [u, y, b.face + o * v] : [b.face + o * v, y, u]);
+  const u0 = b.from,
+    u1 = b.to,
+    v = 0.4;
+  const top = [P(u0 + run, 0, b.h), P(u1 - run, 0, b.h), P(u1 - run, v, b.h), P(u0 + run, v, b.h)];
+  const foot = [P(u0, 0, 0), P(u1, 0, 0), P(u1, d, 0), P(u0, d, 0)];
+  const n = (x: number, y: number, z: number): V3 => {
+    const l = Math.hypot(x, y, z);
+    return [x / l, y / l, z / l];
+  };
+  const outN: V3 = b.side === "n" || b.side === "s" ? n(0, run, o * b.h) : n(o * b.h, run, 0);
+  m.quad(mat, top[0], top[1], top[2], top[3], [0, 1, 0], "#ffffff");
+  m.quad(mat, top[3], top[2], foot[2], foot[3], outN, "#ffffff");
+  // The hipped ends.
+  const endN = (dir: number): V3 => (b.side === "n" || b.side === "s" ? n(dir * b.h, run, 0) : n(0, run, dir * b.h));
+  m.quad(mat, foot[0], top[0], top[3], foot[3], endN(-1), "#ffffff");
+  m.quad(mat, foot[1], top[1], top[2], foot[2], endN(1), "#ffffff");
+}
+
+/** An airlock's porch: a grated landing level with the chamber, a ramp down, rails, a floodlight and a sign. */
+function porch(g: THREE.Group, q: (typeof PORCHES)[number]) {
+  const steel = metal("#8d949e", 0.45),
+    deck = paint("#4a5263", 0.8, 0.3),
+    grate = metal("#6f7884", 0.5);
+  const o = q.out;
+  // Local frame: u across the door, v out from the wall face.
+  const P = (u: number, v: number): [number, number] => (q.along === "x" ? [q.centre + u, q.face + o * v] : [q.face + o * v, q.centre + u]);
+  const m = new CampusMesher();
+  const span = (u0: number, u1: number, v0: number, v1: number, y0: number, y1: number, mat: THREE.Material) => {
+    const [ax, az] = P(u0, v0),
+      [bx, bz] = P(u1, v1);
+    m.box(mat, Math.min(ax, bx), y0, Math.min(az, bz), Math.max(ax, bx), y1, Math.max(az, bz), "#ffffff");
+  };
+  span(-q.half, q.half, 0, q.landing, 0, FLOOR - 0.04, deck);
+  for (let u = -q.half + 0.06; u <= q.half - 0.06; u += 0.08) span(u - 0.015, u + 0.015, 0.05, q.landing - 0.03, FLOOR - 0.04, FLOOR, grate);
+  // The ramp: steps of plate following the slope (so its edge reads clearly), with anti-slip bars.
+  const steps = 12;
+  for (let i = 0; i < steps; i++) {
+    const v0 = q.landing + (q.ramp * i) / steps,
+      v1 = q.landing + (q.ramp * (i + 1)) / steps;
+    const y = FLOOR * (1 - (i + 0.5) / steps);
+    span(-q.half, q.half, v0, v1 + 0.01, 0, Math.max(0.02, y), deck);
+    span(-q.half + 0.05, q.half - 0.05, v0 + 0.02, v0 + 0.05, Math.max(0.02, y), Math.max(0.02, y) + 0.012, grate);
+  }
+  for (const um of m.meshes()) g.add(um);
+  // Rails both sides, the length of the landing and the ramp.
+  for (const side of [-1, 1]) {
+    const u = side * (q.half - 0.04);
+    const posts: [number, number][] = [
+      [0.15, FLOOR],
+      [q.landing, FLOOR],
+      [q.landing + q.ramp * 0.5, FLOOR * 0.5],
+      [q.landing + q.ramp - 0.1, 0.02],
+    ];
+    for (const [v, y] of posts) {
+      const [x, z] = P(u, v);
+      strut(g, x, y, z, x, y + 1.0, z, 0.025, steel, 8);
+    }
+    for (let i = 0; i < posts.length - 1; i++) {
+      const [x0, z0] = P(u, posts[i][0]),
+        [x1, z1] = P(u, posts[i + 1][0]);
+      strut(g, x0, posts[i][1] + 1.0, z0, x1, posts[i + 1][1] + 1.0, z1, 0.022, steel, 8);
+    }
+  }
+  // A floodlight over the door and the panel beside it.
+  const [lx, lz] = P(0, 0.25);
+  box(g, 0.5, 0.1, 0.22, paint("#3b414b", 0.5), lx, FLOOR + LOCK_H + 0.5, lz);
+  box(g, 0.42, 0.03, 0.16, light("#fff1d6", 2.4), lx, FLOOR + LOCK_H + 0.44, lz);
+  const panel = LOCK_PANELS.find((p) => PORTALS.find((x) => x.id === q.door)?.a === `${p.airlock === "eva" ? "eva" : "yard"}-lock`);
+  if (panel) {
+    box(g, q.along === "x" ? 0.36 : 0.08, 0.5, q.along === "x" ? 0.08 : 0.36, paint("#c9ced5", 0.5, 0.2), panel.outside.x, FLOOR + 1.25, panel.outside.z);
+    box(g, q.along === "x" ? 0.1 : 0.03, 0.1, q.along === "x" ? 0.03 : 0.1, light("#e8b425", 1.5), panel.outside.x, FLOOR + 1.32, panel.outside.z + (q.along === "x" ? o * 0.05 : 0));
+  }
+}
+
+/** The HQ's outside: the Earth-link dish and a mast on the roof, air handling, and its name in big letters. */
+function hqOutside(g: THREE.Group, b: Building) {
+  const r = b.rect,
+    top = b.height + 0.9;
+  const white = paint("#e6e8eb", 0.5, 0.1),
+    steel = metal("#a7afbb", 0.4),
+    dark = paint("#3b414b", 0.55, 0.2);
+  // The dish points at Earth: low over the northern horizon at the Moon's south pole (and up into the sky on Mars).
+  const dish = new THREE.Group();
+  dish.position.set(r.x0 + 6, top, r.z0 + 6);
+  g.add(dish);
+  cyl(dish, 0.35, 0.5, 1.6, white, 0, 0.8, 0, 16);
+  const head = new THREE.Group();
+  head.position.y = 1.9;
+  head.rotation.x = 1.2;
+  dish.add(head);
+  const bowl = new THREE.Mesh(new THREE.SphereGeometry(2.0, 32, 12, 0, Math.PI * 2, 0, 0.62), white);
+  bowl.rotation.x = Math.PI;
+  bowl.position.y = 1.6;
+  head.add(bowl);
+  strut(head, 0, 0.1, 0, 0, 1.4, 0, 0.04, steel, 8);
+  box(head, 0.18, 0.18, 0.18, dark, 0, 1.45, 0);
+  // A mast with a beacon, and air handlers.
+  strut(g, r.x1 - 3, top, r.z0 + 3, r.x1 - 3, top + 5.5, r.z0 + 3, 0.07, steel, 10);
+  box(g, 0.14, 0.14, 0.14, light("#ff4d5e", 3), r.x1 - 3, top + 5.6, r.z0 + 3);
+  for (const [x, z] of [
+    [r.x1 - 6, r.z1 - 5],
+    [r.x0 + 5, r.z1 - 5],
+  ]) {
+    box(g, 2.6, 1.0, 1.6, paint("#d0d4d9", 0.6, 0.2), x, top + 0.5, z);
+    for (let i = 0; i < 2; i++) cyl(g, 0.45, 0.45, 0.06, dark, x - 0.6 + i * 1.2, top + 1.03, z, 20);
+  }
+  // Its name on the north face (towards Hab-1) and the south face (towards the apron).
+  const n = label(g, "COMMAND HQ", 6.4, 0, b.height - 1.1, r.z0 - WALL.outer - 0.03);
+  n.rotation.y = Math.PI;
+  label(g, "COMMAND HQ", 6.4, 0, b.height - 1.1, r.z1 + WALL.outer + 0.03);
+}
+
+/** The EVA complex's outside: its name over the door, a radiator on the roof. */
+function evaOutside(g: THREE.Group, b: Building) {
+  const r = b.rect;
+  label(g, "EVA 1", 2.2, 66, b.height - 0.8, r.z1 + WALL.outer + 0.03);
+  const top = b.height + 0.9;
+  for (let i = 0; i < 3; i++) {
+    const x = r.x0 + 4 + i * 2.6;
+    box(g, 2.2, 1.4, 0.06, paint("#e6e8eb", 0.45, 0.2), x, top + 0.75, r.z0 + 3);
+    strut(g, x, top, r.z0 + 3, x, top + 0.1, r.z0 + 3, 0.05, metal("#a7afbb", 0.4), 6);
+  }
 }
 
 /** A building that isn't built yet: its foundation slab, and scaffolding round where its walls will go. */

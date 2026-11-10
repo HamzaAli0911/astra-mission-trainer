@@ -111,6 +111,7 @@ export type CrewSpot =
   | "galley-3"
   | "galley-4"
   | "command"
+  | "hq-ops"
   | "eclss"
   | "garden"
   | "lab"
@@ -122,8 +123,10 @@ export type CrewSpot =
   | "shelter-2"
   | "shelter-3"
   | "shelter-4";
-/** Each crew member's usual work place. */
-const WORK: Record<string, CrewSpot> = { maya: "command", alex: "eclss", sam: "garden", noor: "lab" };
+/** Each crew member's usual work place (the commander works at the flight director's desk in the command HQ). */
+const WORK: Record<string, CrewSpot> = { maya: "hq-ops", alex: "eclss", sam: "garden", noor: "lab" };
+/** Places outside Hab-1 (in the campus): the home's own figures stay hidden there. */
+export const CAMPUS_SPOTS: CrewSpot[] = ["hq-ops"];
 /** The daily routine: breakfast, work, lunch, work (and a turn on the exercise machines), dinner, evening, sleep. */
 export function crewSpots(g: GameState): { id: string; spot: CrewSpot | null }[] {
   const h = ((g.t % 24) + 24) % 24;

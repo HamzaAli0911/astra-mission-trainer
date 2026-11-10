@@ -34,6 +34,8 @@ import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
 import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
+import { dressCampus, type CampusDressing } from "./campus/dress";
+import { campusScreenData } from "./campus/screens";
 import { building, cellAt, PORTALS, rectDistance, stageOf } from "../sim/base";
 import { useWalk, walker } from "../state/walk";
 import { interiorState } from "../sim/interior";
@@ -350,6 +352,9 @@ export function World() {
       for (const p of campus.parts.values()) p.inside.traverse((o) => o.layers.set(INSIDE_LAYER));
       scene.add(campus.group);
       let garageDoor = 0;
+      // The campus's furniture, fittings and screens (built in the background after the home's inside).
+      let dressing: CampusDressing | null = null,
+        campusScreensAt = -1;
 
       if (!(await slice())) return;
       const pads = PADS.map((p) => {
@@ -1343,6 +1348,40 @@ export function World() {
           const was = garageDoor;
           garageDoor = THREE.MathUtils.clamp(garageDoor + (close ? dt : -dt) / 3, 0, 1);
           if (garageDoor !== was) campus.doors.find((d) => d.id === v.id)?.set(garageDoor * garageDoor * (3 - 2 * garageDoor));
+          if (dressing) {
+            // Alex's suit is off its rack while they're outside; the airlocks' beacons turn while they cycle, and the
+            // lights over their doors say which door may open; the servers blink; the screens show the mission.
+            const locks = walkCtl.lockState();
+            if (dressing.alexSuit) dressing.alexSuit.visible = !g.eva;
+            const spots = homeState?.crew ?? interiorState(g).crew;
+            for (const c of dressing.crew) c.o.visible = spots.some((x) => x.id === c.id && x.spot === c.spot);
+            for (const b of dressing.beacons) {
+              const on = (locks[b.airlock]?.cycle ?? "none") !== "none";
+              b.mat.emissiveIntensity = on ? (reduced ? 2.5 : 1.5 + Math.max(0, Math.sin(clock * 9)) * 2.5) : 0;
+              if (on && !reduced) b.o.rotation.y += dt * 6;
+            }
+            for (const l of dressing.doorLights) {
+              const lock = Object.entries(locks).find(([id]) => l.door.startsWith(id))?.[1];
+              const ok = lock ? (l.door.endsWith("inner") ? lock.inner : lock.outer) : false;
+              l.mat.emissive.set(ok ? "#3ee39a" : "#ff4d5e");
+            }
+            dressing.leds.emissiveIntensity = 0.9 + 0.6 * Math.max(0, Math.sin(clock * 5.3) * Math.sin(clock * 1.7));
+            const anyInside = [...campus.parts.values()].some((p) => p.inside.visible);
+            if (anyInside && clock - campusScreensAt > 0.33) {
+              campusScreensAt = clock;
+              const st0 = interiorState(g);
+              const data = campusScreenData(g, { ...screenData(g), essentialOnly: st0.screens === "essential" }, locks);
+              for (const sc of dressing.screens) {
+                if (!sc.canvas || !sc.texture) continue;
+                const c = sc.canvas.getContext("2d")!;
+                if (data.essentialOnly && !sc.essential) {
+                  c.fillStyle = "#020305";
+                  c.fillRect(0, 0, sc.canvas.width, sc.canvas.height);
+                } else sc.draw(c, sc.canvas.width, sc.canvas.height, data);
+                sc.texture.needsUpdate = true;
+              }
+            }
+          }
         }
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
         const near = !!interior && (view === "walk" || camera.position.distanceTo(homeOrigin) < 24);
@@ -1536,6 +1575,24 @@ export function World() {
           interior = built;
           if (debug) debug.interior = built;
           useWalk.getState().set({ ready: true });
+          // Then the campus's furniture and fittings, a building at a time.
+          const dressed = await dressCampus(planet, stageOf(useGame.getState().game.missionId), breathe);
+          if (!dressed || !alive) return;
+          for (const [id, grp] of dressed.groups) {
+            grp.traverse((o) => {
+              o.layers.set(INSIDE_LAYER);
+              const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+              if (m?.isMeshStandardMaterial && !m.transparent && insideEnv) m.envMap = insideEnv.texture;
+            });
+            campus.parts.get(id)?.inside.add(grp);
+          }
+          renderer.setRenderTarget(level > 0 ? target : null);
+          const dressedReady = renderer.compileAsync(campus.group, camera, scene);
+          renderer.setRenderTarget(null);
+          await dressedReady.catch(() => undefined);
+          if (!alive) return;
+          dressing = dressed;
+          if (debug) debug.dressing = dressed;
         });
 
       teardown = () => {

@@ -250,7 +250,7 @@ export function campusInside<T extends THREE.MeshStandardMaterial>(mat: T, patte
 
 const cache = new Map<string, THREE.MeshStandardMaterial>();
 /** One material per finish (what it's made of, how rough, its pattern), coloured per vertex. */
-function finish(key: string, params: THREE.MeshStandardMaterialParameters, detail?: Detail, pattern?: CampusPattern) {
+function finish_(key: string, params: THREE.MeshStandardMaterialParameters, detail?: Detail, pattern?: CampusPattern) {
   const k = key + (pattern ?? "");
   let m = cache.get(k);
   if (!m) {
@@ -263,10 +263,32 @@ function finish(key: string, params: THREE.MeshStandardMaterialParameters, detai
 }
 /** The finishes of the campus inside: painted panels, metal, satin plastic, rubber, and soft fabric. */
 export const FINISH = {
-  paint: (pattern?: CampusPattern, rough = 0.62) => finish(`paint:${rough}`, { roughness: rough, metalness: 0.05 }, FINE.panel, pattern),
-  metal: (rough = 0.38) => finish(`metal:${rough}`, { roughness: rough, metalness: 0.75 }, FINE.metal),
-  plastic: (rough = 0.45) => finish(`plastic:${rough}`, { roughness: rough, metalness: 0 }),
-  rubber: (pattern?: CampusPattern) => finish("rubber", { roughness: 0.9, metalness: 0 }, FINE.rubber, pattern),
-  fabric: () => finish("fabric", { roughness: 0.92, metalness: 0 }, FINE.pad),
+  paint: (pattern?: CampusPattern, rough = 0.62) => finish_(`paint:${rough}`, { roughness: rough, metalness: 0.05 }, FINE.panel, pattern),
+  metal: (rough = 0.38) => finish_(`metal:${rough}`, { roughness: rough, metalness: 0.75 }, FINE.metal),
+  plastic: (rough = 0.45) => finish_(`plastic:${rough}`, { roughness: rough, metalness: 0 }),
+  rubber: (pattern?: CampusPattern) => finish_("rubber", { roughness: 0.9, metalness: 0 }, FINE.rubber, pattern),
+  fabric: () => finish_("fabric", { roughness: 0.92, metalness: 0 }, FINE.pad),
 };
 export type Finish = keyof typeof FINISH;
+
+/** The campus material for one of Hab-1's finishes (see interior/lighting.ts: params, detail, pattern), per vertex coloured. */
+export function campusFinish(finish: string) {
+  const [rest, detail, pattern] = JSON.parse(finish) as [THREE.MeshStandardMaterialParameters, Detail | null, string | null];
+  const mapped: CampusPattern | undefined = pattern === "floor" ? "floor" : pattern === "ceiling" ? "ceiling" : undefined;
+  return finish_(`hab:${JSON.stringify([rest, detail])}`, rest, detail ?? undefined, mapped);
+}
+const clones = new Map<THREE.Material, THREE.Material>();
+/** A campus-lit twin of one of Hab-1's other inside materials (labels, glass, hazard stripes), made once. */
+export function campusTwin(mat: THREE.Material) {
+  let m = clones.get(mat);
+  if (!m) {
+    const c = (mat as THREE.MeshStandardMaterial).clone();
+    // (A clone keeps the maps and settings, not the home's lighting.)
+    c.onBeforeCompile = () => undefined;
+    c.customProgramCacheKey = () => "";
+    m = campusInside(c);
+    m.userData.shared = true;
+    clones.set(mat, m);
+  }
+  return m;
+}

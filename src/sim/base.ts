@@ -193,6 +193,95 @@ export const PORTALS: Portal[] = [
   P("garage-side", "garage", "outside", 46.2, 66, "z", 1.4, "open"),
 ];
 
+/**
+ * Windows in the campus's outer walls: on a room's edge (`side`), centred `at` along it, `width` wide, from `y0` to
+ * `y1` above the ground. They don't change where you can walk, only what the walls are made of.
+ */
+export interface Win {
+  id: string;
+  cell: string;
+  side: Side;
+  at: number;
+  width: number;
+  y0: number;
+  y1: number;
+}
+const W = (id: string, cell: string, side: Side, at: number, width: number, y0: number, y1: number): Win => ({ id, cell, side, at, width, y0, y1 });
+export const CAMPUS_WINDOWS: Win[] = [
+  // The link: a row of windows on its east side, looking out over the pad field.
+  ...[12.5, 17.3, 22.1, 26.9].map((z, i) => W(`link-${i + 1}`, "link", "e", z, 2.0, FLOOR + 1.0, FLOOR + 2.2)),
+  // The HQ: the lobby looks north to Hab-1, the briefing room west, the mezzanine south over the landing apron.
+  W("hq-lobby-w", "hq-lobby", "n", -3.6, 2.4, FLOOR + 1.0, FLOOR + 2.3),
+  W("hq-lobby-e", "hq-lobby", "n", 3.6, 2.4, FLOOR + 1.0, FLOOR + 2.3),
+  W("hq-briefing-1", "hq-briefing", "w", 35.9, 1.6, FLOOR + 1.0, FLOOR + 2.2),
+  W("hq-briefing-2", "hq-briefing", "w", 38.5, 1.6, FLOOR + 1.0, FLOOR + 2.2),
+  ...[-9, -3, 3, 9].map((x, i) => W(`hq-mezzanine-${i + 1}`, "hq-hall", "s", x, 5.2, MEZZANINE + 0.95, MEZZANINE + 2.75)),
+  // The EVA complex's suit room, over its service bench.
+  W("eva-suit", "eva-suit", "e", 52.2, 1.4, FLOOR + 1.1, FLOOR + 2.0),
+];
+/** The windows on one edge of a room. */
+export const windowsOn = (cell: string, side: Side) => CAMPUS_WINDOWS.filter((w) => w.cell === cell && w.side === side);
+
+/**
+ * Furniture and fittings that stand on the floor (what you bump into is what you see): a box in a room, `h` tall,
+ * its front facing `face` (desks: the side the operator sits at; racks and cabinets: the side you use).
+ */
+export interface Furniture {
+  id: string;
+  cell: string;
+  kind: string;
+  rect: Rect;
+  h: number;
+  face: Side;
+}
+const F = (id: string, cell: string, kind: string, x0: number, z0: number, x1: number, z1: number, h: number, face: Side): Furniture => ({ id, cell, kind, rect: R(x0, z0, x1, z1), h, face });
+/** A row of operator chairs behind a desk. */
+const chairs = (prefix: string, cell: string, xs: number[], z: number, face: Side) => xs.map((x, i) => F(`${prefix}-${i + 1}`, cell, "chair", x - 0.28, z - 0.28, x + 0.28, z + 0.28, 1.0, face));
+export const FURNITURE: Furniture[] = [
+  // HQ operations hall: two rows of consoles facing the display wall (two banks each, an aisle down the middle).
+  ...[-1, 1].flatMap((s) => [
+    F(`hq-console-a${s < 0 ? "w" : "e"}`, "hq-hall", "console", s < 0 ? -7 : 1.2, 43.0, s < 0 ? -1.2 : 7, 43.9, 0.76, "s"),
+    F(`hq-console-b${s < 0 ? "w" : "e"}`, "hq-hall", "console", s < 0 ? -7 : 1.2, 46.0, s < 0 ? -1.2 : 7, 46.9, 0.76, "s"),
+  ]),
+  ...chairs("hq-chair-a", "hq-hall", [-6.0, -4.1, -2.2, 2.2, 4.1, 6.0], 44.45, "n"),
+  ...chairs("hq-chair-b", "hq-hall", [-6.0, -4.1, -2.2, 2.2, 4.1, 6.0], 47.45, "n"),
+  // Under the mezzanine: the situation table, the crisis station and the equipment closet.
+  F("hq-table", "hq-hall", "situation-table", -1.4, 52.6, 1.4, 54.0, 0.95, "n"),
+  F("hq-crisis", "hq-hall", "crisis-station", 8.0, 56.05, 11.0, 56.4, 1.9, "n"),
+  F("hq-closet", "hq-hall", "closet", -13.9, 55.8, -11.4, 56.4, 2.1, "n"),
+  // The mezzanine: the flight director's desk and CAPCOM's, overlooking the hall; a rail at the windows behind.
+  F("hq-fd-desk", "hq-mezzanine", "console", -4.5, 51.0, 4.5, 51.8, 0.76, "s"),
+  F("hq-capcom-desk", "hq-mezzanine", "console", 6.5, 51.0, 11.0, 51.8, 0.76, "s"),
+  ...chairs("hq-fd-chair", "hq-mezzanine", [-2.6, 0, 2.6, 7.6, 9.9], 52.15, "n"),
+  F("hq-window-rail", "hq-mezzanine", "window-rail", -12.0, 55.95, 12.0, 56.4, 1.05, "n"),
+  // Lobby: benches under the windows, the colony map, a planter.
+  F("hq-bench-w", "hq-lobby", "bench", -5.0, 34.4, -2.4, 34.85, 0.46, "s"),
+  F("hq-bench-e", "hq-lobby", "bench", 2.4, 34.4, 5.0, 34.85, 0.46, "s"),
+  F("hq-map", "hq-lobby", "map-kiosk", -4.6, 38.7, -2.6, 39.2, 1.7, "n"),
+  F("hq-planter", "hq-lobby", "planter", 3.6, 38.9, 5.6, 39.6, 0.7, "n"),
+  // Briefing room: a table for eight facing the briefing screen.
+  F("hq-brief-table", "hq-briefing", "table", -12.4, 36.5, -8.2, 37.9, 0.75, "n"),
+  ...[-11.8, -10.3, -8.8].flatMap((x, i) => [F(`hq-brief-chair-n${i + 1}`, "hq-briefing", "chair", x - 0.25, 35.75, x + 0.25, 36.25, 0.95, "s"), F(`hq-brief-chair-s${i + 1}`, "hq-briefing", "chair", x - 0.25, 38.15, x + 0.25, 38.65, 0.95, "n")]),
+  // Comms equipment room: server racks, the Earth link's comms console, a cooling unit.
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => F(`hq-rack-${i + 1}`, "hq-equipment", "server-rack", 8.0 + i * 0.6, 34.45, 8.6 + i * 0.6, 35.45, 2.0, "s")),
+  F("hq-comms", "hq-equipment", "console", 13.15, 36.4, 13.95, 38.8, 0.76, "w"),
+  F("hq-comms-chair", "hq-equipment", "chair", 12.3, 37.3, 12.86, 37.86, 1.0, "e"),
+  F("hq-cooling", "hq-equipment", "cooling-unit", 9.0, 39.35, 11.0, 40.0, 1.8, "n"),
+  // EVA complex: suit racks either side of the door, lockers, benches, the suit service bench.
+  F("eva-rack-w", "eva-suit", "suit-rack", 52.6, 49.0, 55.4, 49.7, 2.05, "s"),
+  F("eva-rack-e", "eva-suit", "suit-rack", 63.1, 49.0, 65.9, 49.7, 2.05, "s"),
+  F("eva-rack-spare", "eva-suit", "suit-rack", 66.4, 49.0, 69.2, 49.7, 2.05, "s"),
+  F("eva-lockers", "eva-suit", "lockers", 50.0, 50.0, 50.6, 54.5, 2.0, "e"),
+  F("eva-bench-1", "eva-suit", "bench", 53.0, 51.95, 55.6, 52.35, 0.46, "n"),
+  F("eva-bench-2", "eva-suit", "bench", 62.4, 51.95, 65.0, 52.35, 0.46, "n"),
+  F("eva-service", "eva-suit", "service-bench", 69.25, 50.9, 70.0, 53.6, 0.9, "w"),
+  // The dust lock: brushes and a vacuum on the west wall; the airlock chamber's bench.
+  F("eva-brushes", "eva-dust", "brush-station", 50.0, 57.0, 50.55, 61.2, 1.3, "e"),
+  F("eva-vacuum", "eva-dust", "vacuum", 50.0, 61.8, 50.7, 62.9, 1.05, "e"),
+  F("eva-lock-bench", "eva-lock", "bench", 63.4, 55.65, 68.6, 56.1, 0.46, "s"),
+];
+export const furnitureById = (id: string) => FURNITURE.find((f) => f.id === id);
+
 /** The HQ's feature stair: a straight open flight in the hall, rising south (+z) to the mezzanine's edge. */
 export const HQ_STAIR = { x0: -10, x1: -8.6, z0: 44.0, z1: 50.4 };
 /** Stairs between campus floors (for route finding): from the cell at the foot to the cell at the top. */
@@ -229,6 +318,44 @@ export function doorSlab(p: Portal): Rect {
 /** The airlocks' outer doors. */
 export const OUTER_DOORS = PORTALS.filter((p) => p.kind === "lock-outer");
 
+/**
+ * Regolith banked against outer walls as shielding (radiation and micrometeoroids), at its natural angle of repose
+ * (about 35°): `face` is the wall's outer face, the bank runs from `from` to `to` along it, `h` high at the wall.
+ * Kept clear of doors, windows and where corridors join. Solid for rovers and suited walkers.
+ */
+export interface Berm {
+  id: string;
+  building: BuildingId;
+  side: Side;
+  face: number;
+  from: number;
+  to: number;
+  h: number;
+}
+const REPOSE = Math.tan((35 * Math.PI) / 180);
+/** How far a bank reaches out from the wall: a flat top 0.4 m wide, then the slope. */
+export const bermDepth = (b: Berm) => 0.4 + b.h / REPOSE;
+export const BERMS: Berm[] = [
+  { id: "hq-n-w", building: "hq", side: "n", face: 34.0, from: -14.4, to: -5.2, h: 1.8 },
+  { id: "hq-n-e", building: "hq", side: "n", face: 34.0, from: 5.2, to: 14.4, h: 1.8 },
+  { id: "hq-w-n", building: "hq", side: "w", face: -14.4, from: 39.8, to: 44.6, h: 1.8 },
+  { id: "hq-w-s", building: "hq", side: "w", face: -14.4, from: 49.4, to: 56.8, h: 1.8 },
+  { id: "hq-e-n", building: "hq", side: "e", face: 14.4, from: 34.0, to: 44.6, h: 1.8 },
+  { id: "hq-e-s", building: "hq", side: "e", face: 14.4, from: 49.4, to: 56.8, h: 1.8 },
+  { id: "hq-s", building: "hq", side: "s", face: 56.8, from: -14.4, to: 14.4, h: 1.8 },
+  { id: "eva-e", building: "eva", side: "e", face: 70.4, from: 53.4, to: 63.4, h: 1.8 },
+  { id: "eva-s", building: "eva", side: "s", face: 63.4, from: 49.6, to: 64.3, h: 1.8 },
+  { id: "link-w", building: "link", side: "w", face: -2.0, from: 14.0, to: 34.0, h: 1.6 },
+];
+/** A bank's footprint on the ground. */
+export function bermRect(b: Berm): Rect {
+  const d = bermDepth(b);
+  if (b.side === "n") return R(b.from, b.face - d, b.to, b.face);
+  if (b.side === "s") return R(b.from, b.face, b.to, b.face + d);
+  if (b.side === "w") return R(b.face - d, b.from, b.face, b.to);
+  return R(b.face, b.from, b.face + d, b.to);
+}
+
 /** Outdoor solids for rovers and suited walkers: every building's footprint with its walls (the garage as walls only). */
 export function campusSolids(): Rect[] {
   const out: Rect[] = [];
@@ -251,6 +378,7 @@ export function campusSolids(): Rect[] {
     out.push(...pieces);
   }
   for (const p of COMPOUND_PARTS) out.push(p.rect);
+  for (const b of BERMS) out.push(bermRect(b));
   return out;
 }
 
@@ -451,6 +579,12 @@ export function campusWalls(where: 0 | 2 | "hq-stair"): Seg[] {
   if (level === 0) {
     // Round the HQ stair: its sides and its high end (you step on at the low, north end).
     segs.push(line(s.x0, s.z0, s.x0, s.z1), line(s.x1, s.z0, s.x1, s.z1), line(s.x0, s.z1, s.x1, s.z1));
+  }
+  // Furniture: its four sides, named after it (you can see and reach what's on it).
+  for (const f of FURNITURE) {
+    if (cellById(f.cell)?.level !== level) continue;
+    const r = f.rect;
+    segs.push(...[line(r.x0, r.z0, r.x1, r.z0), line(r.x1, r.z0, r.x1, r.z1), line(r.x1, r.z1, r.x0, r.z1), line(r.x0, r.z1, r.x0, r.z0)].map((g) => ({ ...g, block: f.id })));
   }
   return segs;
 }
