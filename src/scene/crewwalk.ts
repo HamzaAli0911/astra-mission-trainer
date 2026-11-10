@@ -138,25 +138,31 @@ export function crewWalkers(ids: string[], gravity: number) {
             if (!seen(p.to!.x, p.to!.z, p.to!.floor) || !visible) settleAt(p, p.to!);
             else p.state = "settling";
           } else {
-            // Skip the stretch no one can see, up to where it comes into view (a doorway, usually).
+            // Skip the stretch no one can see, up to where it comes into view (a doorway, usually); and wait there,
+            // out of sight, while someone else is just coming through.
+            let hold = false;
+            const crowded = (x: number, z: number) => people.some((o) => o !== p && o.state !== "out" && Math.hypot(o.x - x, o.z - z) < 1.15 && seen(o.x, o.z, o.where));
             skip: while (p.leg < path.length && !seen(p.x, p.z, p.where)) {
               const q = path[p.leg];
               const d = Math.hypot(q.x - p.x, q.z - p.z);
               const n = Math.max(1, Math.ceil(d / 0.4));
               const w = typeof q.where === "number" ? q.where : p.where;
-              for (let i = 1; i < n; i++) {
+              for (let i = 1; i <= n; i++) {
                 const x = p.x + ((q.x - p.x) * i) / n,
                   z = p.z + ((q.z - p.z) * i) / n;
                 if (seen(x, z, w)) {
                   p.x += ((q.x - p.x) * (i - 1)) / n;
                   p.z += ((q.z - p.z) * (i - 1)) / n;
+                  hold = crowded(x, z);
                   break skip;
                 }
               }
               Object.assign(p, { x: q.x, z: q.z, where: q.where });
               p.leg++;
             }
-            if (p.leg >= path.length) {
+            if (hold) {
+              p.speed = 0;
+            } else if (p.leg >= path.length) {
               p.state = "settling";
             } else {
               const q = path[p.leg];
