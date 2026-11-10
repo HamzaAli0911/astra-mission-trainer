@@ -271,6 +271,8 @@ export function walkController(
       useWalk.getState().set({ guide: g2 });
     }
   };
+  // (For the debug visualiser: what E would use now.)
+  let aimed: { x: number; z: number } | null = null;
   let active = false,
     drag: { x: number; y: number } | null = null;
 
@@ -322,6 +324,10 @@ export function walkController(
   return {
     get active() {
       return active;
+    },
+    /** For the debug visualiser: what E would use now, and the tour guide's route. */
+    debug() {
+      return { target: active ? aimed : null, way: active && useWalk.getState().tour !== null ? way : null };
     },
     /** The tour stop being guided to (a point above it, for its beacon), or null. */
     beacon() {
@@ -531,6 +537,7 @@ export function walkController(
         }
       }
       steer(now);
+      aimed = best ? { x: (best as Usable).x, z: (best as Usable).z } : null;
       const label = best?.label ?? null;
       if (here !== room || label !== prompt) {
         room = here;

@@ -202,7 +202,10 @@ higher on High: 9.7 ms before and 9.6 ms now for the overview), so compare numbe
 - **Alex walks outside, not the commander** (the brief said crew[0]): Maya, the commander, rides in the
   rover, so the engineer walks; you can then be outside on foot while the rover is out.
 - **The airlock is a sequence, not a room you walk through**: it plays its cycle, then puts you outside.
-- **The crew don't walk between rooms**, and you can pass through them.
+  (v7: the campus's airlocks are real rooms with two interlocked doors; Hab-1's old hatch now opens onto
+  the link to the HQ.)
+- **The crew don't walk between rooms**, and you can pass through them. (v7: they walk, and doors open
+  for them; you can still pass through them.)
 
 ## Changes to the outpost around it
 
@@ -213,3 +216,38 @@ higher on High: 9.7 ms before and 9.6 ms now for the overview), so compare numbe
 - The ground is now level out past the outer ring (it used to slope up to 0.32 m under the outer pads).
 - Tests check that pads clear the home and each other, sit on level ground and clear the dock, and the
   existing rover tests check that every site can still be reached.
+
+## v7: the colony campus around Hab-1
+
+Hab-1 is now building B of a colony (`src/sim/base.ts`), joined by a 30 m pressurised link to a command HQ,
+and from there by two spines to the west and east wings. The same rule holds as for the home: one plan drives
+the 3D model, the walls you bump into, the outdoor solids rovers and suited walkers hit, the floor plan, the
+walking routes, the stations and the tests.
+
+| | Building | Inside |
+|---|---|---|
+| A | Command HQ | lobby, briefing room, comms equipment room, double-height operations hall with a 16 m display wall, a feature stair, the command mezzanine |
+| B | Hab-1 | the original two-storey home (14 rooms) |
+| C | Life support | control room (oxygen and water consoles), plant room (oxygen plant, CO2 removal, water recovery, pumps, tanks) |
+| D | Science lab | lab (islands, glovebox, microscopes, fume hood, spectrometer, rock saw, sample intake), sample store, briefing nook |
+| E | Greenhouse | growing hall (eight hydroponic racks), prep and nutrient room |
+| F | Clinic | treatment bays, isolation room, supplies |
+| G | Engineering | workshop (printers, benches, welding bay), repair bay, power desk |
+| H | EVA complex | suit room, dust lock, airlock |
+| I | Rover garage | unpressurised hangar: crew rover bay with its charger, the science rover's bay |
+| J | Logistics | main store (shelves that fill and empty with the stores), cargo bay |
+| K | Storm shelter | water-walled refuge under a regolith berm |
+| L | Power compound | outdoors (with the reactor compound far to the east) |
+
+Plus the link, the two spines and the yard lock: 31 rooms and corridors in the campus, 45 walkable spaces
+with Hab-1's. Missions open it in three stages (stage 0: Hab-1, the link, the HQ, the east spine, the yard
+lock, the EVA complex and the garage; stage 1 adds the west spine, life support, the greenhouse, the shelter,
+logistics and the lab; stage 2 adds the clinic, engineering and the power and reactor compounds). Doors into a building a mission hasn't got stay locked.
+
+Lighting follows the home's approach: each room's ceiling lamps (from the same data) light only that room,
+picked by a room index stored on every vertex, and the sun comes in only through that room's own windows
+(an exact ray test against the window's opening, then the shadow map). The campus copies Hab-1's lamp
+colour, so night, a low battery and a power cut look the same everywhere.
+
+Only the building you're in and those joined to it by a doorway are drawn; from outside, a building's
+windows glow instead of drawing its inside.

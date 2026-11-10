@@ -104,4 +104,7 @@ v6 code does today, the decisions taken, and what is done. The final report is w
     in a suit); screenshot mode (U).
   - Sound: grating steps in the airlocks and dust lock, concrete in the garage, the plant room's hum following its
     machines and every machine slowing in a blackout; storm beacons at the shelter, whose door stands open in a storm.
-- [ ] F. Performance, QA screenshots, docs, report.
+- [x] F. Performance, QA screenshots, docs, report: the brief's seven views measured on three tiers, v6 against
+  v7 on the same machine and cameras (v7 costs the same or less where both have a view), the greenhouse's crops
+  thinned after measuring, 18 fixed campus review shots, a debug visualiser, docs updated, and an honest final
+  report in [V7_REPORT.md](V7_REPORT.md).

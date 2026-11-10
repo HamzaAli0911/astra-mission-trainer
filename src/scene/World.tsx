@@ -33,6 +33,7 @@ import { HOME as HOME_PLAN, type Where } from "../sim/home";
 import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
 import { crewWalkers, type CrewWalkers } from "./crewwalk";
+import { debugViz } from "./debugviz";
 import { CREW_COLOR } from "./interior/parts";
 import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
@@ -371,6 +372,9 @@ export function World() {
         habVisible = true;
       // The campus's furniture, fittings and screens (built in the background after the home's inside).
       let crew: CrewWalkers | null = null;
+      let vizOn = false,
+        vizUpdate = () => {},
+        vizOff = () => {};
       let dressing: CampusDressing | null = null,
         campusScreensAt = -1,
         bindingsAt = -1;
@@ -1440,6 +1444,7 @@ export function World() {
           tourBeacon.position.set(stopAt.x, stopAt.y + (reduced ? 0 : Math.sin(clock * 2.2) * 0.08), stopAt.z);
           if (!reduced) tourBeacon.rotation.y += dt * 1.4;
         }
+        vizUpdate();
         // The crew walk between their places (seen stretches at a walking pace; the rest skipped).
         if (crew) {
           const seen = (x: number, z: number, w: Where) => {
@@ -1548,6 +1553,33 @@ export function World() {
           Object.assign(walker, { x, z, where: level, yaw: THREE.MathUtils.degToRad(yaw), pitch: THREE.MathUtils.degToRad(pitch), vx: 0, vz: 0 });
         };
         debug.camera = camera;
+        // The debug visualiser: collision, doors, pressure zones, the walker's body, the interaction ray, routes.
+        let viz: ReturnType<typeof debugViz> | null = null;
+        const setViz = (on: boolean) => {
+          if (on && !viz) {
+            viz = debugViz();
+            scene.add(viz.group);
+          }
+          if (viz) viz.group.visible = on;
+          vizOn = on;
+        };
+        debug.viz = setViz;
+        const onVizKey = (e: KeyboardEvent) => {
+          if (e.code === "Backquote") setViz(!vizOn);
+        };
+        window.addEventListener("keydown", onVizKey);
+        vizUpdate = () => {
+          if (!viz || !vizOn) return;
+          const g2 = useGame.getState().game;
+          const d = walkCtl.debug();
+          const paths = (crew?.people ?? []).filter((p) => p.state === "walking" && p.path).map((p) => ({ points: p.path!.slice(Math.max(0, p.leg - 1)), color: CREW_COLOR[p.id] ?? "#ffffff" }));
+          if (d.way) paths.push({ points: d.way, color: "#ff8a3d" });
+          viz.update({ walker, stage: stageOf(g2.missionId), shown: (id) => !!campus.parts.get(id as never)?.inside.visible, target: d.target, paths });
+        };
+        vizOff = () => {
+          window.removeEventListener("keydown", onVizKey);
+          viz?.dispose();
+        };
         debug.walker = walker;
         // A 1.75 m figure for judging scale in review shots (habitat-local, a floor, facing a bearing); null hides it.
         let figure: THREE.Object3D | null = null;
@@ -1696,6 +1728,7 @@ export function World() {
         window.removeEventListener("pointerup", onLookUp);
         controls.dispose();
         walkCtl.dispose();
+        vizOff();
         interior?.dispose();
         insideEnv?.dispose();
         scene3d.pick = null;

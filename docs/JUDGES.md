@@ -27,6 +27,19 @@ Tip: in **Settings**, turn on **Unlock every mission** first. **Go to Mars**, **
 5. **Solar Storm.** The heads-up card pauses the game when a flare is spotted, with CAPCOM's suggestions (drive home, build a shelter). When the storm hits, the screen tints purple and a Geiger counter clicks; take shelter and watch the dose readout.
 6. **Red Planet.** The Power panel shows less than half the solar power of the Moon. Build MOXIE and a fission reactor and ride out the dust storm.
 
+## The colony in first person (about 3 minutes)
+
+v7 grows the outpost into a colony you can walk through: a command HQ, life support, a greenhouse, a storm shelter, a lab, engineering, an EVA complex and a rover garage, joined by pressurised spines to the original home (Hab-1). Its consoles run on the simulation's own numbers and actions.
+
+1. **Settings → Unlock every mission**, then the mission map → **Mars Colony** → Start (skip the tutorial). It starts with solar arrays, a battery and an oxygen maker. Press **B** and build a **Greenhouse** so its building has crops (ready in a few training hours; press **3** for 4×, then **1**). (20 s)
+2. **V** (or **Walk**, bottom right) puts you in Hab-1. Press **Back to HQ** (top bar): you're in the operations hall. The 16 m display wall and the consoles show the mission live; on the mezzanine above, the commander works at the flight director's desk. Walk to the front row's left console and press **E** on the power board. (20 s)
+3. **Life support (40 s).** **M** opens the floor plan (you, the crew, every room); close it and walk west through the hall's side door along the west spine to the life support block's control room. **E** on the oxygen plant controls, then **1**: the Oxygen Maker switches off. The card's numbers, the HUD and the plant's status lamp all change together, and the card says how long the tanks would last. Press **1** again to switch it back on.
+4. **Greenhouse (20 s).** Next door west. **E** on the grow-light panel by the door: **3** for high light, **1** for off. The grow lights dim, the power figure drops, and food grown falls to zero; crops stop looking productive.
+5. **Storm shelter (20 s).** Back along the spine: the door with amber beacons. Inside, **E** on the dose console shows the dose rate outside and in here (a tenth: water walls). Taking shelter here is the same action as the HUD's, and the crew walk in and sit down.
+6. **EVA and the garage (60 s).** **Back to HQ**, then east along the east spine to the EVA complex. **E** at the suit rack to suit up, through the dust lock, **E** on the airlock panel (it pumps down; the inner and outer doors never open together; **E** again hurries it), and out onto the porch. Walk west to the garage's side door. Inside, **E** on the service board: **1** or **2** sends the crew rover to a site, through the garage's big door. Come back through the airlock the same way.
+
+**Take a tour** (top bar) does the same walk with an arrow along the real route and a beacon over each stop: housing, command, life support, greenhouse, shelter, lab, engineering, the EVA complex and the garage. **U** hides the controls for screenshots.
+
 ## A 60-second "step inside" demo
 
 The outpost's habitat is a two-storey home you can walk through, and every machine in it shows the mission's real numbers ([HABITAT.md](HABITAT.md)).

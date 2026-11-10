@@ -603,16 +603,17 @@ function plant(kind: "lettuce" | "wheat" | "tomato" | "beans") {
     parts.push(g);
   };
   const M = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, "YXZ")), new THREE.Vector3(sx, sy, sz));
-  const leaf = new THREE.SphereGeometry(0.05, 7, 5);
+  // (A greenhouse holds about 1,900 plants: each is kept to a few hundred triangles, flattened low-poly leaves.)
+  const leaf = new THREE.SphereGeometry(0.05, 5, 4);
   if (kind === "lettuce") {
     // Two rings of broad leaves curling up round a pale heart.
-    for (let i = 0; i < 9; i++) add(leaf, i % 2 ? "#7dbb52" : "#8fcc5e", M(Math.cos(i * 0.7) * 0.06, 0.04, Math.sin(i * 0.7) * 0.06, 0, -i * 0.7, 0.55, 1.6, 0.3, 1.0));
-    for (let i = 0; i < 6; i++) add(leaf, "#a9d977", M(Math.cos(i * 1.05 + 0.4) * 0.03, 0.07, Math.sin(i * 1.05 + 0.4) * 0.03, 0, -i * 1.05, 0.9, 1.1, 0.3, 0.8));
-    add(new THREE.SphereGeometry(0.035, 7, 5), "#c9e6a0", M(0, 0.07, 0));
+    for (let i = 0; i < 8; i++) add(leaf, i % 2 ? "#7dbb52" : "#8fcc5e", M(Math.cos(i * 0.79) * 0.06, 0.04, Math.sin(i * 0.79) * 0.06, 0, -i * 0.79, 0.55, 1.6, 0.3, 1.0));
+    for (let i = 0; i < 5; i++) add(leaf, "#a9d977", M(Math.cos(i * 1.26 + 0.4) * 0.03, 0.07, Math.sin(i * 1.26 + 0.4) * 0.03, 0, -i * 1.26, 0.9, 1.1, 0.3, 0.8));
+    add(new THREE.SphereGeometry(0.035, 5, 4), "#c9e6a0", M(0, 0.07, 0));
   } else if (kind === "wheat") {
     // Stalks with an ear of grain at the top.
-    const stalk = new THREE.CylinderGeometry(0.004, 0.006, 0.36, 4);
-    const ear = new THREE.CylinderGeometry(0.012, 0.007, 0.07, 5);
+    const stalk = new THREE.CylinderGeometry(0.004, 0.006, 0.36, 3, 1, true);
+    const ear = new THREE.CylinderGeometry(0.012, 0.007, 0.07, 4);
     for (let i = 0; i < 7; i++) {
       const a = i * 0.9,
         r = 0.03 + (i % 3) * 0.012,

@@ -43,10 +43,11 @@ Missions **save themselves** every few seconds and when the tab is closed. After
 
 Everything is drawn in real time in the browser, with no image or model files: every model, texture and sky is made by code.
 
-- A **300 m × 300 m** area around the outpost on each world, ringed by distant hills: an icy crater that never sees the Sun, boulder fields, smaller craters, a lava-tube skylight (Moon), dunes and a layered mesa (Mars), and the lander that brought the crew.
+- A **540 m × 540 m** area around the colony on each world, ringed by distant hills: an icy crater that never sees the Sun, boulder fields, smaller craters, a lava-tube skylight (Moon), dunes and a layered mesa (Mars), and the lander that brought the crew.
 - **Moon**: a black sky with the Milky Way, a low Sun that casts long shadows, Earth hanging over the horizon, no air (so no haze and no blowing dust), and a crater floor that never sees the Sun, with frost on its rocks. **Mars**: a butterscotch sky, blue sunsets, Phobos and Deimos at night, rippled dunes, a layered mesa and dust storms that dim the Sun. Solar storms don't tint the sky (radiation is invisible); the screen edge pulses instead.
 - Detailed, physically shaded modules: an inflatable habitat (quilted shell, cupola, airlock with a pressure door, radiators, a dish) that gets buried under regolith sandbags as you build its shield; tall Sun-tracking solar masts on the Moon and dusty tilting tables on Mars; a battery bank with cooling fans; ice-water electrolysis on the Moon and a MOXIE-style CO₂ unit on Mars; a water recycler; a greenhouse with lettuce and staked tomato vines under LED bars; an ice drill with a turning auger; a sandbagged storm shelter; a lab with a dish and weather mast; and a fission reactor buried in a berm under a mast of radiator panels (nothing nuclear glows). A six-wheeled pressurised rover with a wraparound canopy, suspension that follows the ground, chevron tyres, suitports and an arm; jointed astronauts who lope on the Moon and walk on Mars; welding sparks while things are built; power cables that pulse in the direction energy flows.
 - A **walkable home**: a two-storey inflatable habitat about 10 m across with 14 rooms, furnished from real analogs (NASA's Mars Dune Alpha, HI-SEAS, the Mars Desert Research Station, the ISS). Lamps light each room on its own, sunlight comes in through the windows, and longer, slower steps match the lower gravity. See [docs/HABITAT.md](docs/HABITAT.md).
+- A **colony campus around it** (v7): about 200 m end to end, a command HQ with a double-height operations hall and a mezzanine, two pressurised spines, life support, a greenhouse, a storm shelter under a regolith berm, a clinic, stores, a science lab, engineering, an EVA complex with an interlocked airlock, a rover garage and outdoor power and reactor compounds: 12 major structures and 31 rooms and corridors, plus Hab-1's 14 rooms. Missions open more of it as the campaign goes on. 21 consoles and benches show the mission's real numbers, and 12 of them have controls that are the game's own actions. The crew walk between the buildings on their daily routine, and a guided tour and a floor plan help you find your way.
 - Two rovers that drive over rocks (only big boulders stop them): each wheel climbs what's under it and the body tilts with them. On the crew rover each wheel's fender, arms and spring move with it, and its rubber tyres flatten where they press on the ground and wrap round small rocks; the science rover's six aluminium wheels (with chevron grousers and curved spokes) ride on a rocker-bogie that keeps all six on the ground, steer at the corners, and leave chevron tracks. Its mast camera pans about, and its arm unfolds onto the rocks while it studies a site.
 - Four camera views. **Overview** looks over the outpost. **Follow** rides behind the rover and turns with it (drag to watch from any side). **Cockpit** puts you in the driver's seat, with live screens for speed, battery, a radar of nearby sites and your cargo. Leaving the dock switches to Follow by itself. **Walk** puts you inside the home.
 - A **map** in the corner shows the whole area. Click a site on it to plan a rover trip, or anywhere else to look there.
@@ -84,8 +85,11 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 | Camera view: Overview · Follow · Cockpit · Walk | View buttons (bottom right); drag to look around | V |
 | Walk inside the home | **Walk** view button, or **Go inside** on the habitat's card | V |
 | Walk · look (walking) | stick on the left, drag on the right | W A S D / arrows, Shift to go faster; mouse (click the view to capture it, Esc to let go) |
-| Look closely · use (suit up, airlock, shelter, repair) | **Use** button | E |
-| Take a tour of the home | **Take a tour** (top) | |
+| Look closely · use (suit up, airlock, shelter, repair, a console) | **Use** button | E |
+| A console's buttons | click them | 1–9 |
+| Take a tour of the colony (with a guide arrow) | **Take a tour** (top) | |
+| Floor plan · back to the HQ | **Floor plan** · **Back to HQ** (top) | M |
+| Hide the controls (screenshots) | | U |
 | Restart the mission from the start | **Restart mission** on the title screen, or above the goals in a mission (asks first) | |
 | Skip the tutorial | **Skip tutorial** on the title screen, the mission briefing, above the goals or on the CAPCOM card | |
 | Go straight to Mars | **Go to Mars** on the title screen, the briefing of a Moon mission, or above the goals | |
@@ -97,7 +101,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 - **Settings → Unlock every mission** opens the whole campaign immediately.
 - **For teachers** (title screen) lists learning goals, NGSS connections and discussion questions for each mission.
 - **Science library** links every fact to its NASA source.
-- See [docs/JUDGES.md](docs/JUDGES.md) for a 5-minute demo, a 60-second "step inside" demo and how ASTRA answers the challenge, [docs/SCIENCE.md](docs/SCIENCE.md) for the numbers and what is simplified, and [docs/HABITAT.md](docs/HABITAT.md) for the design of the home.
+- See [docs/JUDGES.md](docs/JUDGES.md) for a 5-minute demo, a 3-minute walk through the colony, a 60-second "step inside" demo and how ASTRA answers the challenge, [docs/V7_REPORT.md](docs/V7_REPORT.md) for what v7 built and how it measures, [docs/SCIENCE.md](docs/SCIENCE.md) for the numbers and what is simplified, and [docs/HABITAT.md](docs/HABITAT.md) for the design of the home.
 
 ## Project layout
 
@@ -113,10 +117,18 @@ src/sim/      pure, deterministic simulation (no React, no DOM), with tests
   interior.ts   what the inside shows for the mission's state; the crew's routine
   inspect.ts    things to look at closely, with live numbers and sources
   outside.ts    walking outside in a suit
+  base.ts       v7: the colony campus (buildings, rooms, doors, windows, berms, airlocks), its walls and solids
+  furniture.ts  v7: every piece of campus furniture as a box with a front
+  airlock.ts    v7: the interlocked airlock
+  stations.ts   v7: consoles and benches: live numbers, reasons, sources, controls that are game actions
+  nav.ts        v7: walking routes over the real walls and furniture (crew, tour)
+  crew.ts       v7: where each place in the crew's routine is
+  tour.ts       v7: the colony tour
 src/state/    Zustand stores: game loop, UI, tutorial scripts
-src/scene/    Three.js world: procedural models, terrain, sky, effects, the inside of the home (interior/), walking (walk.ts)
-src/ui/       HUD, panels, overlays, tutorial coach, screens, dialogs
-docs/         judges' guide, science notes, architecture
+src/scene/    Three.js world: procedural models, terrain, sky, effects, the inside of the home (interior/), the campus
+              (campus/), walking (walk.ts), the walking crew (crewwalk.ts), the debug visualiser (debugviz.ts)
+src/ui/       HUD, panels, overlays, tutorial coach, screens, dialogs, the floor plan
+docs/         judges' guide, science notes, architecture, the v7 plan and report
 ```
 
 ## Accessibility

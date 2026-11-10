@@ -307,6 +307,95 @@ SHOTS.push(
   { id: "EX06-eva-mars", planet: "mars", frames: 30, run: eva(-6, 21, 300, 2) },
 );
 
+// v7: the colony campus at eye level (campus metres from Hab-1's centre; floor 2 is the HQ mezzanine), from fixed,
+// reproducible spots, plus a wide view. "C" shots walk; their setup keeps the crew where the routine puts them.
+const campus = (x: number, z: number, level: 0 | 1 | 2, yaw: number, pitch: number, before?: (g: ReturnType<typeof useGame.getState>["game"]) => void) => (h: Hooks) => {
+  const g = useGame.getState().game;
+  before?.(g);
+  h.walk(x, z, level as 0 | 1, yaw, pitch);
+};
+const suited = (x: number, z: number, yaw: number, pitch: number, before?: (g: ReturnType<typeof useGame.getState>["game"]) => void) => (h: Hooks) => {
+  const g = useGame.getState().game;
+  before?.(g);
+  eva(x, z, yaw, pitch)(h);
+};
+SHOTS.push(
+  { id: "C01-entrance-lobby", planet: "mars", frames: 40, run: campus(0, 35.0, 0, 180, -3) },
+  { id: "C02-command-atrium", planet: "mars", frames: 40, run: campus(-11.2, 54.6, 0, 28, 7) },
+  { id: "C03-mezzanine-fd-desk", planet: "mars", frames: 40, run: campus(2.2, 55.0, 2, 320, -14) },
+  { id: "C04-life-support-control", planet: "mars", frames: 40, run: campus(-45.2, 44.2, 0, 300, -12) },
+  { id: "C05-life-support-plant", planet: "mars", frames: 40, run: campus(-48.4, 38.8, 0, 296, -9) },
+  { id: "C06-greenhouse", planet: "mars", frames: 40, run: campus(-53.6, 50.4, 0, 180, -6) },
+  { id: "C07-science-lab", planet: "mars", frames: 40, run: campus(52.6, 38.4, 0, 292, -8) },
+  { id: "C08-engineering", planet: "mars", frames: 40, run: campus(78.4, 47.8, 0, 70, -6) },
+  { id: "C09-storm-shelter", planet: "mars", frames: 40, run: campus(-23.2, 51.2, 0, 205, -12) },
+  { id: "C10-clinic", planet: "mars", frames: 40, run: campus(-23.2, 37.6, 0, 262, -10) },
+  { id: "C11-logistics", planet: "mars", frames: 40, run: campus(-78.8, 50.2, 0, 285, -6) },
+  { id: "C12-eva-suit-room", planet: "mars", frames: 40, run: campus(60, 54.4, 0, 20, -8) },
+  { id: "C13-west-spine-night", planet: "mars", frames: 60, run: campus(-18, 47, 0, 270, -1, (g) => (g.t = 23.2)) },
+  { id: "C14-hab1-link", planet: "mars", frames: 40, run: campus(0, 12, 0, 180, 0) },
+  { id: "C15-garage-suited", planet: "mars", frames: 40, run: suited(36.5, 66.4, 300, -4) },
+  { id: "C16-eva-exit-porch", planet: "mars", frames: 40, run: suited(66, 69.5, 0, 4) },
+  { id: "C17-wide-campus", planet: "mars", frames: 30, run: place([62, 58, 148], [6, 0, 44]) },
+  { id: "C18-wide-campus-moon", planet: "moon", frames: 30, run: place([-70, 46, 128], [0, 0, 44]) },
+);
+
+/**
+ * The brief's performance views on Mars (stage 2: every building): overview, the command atrium, the greenhouse
+ * full of crops, the long west spine, the garage in a suit, outside the EVA complex in a dust storm, and the wide
+ * base. Same method as perf(): wall time for 10 frames after a pixel read (so the GPU's work counts), draw calls
+ * and triangles of one frame, GPU memory counts.
+ */
+async function perf7(tiers: ("low" | "high" | "ultra")[] = ["low", "high", "ultra"]) {
+  const out: Record<string, unknown> = {};
+  const dust = (g: ReturnType<typeof useGame.getState>["game"]) => g.hazards.push({ id: 993, kind: "dust", warnAt: 9, startAt: 10, endAt: 30, strength: 0.35, phase: "active" });
+  for (const tier of tiers) {
+    useUI.setState((s) => ({ settings: { ...s.settings, graphics: tier } }));
+    await setup("mars");
+    const res: Record<string, unknown> = {};
+    const cams: [string, (h: Hooks) => void][] = [
+      ["overview", (h) => h.place([30, 24, 40], [0, 0, 2])],
+      ["command-atrium", campus(-11.2, 54.6, 0, 28, 7)],
+      ["greenhouse", campus(-53.6, 50.4, 0, 180, -6)],
+      ["long-corridor", campus(-18, 47, 0, 270, -1)],
+      ["garage-suited", suited(36.5, 66.4, 300, -4)],
+      ["eva-dust-storm", suited(66, 69.5, 180, 2, dust)],
+      ["wide-base", (h) => h.place([62, 58, 148], [6, 0, 44])],
+    ];
+    for (const [name, cam] of cams) {
+      const h = hooks() as Hooks;
+      const g = useGame.getState().game;
+      g.eva = null;
+      g.hazards = g.hazards.filter((x) => x.id !== 993);
+      if (useUI.getState().view === "walk") useUI.getState().setView("orbit");
+      await settle(4);
+      cam(h);
+      await settle(30);
+      const r = h.renderer;
+      r.info.autoReset = false;
+      r.info.reset();
+      h.snap(1);
+      const calls = r.info.render.calls,
+        tris = r.info.render.triangles;
+      r.info.autoReset = true;
+      const ms: number[] = [];
+      for (let k = 0; k < 3; k++) {
+        const t0 = performance.now();
+        h.snap(1);
+        const t1 = performance.now();
+        h.snap(11);
+        const t2 = performance.now();
+        ms.push(+((t2 - t1 - (t1 - t0)) / 10).toFixed(1));
+      }
+      res[name] = { ms, calls, tris, geometries: r.info.memory.geometries, textures: r.info.memory.textures, programs: r.info.programs?.length, px: r.getPixelRatio() };
+    }
+    if (useUI.getState().view === "walk") useUI.getState().setView("orbit");
+    useGame.getState().game.eva = null;
+    out[tier] = res;
+  }
+  return out;
+}
+
 /** Extra shots (interior, states, new exterior views) register themselves here. */
 export function addShots(...more: Shot[]) {
   for (const s of more) {
@@ -651,4 +740,4 @@ async function plan() {
   return url.length;
 }
 
-Object.assign(window, { __qc: { capture, perf, startup, overlaps, leak, plan, post, go, shot, walkAll, shots: () => SHOTS.map((s) => s.id) } });
+Object.assign(window, { __qc: { capture, perf, perf7, startup, overlaps, leak, plan, post, go, shot, walkAll, shots: () => SHOTS.map((s) => s.id) } });
