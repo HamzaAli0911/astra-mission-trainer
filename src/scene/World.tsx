@@ -29,9 +29,10 @@ import { buildHorizon, buildIce, buildRocks, buildTerrain, PALETTE, trackSystem,
 import { pressTyre, seat, squashableTyres, Wheel } from "./drive";
 import { buildScout, poseArm, poseScout, SCOUT } from "./models/scout";
 import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData, type Interior } from "./interior";
-import { HOME as HOME_PLAN } from "../sim/home";
+import { HOME as HOME_PLAN, type Where } from "../sim/home";
 import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
+import { crewWalkers, type CrewWalkers } from "./crewwalk";
 import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
 import { dressCampus, keepInStep, type CampusDressing } from "./campus/dress";
@@ -354,6 +355,7 @@ export function World() {
       let garageDoor = 0,
         habVisible = true;
       // The campus's furniture, fittings and screens (built in the background after the home's inside).
+      let crew: CrewWalkers | null = null;
       let dressing: CampusDressing | null = null,
         campusScreensAt = -1,
         bindingsAt = -1;
@@ -422,7 +424,7 @@ export function World() {
       useWalk.getState().set({ ready: false });
       const homeAt = modulePos({ pad: -1 });
       const homeOrigin = new THREE.Vector3(homeAt.x, terrainHeight(homeAt.x, homeAt.z, planet), homeAt.z);
-      const walkCtl = walkController(renderer.domElement, planet, () => interior, (x, z) => Math.max(heightAt(x, z), bumps.top(x, z)), () => campus.doors);
+      const walkCtl = walkController(renderer.domElement, planet, () => interior, (x, z) => Math.max(heightAt(x, z), bumps.top(x, z)), () => campus.doors, () => crew?.bodies() ?? []);
       const baseExposure = renderer.toneMappingExposure;
       let exposure = baseExposure,
         screensAt = -1;
@@ -1366,8 +1368,6 @@ export function World() {
             // lights over their doors say which door may open; the servers blink; the screens show the mission.
             const locks = walkCtl.lockState();
             if (dressing.alexSuit) dressing.alexSuit.visible = !g.eva;
-            const spots = homeState?.crew ?? interiorState(g).crew;
-            for (const c of dressing.crew) c.o.visible = spots.some((x) => x.id === c.id && x.spot === c.spot);
             for (const b of dressing.beacons) {
               const on = (locks[b.airlock]?.cycle ?? "none") !== "none";
               b.mat.emissiveIntensity = on ? (reduced ? 2.5 : 1.5 + Math.max(0, Math.sin(clock * 9)) * 2.5) : 0;
@@ -1379,6 +1379,14 @@ export function World() {
               l.mat.emissive.set(ok ? "#3ee39a" : "#ff4d5e");
             }
             dressing.leds.emissiveIntensity = 0.9 + 0.6 * Math.max(0, Math.sin(clock * 5.3) * Math.sin(clock * 1.7));
+            // Equipment doors swing open while you look inside (and shut again after).
+            const card = view === "walk" ? useWalk.getState().card : null;
+            for (const o of dressing.opening) {
+              const want = card === o.station ? 1 : 0;
+              if (o.t === want) continue;
+              o.t = reduced ? want : THREE.MathUtils.clamp(o.t + (want ? dt : -dt) / 0.7, 0, 1);
+              o.o.rotation.y = -1.75 * o.t * o.t * (3 - 2 * o.t);
+            }
             if (clock - bindingsAt > 0.5) {
               bindingsAt = clock;
               keepInStep(dressing, g, homeState ?? interiorState(g));
@@ -1403,6 +1411,16 @@ export function World() {
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
         const near = !!interior && ((view === "walk" && habVisible) || camera.position.distanceTo(homeOrigin) < 24);
         if (interior) interior.group.visible = near;
+        // The crew walk between their places (seen stretches at a walking pace; the rest skipped).
+        if (crew) {
+          const seen = (x: number, z: number, w: Where) => {
+            if (w === 1 || w === "stair" || (w === 0 && Math.hypot(x, z) < 4.96)) return near;
+            const b = buildingAt(x, z, w === 2 ? 2 : 0);
+            return !!b && !!campus.parts.get(b)?.inside.visible;
+          };
+          const anyInView = near || [...campus.parts.values()].some((p) => p.inside.visible);
+          crew.update(dt, (homeState ?? interiorState(g)).crew, stageOf(g.missionId), seen, near, anyInView, clock, reduced);
+        }
         if (interior && near && homeState) {
           interior.apply(homeState, dt, clock, reduced);
           // Screens inside redraw a few times a second (in a blackout only life support's stay on).
@@ -1611,6 +1629,25 @@ export function World() {
           if (!alive) return;
           dressing = dressed;
           if (debug) debug.dressing = dressed;
+          // The crew's bodies: one lit for Hab-1 (in its inside), one for the campus.
+          const people = crewWalkers(
+            useGame.getState().game.crew.map((c) => c.id),
+            PLANETS[planet].gravity,
+          );
+          for (const person of people.people)
+            for (const [root, parent] of [
+              [person.hab.root, built.group],
+              [person.campus.root, campus.group],
+            ] as const) {
+              root.traverse((o) => {
+                o.layers.set(INSIDE_LAYER);
+                const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+                if (m?.isMeshStandardMaterial && insideEnv) m.envMap = insideEnv.texture;
+              });
+              parent.add(root);
+            }
+          crew = people;
+          if (debug) debug.crew = people;
         });
 
       teardown = () => {

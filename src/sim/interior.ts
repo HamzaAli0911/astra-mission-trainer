@@ -1,6 +1,7 @@
 import { capacity, flows, isBuilt } from "./core";
 import { CREW_NEEDS, DAMAGED, STORAGE } from "./modules";
 import type { GameState, ModuleType } from "./types";
+import { stageOf, type Stage } from "./base";
 
 /**
  * What the inside of the home shows, worked out from the mission alone (pure: the 3D view only reads this).
@@ -104,14 +105,13 @@ export function interiorState(g: GameState): InteriorState {
   };
 }
 
-/** Where a crew member is in the home right now (a named place the 3D view knows), or null if they're out. */
+/** Where a crew member is right now (a named place the 3D view knows: sim/crew.ts places it), or null if they're out. */
 export type CrewSpot =
   | "galley-1"
   | "galley-2"
   | "galley-3"
   | "galley-4"
   | "command"
-  | "hq-ops"
   | "eclss"
   | "garden"
   | "lab"
@@ -122,25 +122,61 @@ export type CrewSpot =
   | "shelter-1"
   | "shelter-2"
   | "shelter-3"
-  | "shelter-4";
-/** Each crew member's usual work place (the commander works at the flight director's desk in the command HQ). */
-const WORK: Record<string, CrewSpot> = { maya: "hq-ops", alex: "eclss", sam: "garden", noor: "lab" };
-/** Places outside Hab-1 (in the campus): the home's own figures stay hidden there. */
-export const CAMPUS_SPOTS: CrewSpot[] = ["hq-ops"];
-/** The daily routine: breakfast, work, lunch, work (and a turn on the exercise machines), dinner, evening, sleep. */
+  | "shelter-4"
+  // In the campus.
+  | "hq-ops"
+  | "hq-alerts"
+  | "hq-power"
+  | "ls-work"
+  | "gh-work"
+  | "sci-work"
+  | "eng-power"
+  | "eng-repair"
+  | "sh-1"
+  | "sh-2"
+  | "sh-3"
+  | "sh-4";
+const built = (g: GameState, ...types: ModuleType[]) => g.modules.some((m) => types.includes(m.type) && isBuilt(m));
+/**
+ * Each crew member's work place. The commander runs the mission from the flight director's desk in the command HQ;
+ * the others work in the campus building that has their machines, once the mission has that wing and the module is
+ * built (an empty greenhouse has nothing to tend), and otherwise at Hab-1's own racks.
+ */
+function workPlace(g: GameState, id: string, stage: Stage): CrewSpot {
+  if (id === "maya") return "hq-ops";
+  if (id === "alex") return stage >= 1 && built(g, "oxygen", "recycler") ? "ls-work" : "eclss";
+  if (id === "sam") return stage >= 1 && built(g, "greenhouse") ? "gh-work" : "garden";
+  return stage >= 1 && built(g, "lab") ? "sci-work" : "lab";
+}
+/**
+ * The daily routine: breakfast, work, lunch, work (and a turn on the exercise machines), dinner, evening, sleep.
+ * Those working out in the campus take lunch at work. A few reactions, only to what the mission says is happening:
+ * the commander goes to the alerts board when a solar storm is warned; Alex goes to the power desk when the battery
+ * runs low; Noor to the repair bay while a repair is under way. Sheltering, everyone is in the storm shelter.
+ */
 export function crewSpots(g: GameState): { id: string; spot: CrewSpot | null }[] {
   const h = ((g.t % 24) + 24) % 24;
   const day = Math.floor(g.t / 24);
+  const stage = stageOf(g.missionId);
+  const storm = g.hazards.some((x) => x.kind === "storm" && x.phase === "warned");
+  const cap = capacity(g).power;
+  const batteryLow = g.res.power / Math.max(1e-6, cap) < 0.2;
+  const repairing = g.modules.some((m) => m.repair > 0);
   return g.crew.map((c, i) => {
     if (c.place === "rover" || c.place === "eva") return { id: c.id, spot: null };
-    if (c.place === "shelter") return { id: c.id, spot: `shelter-${i + 1}` as CrewSpot };
-    const meal = (h >= 7 && h < 8) || (h >= 12 && h < 13) || (h >= 19 && h < 20);
+    if (c.place === "shelter") return { id: c.id, spot: (stage >= 1 ? `sh-${i + 1}` : `shelter-${i + 1}`) as CrewSpot };
+    const work = workPlace(g, c.id, stage);
+    const away = !["eclss", "garden", "lab", "command"].includes(work);
+    const meal = (h >= 7 && h < 8) || (!away && h >= 12 && h < 13) || (h >= 19 && h < 20);
     if (meal) return { id: c.id, spot: `galley-${i + 1}` as CrewSpot };
     if (h >= 22 || h < 6.5) return { id: c.id, spot: "bed" };
     if (h >= 20) return { id: c.id, spot: "desk" };
     // Two hours of exercise a day each: two at a time (treadmill and cycle) through the afternoon, taking turns.
     const start = 13 + 2 * (((i >> 1) + day) % 2);
     if (h >= start && h < start + 2) return { id: c.id, spot: i % 2 ? "cycle" : "treadmill" };
-    return { id: c.id, spot: WORK[c.id] ?? "lab" };
+    if (c.id === "maya" && storm) return { id: c.id, spot: "hq-alerts" };
+    if (c.id === "alex" && batteryLow) return { id: c.id, spot: stage >= 2 ? "eng-power" : "hq-power" };
+    if (c.id === "noor" && repairing && stage >= 2) return { id: c.id, spot: "eng-repair" };
+    return { id: c.id, spot: work };
   });
 }

@@ -1,11 +1,11 @@
 import * as THREE from "three";
-import { BUILDINGS, built, cellById, FURNITURE, furnitureById, MEZZANINE, PORTALS, windowsOn, type Side, type Stage } from "../../sim/base";
+import { STATIONS } from "../../sim/stations";
+import { BUILDINGS, built, cellById, FURNITURE, MEZZANINE, PORTALS, windowsOn, type Side, type Stage } from "../../sim/base";
 import { capacity, isBuilt } from "../../sim/core";
 import type { InteriorState } from "../../sim/interior";
 import { DAMAGED } from "../../sim/modules";
 import type { GameState, Planet } from "../../sim/types";
 import { ball, box, cyl, keep, rbox, strut, torus } from "../kit";
-import { crewFigure } from "../interior/crew";
 import { homePiece, suit } from "../interior/furniture";
 import { ifabric, imetal, ipaint, iplastic } from "../interior/lighting";
 import { beginLabels, cableTray, CREW_COLOR, extinguisher, finishLabels, footShadow, hazard, ilabel, screen, screens, vent } from "../interior/parts";
@@ -264,7 +264,7 @@ function corridor(parent: THREE.Group, cell: string, stripe: string) {
 
 /* ---------- The buildings ---------- */
 
-function dressHQ(g: THREE.Group, ctx: Ctx) {
+function dressHQ(g: THREE.Group) {
   const hall = cellById("hq-hall")!;
   const top = cellCeiling(hall);
   // The display wall above the lobby doors: sixteen metres of live mission status.
@@ -305,12 +305,6 @@ function dressHQ(g: THREE.Group, ctx: Ctx) {
   box(brief, 3.12, 1.52, 0.04, P.black(), 0, 0, 0);
   const tray = onWall(g, "hq-equipment", "n", 10.4, 3.25, 0);
   cableTray(tray, 7.4, 0, 0, 0);
-  // The commander at the flight director's desk (while her routine has her at work).
-  const seat = furnitureById("hq-fd-chair-2")!;
-  const maya = crewFigure("maya", "sit");
-  const at = place(g, "hq-mezzanine", (seat.rect.x0 + seat.rect.x1) / 2, MEZZANINE + 0.5, (seat.rect.z0 + seat.rect.z1) / 2 + 0.05, "n");
-  at.add(maya);
-  ctx.out.crew.push({ id: "maya", spot: "hq-ops", o: maya });
 }
 
 function dressEVA(g: THREE.Group, ctx: Ctx) {
@@ -345,7 +339,7 @@ function dressLink(g: THREE.Group) {
 
 export async function dressCampus(planet: Planet, stage: Stage, pause: () => Promise<boolean>): Promise<CampusDressing | null> {
   const leds = new THREE.MeshStandardMaterial({ color: "#05220f", emissive: "#3ee39a", emissiveIntensity: 1.4, roughness: 0.4, toneMapped: false });
-  const out: CampusDressing = { groups: new Map(), screens: [], alexSuit: null, beacons: [], doorLights: [], leds, crew: [], status: [], gauges: [], plants: [], growLights: null, stock: [] };
+  const out: CampusDressing = { groups: new Map(), screens: [], alexSuit: null, beacons: [], doorLights: [], leds, status: [], gauges: [], plants: [], growLights: null, stock: [], opening: [] };
   const ctx: Ctx = { planet, out };
   const firstScreen = screens.length;
   beginLabels();
@@ -363,7 +357,7 @@ export async function dressCampus(planet: Planet, stage: Stage, pause: () => Pro
     if (b.id === "link") dressLink(g);
     else if (b.id === "w1") corridor(g, "w1", "#2e7d4f");
     else if (b.id === "e1") corridor(g, "e1", "#b5651d");
-    else if (b.id === "hq") dressHQ(g, ctx);
+    else if (b.id === "hq") dressHQ(g);
     else if (b.id === "eva") dressEVA(g, ctx);
     else dressRooms(b.id, g, ctx);
     out.groups.set(b.id, g);
@@ -375,6 +369,14 @@ export async function dressCampus(planet: Planet, stage: Stage, pause: () => Pro
   finishLabels();
   for (const g of out.groups.values()) bakeProps(g);
   out.screens = screens.splice(firstScreen);
+  // Equipment with a door that opens while you look inside (its station says so).
+  for (const st of STATIONS) {
+    if (!st.opens || !st.furniture) continue;
+    for (const g of out.groups.values()) {
+      const door = g.getObjectByName(st.furniture)?.getObjectByName("door");
+      if (door) out.opening.push({ station: st.id, o: door, t: 0 });
+    }
+  }
   return out;
 }
 
@@ -407,7 +409,8 @@ export function keepInStep(d: CampusDressing, g: GameState, st: InteriorState) {
   for (const k of d.stock) k.mesh.count = Math.round(k.total * Math.max(0, Math.min(1, fill(k.res))));
   // The greenhouse: plants sized by how well they grow, fruit only on healthy plants, lights with the modules' setting.
   const houses = g.modules.filter((m) => m.type === "greenhouse" && isBuilt(m));
-  const lit = houses.filter((m) => m.on && m.health >= DAMAGED);
+  // (Lights set to off, a module switched off or broken: dark.)
+  const lit = houses.filter((m) => m.on && m.health >= DAMAGED && m.light > 0);
   const scale = houses.length ? 0.45 + 0.55 * st.plants : 0;
   for (const p of d.plants) {
     const tomatoes = p.mesh.name === "tomatoes";

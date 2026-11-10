@@ -1,127 +1,66 @@
 import * as THREE from "three";
-import { blockAxes, BLOCKS, HOME, polar, rad, type Block, type Level } from "../../sim/home";
-import { CAMPUS_SPOTS, type CrewSpot } from "../../sim/interior";
-import { ball, box, capsule, cyl, geo, keep, mesh, rbox } from "../kit";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import type { Pose } from "../../sim/crew";
+import { ball, capsule, cyl, geo, keep, mesh, rbox, box } from "../kit";
 import { ifabric, ipaint } from "./lighting";
 import { CREW_COLOR } from "./parts";
 
 /**
- * The crew at home: four people in flight suits with their own stripe colours, standing at work, sitting at the
- * table, exercising, asleep in their bunks or sheltering in the core, as the routine in sim/interior.ts says.
+ * The crew's bodies: four people in flight suits with their own stripe colours, jointed at the hips, knees and
+ * shoulders so they can walk, sit, lie in a bunk or ride the exercise cycle. Each joint's parts are merged (one draw
+ * call per material per joint). Posed by `posture()` from a few numbers, so poses blend smoothly into each other.
  */
-type Pose = "stand" | "sit" | "lie" | "ride";
-interface Place {
-  x: number;
-  z: number;
-  level: Level;
-  /** Facing, a compass bearing in degrees. */
-  yaw: number;
-  pose: Pose;
-  /** Height of what they sit or lie on. */
-  y?: number;
-}
-const QUARTERS: Record<string, string> = { maya: "q1", alex: "q2", sam: "q3", noor: "q4" };
-
-const block = (id: string) => BLOCKS.find((k) => k.id === id)!;
-/** Where a piece's front faces (degrees), and a point in front of it. */
-function front(k: Block, out: number) {
-  const { c, n, t } = blockAxes(k);
-  const f = k.face ?? 0;
-  const dir = f === 90 ? t : f === -90 ? { x: -t.x, z: -t.z } : f === 180 ? n : { x: -n.x, z: -n.z };
-  const depth = Math.abs(f) === 90 ? k.w : k.d;
-  return { x: c.x + dir.x * (depth / 2 + out), z: c.z + dir.z * (depth / 2 + out), facing: (Math.atan2(-dir.x, dir.z) * 180) / Math.PI };
-}
-/** Sitting on a seat piece, facing the way it faces. */
-function seat(id: string, y = 0.45): Place {
-  const k = block(id);
-  const p = polar(k.bearing, k.r);
-  const f = front(k, 0);
-  return { x: p.x, z: p.z, level: k.level, yaw: f.facing, pose: "sit", y };
-}
-/** Standing at a piece of equipment, looking at it. */
-function standAt(id: string, out = 0.35): Place {
-  const k = block(id);
-  const f = front(k, out);
-  return { x: f.x, z: f.z, level: k.level, yaw: f.facing + 180, pose: "stand" };
-}
-
-function placeFor(id: string, spot: CrewSpot): Place {
-  if (spot.startsWith("galley-")) return seat(`galley-chair-${spot.slice(-1)}`);
-  if (spot.startsWith("shelter-")) return seat(`shelter-seat-${spot.slice(-1)}`);
-  switch (spot) {
-    case "command":
-      return seat("command-chair-1", 0.5);
-    case "eclss":
-      return standAt("eclss-co2", 0.3);
-    case "garden":
-      return standAt("garden-rack-2", 0.35);
-    case "lab":
-      return standAt("lab-bench", 0.3);
-    case "treadmill": {
-      const k = block("exercise-treadmill");
-      const p = polar(k.bearing, k.r);
-      return { x: p.x, z: p.z, level: 1, yaw: k.bearing + 90, pose: "stand", y: 0.17 };
-    }
-    case "cycle": {
-      const k = block("exercise-cycle");
-      const p = polar(k.bearing, k.r + 0.15);
-      return { x: p.x, z: p.z, level: 1, yaw: k.bearing, pose: "ride", y: 0.69 };
-    }
-    case "bed": {
-      const k = block(`${QUARTERS[id]}-bunk`);
-      const p = polar(k.bearing, k.r);
-      return { x: p.x, z: p.z, level: 1, yaw: k.bearing + 90, pose: "lie", y: 0.58 };
-    }
-    case "desk": {
-      const k = block(`${QUARTERS[id]}-desk`);
-      const f = front(k, 0.32);
-      return { x: f.x, z: f.z, level: 1, yaw: f.facing + 180, pose: "sit", y: 0.45 };
-    }
-  }
-  return standAt("lab-bench");
-}
-
-interface Figure {
+export interface Body {
   root: THREE.Group;
   hips: THREE.Group;
+  /** Thighs (each with its knee as `children[1]`), left then right. */
   legs: THREE.Group[];
+  knees: THREE.Group[];
   arms: THREE.Group[];
 }
-/** A crew member in a flight suit: built standing, hips at 0.9 m; the joints turn for other poses. */
-function figure(color: string, hair: string, skin: string): Figure {
+/** Each crew member's hair and skin. */
+const LOOKS: Record<string, [string, string]> = { maya: ["#2b1e18", "#d9a37f"], alex: ["#3a2a1a", "#a8714f"], sam: ["#151515", "#6b4430"], noor: ["#1d1410", "#b98563"] };
+
+/** A crew member standing, hips 0.9 m up, facing +z. Every joint is kept (it moves). */
+export function crewBody(id: string): Body {
+  const [hair, skin] = LOOKS[id];
   const root = keep(new THREE.Group());
+  root.name = `crew-${id}`;
   const suit = ifabric("#4b5a6e", 0.85),
-    stripe = ipaint(color, 0.55),
+    stripe = ipaint(CREW_COLOR[id], 0.55),
     shoe = ipaint("#2a2e35", 0.7),
     face = ipaint(skin, 0.75),
     hairM = ipaint(hair, 0.85);
-  const hips = new THREE.Group();
+  const hips = keep(new THREE.Group());
   hips.position.y = 0.9;
   root.add(hips);
   rbox(hips, 0.36, 0.56, 0.22, 0.08, suit, 0, 0.3, 0);
   box(hips, 0.1, 0.05, 0.015, stripe, -0.1, 0.48, 0.115);
-  // A neck and collar under the head; hair as two shells round it (the top and the back), so the hairline is clean.
+  // A belt, a collar and a neck under the head; hair as two shells round it (the top and the back), so the hairline is clean.
+  box(hips, 0.37, 0.05, 0.23, ipaint("#2a2e35", 0.6), 0, 0.04, 0);
   cyl(hips, 0.05, 0.055, 0.1, face, 0, 0.61, 0.005, 12);
   cyl(hips, 0.075, 0.085, 0.045, suit, 0, 0.585, 0, 14);
   ball(hips, 0.105, face, 0, 0.725, 0.01, 18);
   mesh(geo("hair-top", () => new THREE.SphereGeometry(0.112, 20, 8, 0, Math.PI * 2, 0, 0.38 * Math.PI)), hairM, hips, 0, 0.725, 0.01);
   mesh(geo("hair-back", () => new THREE.SphereGeometry(0.112, 12, 10, Math.PI, Math.PI, 0, 0.72 * Math.PI)), hairM, hips, 0, 0.725, 0.01);
+  const knees: THREE.Group[] = [];
   const legs = [-1, 1].map((s) => {
     const leg = new THREE.Group();
     leg.position.set(s * 0.09, 0, 0);
     hips.add(leg);
-    const thigh = new THREE.Group();
+    const thigh = keep(new THREE.Group());
     leg.add(thigh);
     capsule(thigh, 0.07, 0.34, suit, 0, -0.22, 0);
-    const knee = new THREE.Group();
+    const knee = keep(new THREE.Group());
     knee.position.y = -0.44;
     thigh.add(knee);
     capsule(knee, 0.06, 0.34, suit, 0, -0.2, 0);
     rbox(knee, 0.11, 0.07, 0.24, 0.03, shoe, 0, -0.42, 0.05);
+    knees.push(knee);
     return thigh;
   });
   const arms = [-1, 1].map((s) => {
-    const arm = new THREE.Group();
+    const arm = keep(new THREE.Group());
     arm.position.set(s * 0.23, 0.53, 0);
     hips.add(arm);
     capsule(arm, 0.055, 0.42, suit, 0, -0.25, 0);
@@ -129,71 +68,96 @@ function figure(color: string, hair: string, skin: string): Figure {
     ball(arm, 0.045, face, 0, -0.52, 0, 10);
     return arm;
   });
-  return { root, hips, legs, arms };
-}
-/** Bend a figure into a pose (in its own frame: the hips over the origin; it's merged afterwards). */
-function bend(f: Figure, kind: Pose) {
-  if (kind === "sit" || kind === "ride") {
-    // Hips on the seat, thighs forward, shins down; hands on the table or the handlebars.
-    f.hips.position.set(0, 0.04, 0);
-    for (const l of f.legs) {
-      l.rotation.x = -Math.PI / 2;
-      (l.children[1] as THREE.Group).rotation.x = Math.PI / 2;
-    }
-    for (const a of f.arms) a.rotation.x = kind === "ride" ? -1.1 : -0.75;
-    if (kind === "ride") f.hips.rotation.x = 0.35;
-  } else if (kind === "lie") {
-    // On their back, face up.
-    f.hips.position.set(0, 0.12, 0);
-    f.hips.rotation.x = -Math.PI / 2;
-  } else for (const a of f.arms) a.rotation.x = -0.25;
+  root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) o.castShadow = true;
+  });
+  return { root, hips, legs, knees, arms };
 }
 
-const POSES: Pose[] = ["stand", "sit", "ride", "lie"];
-/** Each crew member's hair and skin. */
-const LOOKS: Record<string, [string, string]> = { maya: ["#2b1e18", "#d9a37f"], alex: ["#3a2a1a", "#a8714f"], sam: ["#151515", "#6b4430"], noor: ["#1d1410", "#b98563"] };
-/** One crew member in a pose, on their own (for places outside the home: the campus). Hips over the origin. */
-export function crewFigure(id: string, pose: Pose) {
-  const f = figure(CREW_COLOR[id], ...LOOKS[id]);
-  bend(f, pose);
-  f.root.name = `crew-${id}-${pose}`;
-  return f.root;
+/** A pose as a handful of joint angles (radians; negative swings a limb forward) and the hips' height and tilt. */
+export interface Posture {
+  hipsY: number;
+  tilt: number;
+  thigh: [number, number];
+  knee: [number, number];
+  arm: [number, number];
 }
-export function buildCrew(g: THREE.Group) {
-  const looks = LOOKS;
-  // Each crew member in each pose, built once and merged (one set of draw calls per person on show).
-  const figures = new Map<string, Record<Pose, THREE.Group>>();
-  for (const id of ["maya", "alex", "sam", "noor"]) {
-    const set = {} as Record<Pose, THREE.Group>;
-    for (const kind of POSES) {
-      const f = figure(CREW_COLOR[id], ...looks[id]);
-      bend(f, kind);
-      f.root.name = `crew-${id}-${kind}`;
-      f.root.visible = false;
-      g.add(f.root);
-      set[kind] = f.root;
-    }
-    figures.set(id, set);
-  }
-  let last = "";
+export const POSTURES: Record<Pose, Posture> = {
+  stand: { hipsY: 0.9, tilt: 0, thigh: [0, 0], knee: [0, 0], arm: [-0.12, -0.12] },
+  sit: { hipsY: 0.04, tilt: 0, thigh: [-Math.PI / 2, -Math.PI / 2], knee: [Math.PI / 2, Math.PI / 2], arm: [-0.75, -0.75] },
+  ride: { hipsY: 0.04, tilt: 0.35, thigh: [-Math.PI / 2, -Math.PI / 2], knee: [Math.PI / 2, Math.PI / 2], arm: [-1.1, -1.1] },
+  lie: { hipsY: 0.12, tilt: -Math.PI / 2, thigh: [0, 0], knee: [0, 0], arm: [-0.12, -0.12] },
+};
+/** Walking: legs and arms swing with the stride's phase, knees bend through the swing, the hips dip between steps. */
+export function gait(phase: number, amount: number): Posture {
+  const s = Math.sin(phase),
+    c = Math.cos(phase);
+  const A = 0.4 * amount,
+    K = 0.75 * amount,
+    B = 0.28 * amount;
   return {
-    /** Put everyone where the routine says (only when it changes). */
-    place(spots: { id: string; spot: CrewSpot | null }[]) {
-      const key = spots.map((s) => `${s.id}:${s.spot}`).join("|");
-      if (key === last) return;
-      last = key;
-      for (const { id, spot } of spots) {
-        const set = figures.get(id);
-        if (!set) continue;
-        for (const kind of POSES) set[kind].visible = false;
-        // (Out, or somewhere in the campus: the campus shows them there.)
-        if (!spot || CAMPUS_SPOTS.includes(spot)) continue;
-        const p = placeFor(id, spot);
-        const root = set[p.pose];
-        root.visible = true;
-        root.position.set(p.x, HOME.floor[p.level] + (p.y ?? 0), p.z);
-        root.rotation.set(0, Math.PI - rad(p.yaw), 0);
-      }
-    },
+    hipsY: 0.9 - 0.035 * amount * s * s,
+    tilt: 0.04 * amount,
+    thigh: [-A * s, A * s],
+    knee: [K * Math.max(0, c), K * Math.max(0, -c)],
+    arm: [-0.12 + B * s, -0.12 - B * s],
   };
+}
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+export function mix(a: Posture, b: Posture, t: number): Posture {
+  return {
+    hipsY: lerp(a.hipsY, b.hipsY, t),
+    tilt: lerp(a.tilt, b.tilt, t),
+    thigh: [lerp(a.thigh[0], b.thigh[0], t), lerp(a.thigh[1], b.thigh[1], t)],
+    knee: [lerp(a.knee[0], b.knee[0], t), lerp(a.knee[1], b.knee[1], t)],
+    arm: [lerp(a.arm[0], b.arm[0], t), lerp(a.arm[1], b.arm[1], t)],
+  };
+}
+export function posture(b: Body, p: Posture) {
+  b.hips.position.y = p.hipsY;
+  b.hips.rotation.x = p.tilt;
+  for (let i = 0; i < 2; i++) {
+    b.legs[i].rotation.x = p.thigh[i];
+    b.knees[i].rotation.x = p.knee[i];
+    b.arms[i].rotation.x = p.arm[i];
+  }
+}
+
+/** Merge each joint's own parts by material (its moving children stay separate): a few draw calls per person. */
+export function mergeJoints(root: THREE.Object3D) {
+  const joints: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    if (o.userData.keep && !(o as THREE.Mesh).isMesh) joints.push(o);
+  });
+  for (const j of joints) {
+    j.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(j.matrixWorld).invert();
+    const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const drop: THREE.Mesh[] = [];
+    j.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material)) return;
+      for (let a: THREE.Object3D | null = m.parent; a && a !== j; a = a.parent) if (a.userData.keep) return;
+      const g = m.geometry.clone();
+      if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+      for (const name of Object.keys(g.attributes)) if (name !== "position" && name !== "normal" && name !== "uv") g.deleteAttribute(name);
+      if (!g.attributes.uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+      const list = byMat.get(m.material);
+      if (list) list.push(g);
+      else byMat.set(m.material, [g]);
+      drop.push(m);
+    });
+    for (const m of drop) m.parent?.remove(m);
+    for (const [mat, list] of byMat) {
+      const merged = mergeGeometries(list, false);
+      for (const g of list) g.dispose();
+      if (!merged) continue;
+      const out = new THREE.Mesh(merged, mat);
+      out.castShadow = true;
+      out.receiveShadow = true;
+      out.userData.keep = true;
+      j.add(out);
+    }
+  }
 }

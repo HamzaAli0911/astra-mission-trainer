@@ -23,6 +23,9 @@ export function clearWalkInput() {
   walkInput.fast = walkInput.use = false;
 }
 
+/** The open station card's number keys (1–9 press its controls): set by the card while it's on screen. */
+export const cardKeys: { press: ((n: number) => boolean) | null } = { press: null };
+
 /** When the mouse was last let go (Esc frees it first; that same press shouldn't also open the menu). */
 export const lockState = { freedAt: -1e9 };
 

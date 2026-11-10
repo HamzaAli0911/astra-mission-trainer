@@ -3,12 +3,15 @@ import { useShallow } from "zustand/react/shallow";
 import { DoorOpen, ExternalLink, Hand, Map as MapIcon, X } from "lucide-react";
 import { HOME_TOUR } from "../state/tutorial";
 import { INSPECTS } from "../sim/inspect";
+import { stationById, type Control } from "../sim/stations";
+import { site } from "../sim/world";
+import { play } from "../lib/sound";
 import { activeHazard } from "../sim/core";
 import { SUIT_HOURS, WALKER } from "../sim/engine";
 import { PLANETS } from "../sim/planets";
 import { HOUR_SECONDS, useGame } from "../state/game";
 import { useUI } from "../state/ui";
-import { leaveWalk, useWalk, walker, walkInput } from "../state/walk";
+import { cardKeys, leaveWalk, useWalk, walker, walkInput } from "../state/walk";
 
 const isTouch = () => typeof matchMedia !== "undefined" && matchMedia("(hover: none) and (pointer: coarse)").matches;
 
@@ -222,33 +225,96 @@ function Airlock() {
   );
 }
 
-/** A close look at a piece of equipment: live readings from the mission and one sourced science fact. */
+/** Do what a station's control says: the game's own actions (its rules and costs), a rover sent off, or a HUD planner. */
+function run(c: Control) {
+  const store = useGame.getState();
+  if (c.off) {
+    store.toast(c.off, "warn");
+    play("warn");
+    return;
+  }
+  const d = c.does;
+  if ("act" in d) {
+    for (const a of d.act) if (!store.act(a)) return;
+    play("toggle");
+    // (The grow lights have no line in the mission log of their own.)
+    const a = d.act[0];
+    if (a?.type === "light") store.toast(`Grow lights ${["off", "low", "high"][a.level]}.`, "info");
+  } else if ("send" in d) {
+    if (!store.sendRover(d.send, d.which)) return;
+    play("rover");
+    const where = d.send === "dock" || d.send === "home" ? "home" : `to ${site(d.send)?.name[store.game.planet] ?? "the site"}`;
+    store.toast(`${d.which === "rover" ? "Crew rover" : "Science rover"} on its way ${where}.`, "info");
+  } else if ("panel" in d) {
+    leaveWalk();
+    useUI.getState().openPanel(d.panel);
+    play("open");
+  } else if (d.say) store.say(d.say);
+}
+
+/**
+ * A close look at a piece of equipment, or a station you can use: live readings from the mission, why they matter,
+ * its controls (each a real game action), and one sourced science fact.
+ */
 function InspectCard() {
   const id = useWalk((s) => s.card);
   const g = useGame((s) => s.game);
   const p = INSPECTS.find((x) => x.id === id);
-  // Let go of the mouse while a card is open, so its link can be clicked.
+  const st = !p && id ? (stationById(id) ?? null) : null;
+  const shown = p ?? st;
+  const controls = st?.controls?.(g) ?? [];
+  const latest = useRef(controls);
+  latest.current = controls;
+  const touch = useMemo(isTouch, []);
+  // Let go of the mouse while a card is open, so its buttons and link can be clicked.
   useEffect(() => {
-    if (p && document.pointerLockElement) document.exitPointerLock();
-  }, [p]);
-  if (!p) return null;
-  const f = p.fact(g);
+    if (shown && document.pointerLockElement) document.exitPointerLock();
+  }, [shown]);
+  // Number keys press its buttons.
+  useEffect(() => {
+    if (!st) return;
+    cardKeys.press = (n) => {
+      const c = latest.current[n - 1];
+      if (!c) return false;
+      run(c);
+      return true;
+    };
+    return () => {
+      cardKeys.press = null;
+    };
+  }, [st]);
+  if (!shown) return null;
+  const f = shown.fact(g);
   return (
-    <aside className="inspect-card" role="dialog" aria-label={p.title}>
+    <aside className={`inspect-card ${st ? "station" : ""}`} role="dialog" aria-label={shown.title}>
       <header>
-        <h3>{p.title}</h3>
+        <h3>{shown.title}</h3>
         <button className="icon-btn" aria-label="Close" onClick={() => useWalk.getState().set({ card: null })}>
           <X size={18} />
         </button>
       </header>
       <dl>
-        {p.live(g).map(([label, value, warn]) => (
+        {shown.live(g).map(([label, value, warn]) => (
           <div key={label} className={warn ? "warn" : ""}>
             <dt>{label}</dt>
             <dd>{value}</dd>
           </div>
         ))}
       </dl>
+      {st && <p className="station-why">{st.why(g)}</p>}
+      {controls.length > 0 && (
+        <div className="station-controls" role="group" aria-label={`${shown.title}: controls`}>
+          {controls.map((c, i) => (
+            <button key={c.label} className={`btn small secondary ${c.on ? "on" : ""}`} aria-pressed={c.on === undefined ? undefined : c.on} aria-disabled={!!c.off} onClick={() => run(c)}>
+              {!touch && i < 9 && <kbd className="kbd">{i + 1}</kbd>}
+              <span>
+                {c.label}
+                {c.off && <small>{c.off}</small>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       <p className="inspect-fact">
         <b>{f.title}.</b> {f.text}
       </p>

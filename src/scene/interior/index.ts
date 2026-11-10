@@ -6,7 +6,6 @@ import { activeHazard, capacity, flows } from "../../sim/core";
 import { clockOf, dayOf, PLANETS } from "../../sim/planets";
 import type { GameState, Planet } from "../../sim/types";
 import type { InteriorState } from "../../sim/interior";
-import { buildCrew } from "./crew";
 import { dress } from "./dressing";
 import { buildPiece, living, placeInstances, resetLiving } from "./furniture";
 import { finishMaterial, insideLight, ipaint } from "./lighting";
@@ -77,7 +76,6 @@ export async function buildInterior(planet: Planet = "mars", pause: () => Promis
   }
   dress(group, planet);
   if (!(await pause())) return null;
-  const crew = buildCrew(group);
   placeInstances(group);
   finishLabels();
   if (!(await pause())) return null;
@@ -154,7 +152,6 @@ export async function buildInterior(planet: Planet = "mars", pause: () => Promis
       f.visible = f.opacity > 0.01;
     }
     for (const gl of live.growLights) gl.emissiveIntensity = st.lights === "emergency" ? 0.15 : 0.4 + 1.2 * st.plants;
-    crew.place(st.crew);
   };
   return {
     apply,

@@ -8,6 +8,7 @@ import { modulePos } from "../sim/rover";
 import { FOOTPRINT, terrainHeight } from "../sim/world";
 import { isBuilt } from "../sim/core";
 import { INSPECTS } from "../sim/inspect";
+import { nearestOn, stationById, stationsFor, stationSpot, type Station } from "../sim/stations";
 import type { InteriorState } from "../sim/interior";
 import { useGame } from "../state/game";
 import { PLANETS } from "../sim/planets";
@@ -34,7 +35,11 @@ interface Usable {
   use: () => void;
   /** The furniture it sits on (its own edges don't hide it from you). */
   block?: string;
+  /** Used from anywhere along a front edge (a long console): the point on it nearest to you counts. */
+  face?: { ax: number; az: number; bx: number; bz: number };
 }
+/** "Grow-light controls" → "grow-light controls" (proper names and abbreviations kept). */
+const inSentence = (t: string) => (/^(Earth|CO2|CAPCOM)\b/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1));
 
 /**
  * Walking inside the home in first person: look with the mouse (captured with the Pointer Lock API, or by
@@ -66,6 +71,8 @@ export function walkController(
   ground: (x: number, z: number) => number = (x, z) => terrainHeight(x, z, planet),
   /** The campus's doors (its 3D model is built in the background). */
   campusDoors: () => DoorView[] = () => [],
+  /** The crew on their feet: doors open for them too. */
+  others: () => { x: number; z: number; level: number }[] = () => [],
 ) {
   // Outside, the feet follow the ground and climb onto rocks over a moment rather than in a jump.
   let feet = Number.NaN,
@@ -121,6 +128,30 @@ export function walkController(
     // Equipment you can look at closely: live readings and a fact.
     ...INSPECTS.map((p) => ({ level: p.level, x: p.x, z: p.z, block: p.block, label: `Look at the ${p.title.toLowerCase()}`, use: () => useWalk.getState().set({ card: useWalk.getState().card === p.id ? null : p.id }) })),
   ];
+  // The campus's stations (consoles, panels, benches): the ones in buildings this mission has.
+  let stationStage = -1,
+    stationUses: Usable[] = [],
+    outdoorStations: Usable[] = [];
+  const stationUse = (st: Station): Usable => {
+    const sp = stationSpot(st);
+    return {
+      level: sp.level as Floor | -1,
+      x: (sp.face.ax + sp.face.bx) / 2,
+      z: (sp.face.az + sp.face.bz) / 2,
+      face: sp.face,
+      block: sp.f?.id,
+      label: `${st.controls ? "Use" : "Look at"} the ${inSentence(st.title.replace(/ \(.*\)$/, ""))}`,
+      use: () => useWalk.getState().set({ card: useWalk.getState().card === st.id ? null : st.id }),
+    };
+  };
+  const refreshStations = () => {
+    const now = stage();
+    if (now === stationStage) return;
+    stationStage = now;
+    const all = stationsFor(now).map(stationUse);
+    stationUses = all.filter((u) => u.level !== -1);
+    outdoorStations = all.filter((u) => u.level === -1);
+  };
   const rackUses = usables.slice(1, 1 + SUIT_RACKS.length),
     panelUses = usables.slice(1 + SUIT_RACKS.length, 1 + SUIT_RACKS.length + LOCK_PANELS.length);
   // The storm drill: inside the shelter, the same shelter action as the HUD's (same rules, same costs).
@@ -140,7 +171,7 @@ export function walkController(
   /** Outside: the airlocks' outer panels, broken modules to repair, dusty panels to brush. */
   const outsideUses = (): Usable[] => {
     const g = useGame.getState().game;
-    const out: Usable[] = LOCK_PANELS.map((p) => {
+    const out: Usable[] = [...outdoorStations, ...LOCK_PANELS.map((p) => {
       const a = AIRLOCKS.find((x) => x.id === p.airlock)!;
       const l = locks.get(a.id)!;
       return {
@@ -149,7 +180,7 @@ export function walkController(
         label: l.cycle !== "none" ? "Airlock cycling: hurry it along" : l.pressure > 0 ? `${a.name}: pump it down to open the outer door` : `${a.name}: the outer door opens as you come near`,
         use: () => (l.cycle !== "none" ? (hurry = true) : l.pressure > 0 ? cycle(a, "out") : undefined),
       };
-    });
+    })];
     for (const m of g.modules) {
       if (m.type === "habitat" || !isBuilt(m)) continue;
       const p = modulePos(m);
@@ -337,13 +368,17 @@ export function walkController(
       // Doors slide open as you come near (a door into a building the colony hasn't built yet stays locked).
       const level = walker.outside ? -1 : walker.where === "stair" || walker.where === "hq-stair" ? null : walker.where;
       const now0 = stage();
+      const crewNear = others();
       for (const d of [...(interior?.doors ?? []), ...campusDoors()]) {
         if (lockOf.has(d.id)) continue;
         const portal = portalById(d.id);
         // (The garage's vehicle door opens for the rovers, not for walkers.)
         if (portal && (portal.kind === "vehicle" || doorLocked(portal, now0))) continue;
         // (The shelter's hatch stands open while a storm is coming or on.)
-        const near = (walking && level === d.level && Math.hypot(walker.x - d.x, walker.z - d.z) < DOOR_REACH) || (d.id === "shelter" && !!st?.shelterOpen);
+        const near =
+          (walking && level === d.level && Math.hypot(walker.x - d.x, walker.z - d.z) < DOOR_REACH) ||
+          (d.id === "shelter" && !!st?.shelterOpen) ||
+          crewNear.some((o) => o.level === d.level && Math.hypot(o.x - d.x, o.z - d.z) < DOOR_REACH + 0.35);
         const was = open.get(d.id) ?? 0;
         const now = THREE.MathUtils.clamp(was + (near ? dt : -dt) / DOOR_TIME, 0, 1);
         if (now !== was) {
@@ -371,7 +406,10 @@ export function walkController(
       const card = useWalk.getState().card;
       if (card) {
         const p = INSPECTS.find((x) => x.id === card);
-        if (!p || p.level !== level || Math.hypot(p.x - walker.x, p.z - walker.z) > 2.2) useWalk.getState().set({ card: null });
+        const st = p ? null : stationById(card);
+        const sp = st ? stationSpot(st) : null;
+        const near = p ? p.level === level && Math.hypot(p.x - walker.x, p.z - walker.z) <= 2.2 : !!sp && sp.level === level && Math.hypot(nearestOn(sp.face, walker.x, walker.z).x - walker.x, nearestOn(sp.face, walker.x, walker.z).z - walker.z) <= 2.4;
+        if (!near) useWalk.getState().set({ card: null });
       }
       const garage = walker.outside && cellAt(walker.x, walker.z, 0)?.id === "garage";
       const here = walker.outside ? (garage ? "Rover garage (unpressurised)" : planet === "mars" ? "Outside · Mars" : "Outside · the Moon") : placeName(walker.x, walker.z, walker.where);
@@ -384,9 +422,12 @@ export function walkController(
         u.label = l.cycle !== "none" ? "Airlock cycling: hurry it along" : l.pressure >= 1 ? (suited() ? "Pump the airlock down and go outside" : "Airlock: suit up first") : "Fill the airlock with air and come in";
       });
       const shelter = shelterUse();
-      const list = walker.outside ? outsideUses() : shelter ? [shelter, ...usables] : usables;
+      refreshStations();
+      const list = walker.outside ? outsideUses() : shelter ? [shelter, ...usables, ...stationUses] : [...usables, ...stationUses];
       for (const u of list) {
         if (u.level !== level) continue;
+        // (Along a long console, the bit of it nearest you.)
+        if (u.face) Object.assign(u, nearestOn(u.face, walker.x, walker.z));
         const dx = u.x - walker.x,
           dz = u.z - walker.z;
         const d = Math.hypot(dx, dz);

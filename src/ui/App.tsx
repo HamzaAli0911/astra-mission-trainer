@@ -15,7 +15,7 @@ import { MissionMap, Title } from "./screens";
 import { Modals } from "./modals";
 import { Minimap } from "./Minimap";
 import { WalkHud } from "./walk";
-import { clearWalkInput, enterWalk, lockState, walkInput } from "../state/walk";
+import { cardKeys, clearWalkInput, enterWalk, lockState, walkInput } from "../state/walk";
 
 /** Keys held for driving, by physical key code. */
 const held = new Set<string>();
@@ -124,7 +124,15 @@ export default function App() {
         case "Digit1":
         case "Digit2":
         case "Digit3":
-          if (!st.held) st.setSpeed(([1, 2, 4] as const)[Number(e.code.slice(-1)) - 1]);
+        case "Digit4":
+        case "Digit5":
+        case "Digit6":
+        case "Digit7":
+        case "Digit8":
+        case "Digit9":
+          // With a station's card open while walking, the numbers press its buttons; otherwise 1–3 set the speed.
+          if (walking && cardKeys.press?.(Number(e.code.slice(-1)))) break;
+          if (e.code <= "Digit3" && !st.held) st.setSpeed(([1, 2, 4] as const)[Number(e.code.slice(-1)) - 1]);
           break;
         case "KeyB":
           panel("build");

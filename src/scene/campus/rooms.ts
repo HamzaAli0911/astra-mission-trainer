@@ -15,6 +15,9 @@ import { drawLock, drawStation } from "./screens";
  * stores' shelves fill with the stock: the scene keeps all of these in step with the mission.
  */
 
+/** A small green readout that glows (shared: one material). */
+let readoutMat: THREE.MeshStandardMaterial | null = null;
+const readout = () => (readoutMat ??= new THREE.MeshStandardMaterial({ color: "#10301e", emissive: "#3ee39a", emissiveIntensity: 1.3, roughness: 0.4, toneMapped: false }));
 const label = (g: THREE.Object3D, text: string, w: number, x: number, y: number, z: number, ink = "#1d222b", plate: string | null = "#eceff2") => ilabel(g, text, w, x, y, z, ink, plate);
 const pipeX = (g: THREE.Object3D, len: number, r: number, m: THREE.Material, x: number, y: number, z: number) => (cyl(g, r, r, len, m, x, y, z, 10).rotation.z = Math.PI / 2);
 
@@ -35,7 +38,19 @@ export const ROOM_BUILDERS: Record<string, Build> = {
       blue = ipaint("#3d78c2", 0.4);
     pipeX(g, W - 0.4, 0.05, green, 0, H - 0.2, -D / 2 + 0.25);
     pipeX(g, W - 0.4, 0.05, blue, 0, 0.45, -D / 2 + 0.25);
+    // The control box: a hinged access door over its breakers and cell-voltage readout (it swings open while you
+    // look at the plant closely); the status lamp above it.
     box(g, 0.6, 0.8, 0.3, P.panel(), -W / 2 + 0.5, 1.2, D / 2 - 0.2);
+    box(g, 0.5, 0.42, 0.01, iplastic("#11161e", 0.6), -W / 2 + 0.5, 1.1, D / 2 - 0.045);
+    for (let i = 0; i < 5; i++) box(g, 0.05, 0.09, 0.02, ipaint(i === 2 ? "#e8b425" : "#2a2e35", 0.5), -W / 2 + 0.32 + i * 0.09, 1.2, D / 2 - 0.035);
+    box(g, 0.26, 0.08, 0.012, readout(), -W / 2 + 0.5, 0.99, D / 2 - 0.038);
+    const door = keep(new THREE.Group());
+    door.name = "door";
+    door.position.set(-W / 2 + 0.22, 0, D / 2 - 0.05);
+    g.add(door);
+    box(door, 0.56, 0.5, 0.025, P.panel(), 0.28, 1.1, 0.0125);
+    box(door, 0.03, 0.12, 0.03, P.steel(), 0.5, 1.1, 0.035);
+    hazard(door, 0.5, 0.04, 0.28, 0.9, 0.026);
     statusLamp(g, ctx, "oxygen", -W / 2 + 0.5, 1.45, D / 2 - 0.04);
     label(g, "OXYGEN PLANT", 0.8, 0, H - 0.05, D / 2 - 0.04);
     label(g, "O2", 0.24, W / 2 - 0.5, 1.6, D / 2 - 0.6 + 0.385, "#ffffff", "#3e9a5b");
@@ -352,10 +367,30 @@ export const ROOM_BUILDERS: Record<string, Build> = {
     label(g, "SAMPLE PREP", 0.5, 0, H - 0.15, D / 2 - 0.04);
   },
   "sample-freezer": (g, W, D, H) => {
-    rbox(g, W, H, D, 0.03, P.white(), 0, H / 2, 0);
-    box(g, 0.25, 0.08, 0.01, iplastic("#0f1520", 0.3), 0, H - 0.25, D / 2 + 0.003);
-    label(g, "SAMPLES −80 °C", 0.5, 0, H - 0.45, D / 2 + 0.003);
-    box(g, 0.02, 0.3, 0.03, P.steel(), W / 2 - 0.08, H * 0.6, D / 2 + 0.015);
+    // An upright −80 °C freezer: a white cabinet (walls, top, plinth) round a frosted inside with racks of sample
+    // boxes, and a thick insulated door hinged on its left that swings open while you look inside (kept: it moves).
+    const t = 0.06;
+    box(g, t, H, D, P.white(), -W / 2 + t / 2, H / 2, 0);
+    box(g, t, H, D, P.white(), W / 2 - t / 2, H / 2, 0);
+    box(g, W, t, D, P.white(), 0, H - t / 2, 0);
+    box(g, W, 0.12, D, P.gun(), 0, 0.06, 0);
+    box(g, W - 2 * t, H - 0.12 - t, t, P.white(), 0, (H - t + 0.12) / 2, -D / 2 + t / 2);
+    const frost = iplastic("#dfe9f2", 0.75);
+    box(g, W - 2 * t - 0.01, H - 0.12 - t - 0.01, 0.01, frost, 0, (H - t + 0.12) / 2, -D / 2 + t + 0.006);
+    const colours = ["#3d78c2", "#c7a14a", "#3e9a5b", "#b04a4a", "#7a5aa8"];
+    for (let k = 0; k < 4; k++) {
+      const y = 0.25 + k * ((H - 0.45) / 4);
+      box(g, W - 2 * t, 0.02, D - 2 * t, P.steel(), 0, y, 0);
+      for (let i = 0; i < 4; i++) box(g, (W - 2 * t) / 4 - 0.05, 0.16, D - 2 * t - 0.12, iplastic(colours[(i + k) % 5], 0.5), -W / 2 + t + ((W - 2 * t) / 4) * (i + 0.5), y + 0.09, 0.02);
+    }
+    const door = keep(new THREE.Group());
+    door.name = "door";
+    door.position.set(-W / 2, 0, D / 2);
+    g.add(door);
+    rbox(door, W, H - 0.13, 0.07, 0.02, P.white(), W / 2, 0.12 + (H - 0.13) / 2, 0.035);
+    box(door, 0.25, 0.08, 0.01, iplastic("#0f1520", 0.3), W / 2, H - 0.25, 0.074);
+    label(door, "SAMPLES −80 °C", 0.5, W / 2, H - 0.45, 0.074);
+    box(door, 0.03, 0.34, 0.04, P.steel(), W - 0.09, H * 0.58, 0.09);
   },
   "sample-cabinet": (g, W, D, H) => {
     box(g, W, H, D, P.panel(), 0, H / 2, 0);

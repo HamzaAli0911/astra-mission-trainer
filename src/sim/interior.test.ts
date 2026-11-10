@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createState } from "./engine";
 import { crewSpots, dayPhase, interiorState } from "./interior";
 import { STORAGE } from "./modules";
-import type { GameState } from "./types";
+import type { GameState, ModuleType } from "./types";
 
 /** A fresh Mars outpost at mid-morning with full stores, a charged battery and the lights on. */
 function home(): GameState {
@@ -117,6 +117,38 @@ describe("what the inside of the home shows", () => {
   });
 });
 
+describe("the crew's day in the colony", () => {
+  const at = (g: GameState) => Object.fromEntries(crewSpots(g).map((c) => [c.id, c.spot]));
+  const withModules = (g: GameState, ...types: ModuleType[]) => {
+    for (const t of types) g.modules.push({ id: g.nextId++, type: t, pad: 99, built: 999, on: true, light: 2, health: 100, repair: 0 });
+    return g;
+  };
+  it("works in the wing that has their machines, once the module is built", () => {
+    const g = withModules(home(), "oxygen", "greenhouse", "lab");
+    g.t = 24 + 10;
+    expect(at(g)).toEqual({ maya: "hq-ops", alex: "ls-work", sam: "gh-work", noor: "sci-work" });
+    // (Lunch at work for those out in the wings; the ones at home eat in the galley.)
+    g.t = 24 + 12.5;
+    expect(at(g).alex).toBe("ls-work");
+    // A mission without those wings: Hab-1's own racks.
+    const early = { ...structuredClone(g), missionId: "first-light" };
+    early.t = 24 + 10;
+    expect(at(early)).toEqual({ maya: "hq-ops", alex: "eclss", sam: "garden", noor: "lab" });
+  });
+  it("reacts only to what's really happening: a storm warning, a flat battery, a repair", () => {
+    const g = withModules(home(), "oxygen");
+    g.t = 24 + 10;
+    g.res.power = 1000;
+    expect(at(g).maya).toBe("hq-ops");
+    g.hazards.push({ id: 99, kind: "storm", warnAt: 0, startAt: 50, endAt: 60, strength: 1, phase: "warned" });
+    expect(at(g).maya).toBe("hq-alerts");
+    g.res.power = 0.5;
+    expect(at(g).alex).toBe("eng-power");
+    g.modules[1].repair = 0.5;
+    expect(at(g).noor).toBe("eng-repair");
+  });
+});
+
 describe("the crew's day in the home", () => {
   const at = (g: GameState) => Object.fromEntries(crewSpots(g).map((c) => [c.id, c.spot]));
   it("eats together, works at their stations, takes turns exercising, and sleeps in their quarters", () => {
@@ -135,12 +167,14 @@ describe("the crew's day in the home", () => {
     }
     expect(exercising.size).toBe(4);
   });
-  it("shelters in the core in a storm, and isn't home while out in the rover or on foot outside", () => {
+  it("shelters in the campus's storm shelter (Hab-1's core before the colony has one), and isn't home while out in the rover or on foot outside", () => {
     const g = home();
     g.t = 10;
     g.sheltering = true;
     for (const c of g.crew) c.place = "shelter";
-    expect(Object.values(at(g)).every((s) => s?.startsWith("shelter"))).toBe(true);
+    expect(Object.values(at(g)).every((s) => s?.startsWith("sh-"))).toBe(true);
+    const early = { ...structuredClone(g), missionId: "first-light" };
+    expect(Object.values(at(early)).every((s) => s?.startsWith("shelter-"))).toBe(true);
     g.sheltering = false;
     g.crew[0].place = "rover";
     g.crew[1].place = "eva";

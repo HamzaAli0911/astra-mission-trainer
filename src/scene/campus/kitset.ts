@@ -24,8 +24,6 @@ export interface CampusDressing {
   doorLights: { door: string; mat: THREE.MeshStandardMaterial }[];
   /** The server racks' status lights. */
   leds: THREE.MeshStandardMaterial;
-  /** Crew at their places in the campus, by place: shown while the routine puts them there. */
-  crew: { id: string; spot: string; o: THREE.Object3D }[];
   /** Machines' status lamps, by what they show: a module type's state, or life support's power, or damage anywhere. */
   status: { bind: StatusBind; mat: THREE.MeshStandardMaterial }[];
   /** Gauges (a bar scaled upright from 0 to 1): a store's fill, or the shelter's water walls. */
@@ -35,6 +33,8 @@ export interface CampusDressing {
   growLights: THREE.MeshStandardMaterial | null;
   /** Crates and containers on the stores' shelves: as many as the stock fills. */
   stock: { res: "food" | "water" | "materials"; mesh: THREE.InstancedMesh; total: number }[];
+  /** Doors and lids on equipment that swing open while its station's card is open (`t` 0 shut – 1 open). */
+  opening: { station: string; o: THREE.Object3D; t: number }[];
 }
 export type StatusBind = ModuleType | "lifesupport" | "damage";
 export type GaugeRes = "o2" | "water" | "food" | "materials" | "shelter";

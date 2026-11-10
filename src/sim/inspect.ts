@@ -26,9 +26,9 @@ const at = (block: string) => {
   const k = BLOCKS.find((b) => b.id === block)!;
   return { level: k.level, block, ...polar(k.bearing, k.r) };
 };
-const perDay = (perHour: number) => perHour * 24;
-const fmt = (n: number, d = 0) => (Math.abs(n) < 1e-9 ? "0" : n.toFixed(d));
-const status = (g: GameState, type: ModuleType) => {
+export const perDay = (perHour: number) => perHour * 24;
+export const fmt = (n: number, d = 0) => (Math.abs(n) < 1e-9 ? "0" : n.toFixed(d));
+export const status = (g: GameState, type: ModuleType) => {
   const m = g.modules.find((x) => x.type === type && isBuilt(x));
   if (!m) return "not built";
   if (m.health < DAMAGED) return m.repair > 0 ? "being repaired" : "FAULT: needs repair";
@@ -36,8 +36,8 @@ const status = (g: GameState, type: ModuleType) => {
   const r = flows(g).ratio[m.id] ?? 1;
   return r < 0.5 ? "short of power" : "working";
 };
-const worry = (s: string) => s !== "working";
-const daysLeft = (stock: number, net: number) => (net >= -1e-9 ? "keeping up" : `${fmt(stock / -perDay(net), 1)} days left`);
+export const worry = (s: string) => s !== "working";
+export const daysLeft = (stock: number, net: number) => (net >= -1e-9 ? "keeping up" : `${fmt(stock / -perDay(net), 1)} days left`);
 
 export const INSPECTS: Inspect[] = [
   {
