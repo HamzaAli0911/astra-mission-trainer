@@ -11,8 +11,11 @@ import {
   doorLocked,
   doorSlab,
   FLOOR,
+  FURNITURE,
   hitsCampus,
   HQ_STAIR,
+  LOCK_PANELS,
+  SUIT_RACKS,
   MEZZANINE,
   OUTER_DOORS,
   porchY,
@@ -188,6 +191,63 @@ describe("the campus plan", () => {
     const w = walk({ x: 0, z: 4.35, where: 0 }, 0, 3, OPEN);
     expect(floorY(w)).toBe(FLOOR);
     expect(cellAt(w.x, w.z, 0)?.id).toBe("link-tunnel");
+  });
+});
+
+describe("the campus's furniture", () => {
+  it("stands inside its own room, never overlapping another piece", () => {
+    for (const f of FURNITURE) {
+      const c = cellById(f.cell);
+      expect(c, f.id).toBeTruthy();
+      const r = c!.rect,
+        q = f.rect;
+      expect(q.x0 >= r.x0 - 1e-6 && q.x1 <= r.x1 + 1e-6 && q.z0 >= r.z0 - 1e-6 && q.z1 <= r.z1 + 1e-6, f.id).toBe(true);
+      expect(q.x1 > q.x0 && q.z1 > q.z0 && f.h > 0, f.id).toBe(true);
+    }
+    for (const a of FURNITURE)
+      for (const b of FURNITURE) {
+        if (a === b || a.cell !== b.cell) continue;
+        const overlap = Math.min(a.rect.x1, b.rect.x1) - Math.max(a.rect.x0, b.rect.x0) > 0.01 && Math.min(a.rect.z1, b.rect.z1) - Math.max(a.rect.z0, b.rect.z0) > 0.01;
+        expect(overlap, `${a.id} / ${b.id}`).toBe(false);
+      }
+  });
+
+  it("keeps every doorway clear: a body's width in front of each door, on both sides", () => {
+    for (const p of PORTALS) {
+      if (p.kind === "vehicle") continue;
+      for (const id of [p.a, p.b]) {
+        const c = cellById(id);
+        if (!c) continue;
+        // The patch of floor a walker crosses to reach the door from this room.
+        const r = c.rect,
+          h = p.width / 2;
+        const zone =
+          p.along === "x"
+            ? Math.abs(p.z - r.z0) < Math.abs(p.z - r.z1)
+              ? { x0: p.x - h, z0: r.z0, x1: p.x + h, z1: r.z0 + 0.9 }
+              : { x0: p.x - h, z0: r.z1 - 0.9, x1: p.x + h, z1: r.z1 }
+            : Math.abs(p.x - r.x0) < Math.abs(p.x - r.x1)
+              ? { x0: r.x0, z0: p.z - h, x1: r.x0 + 0.9, z1: p.z + h }
+              : { x0: r.x1 - 0.9, z0: p.z - h, x1: r.x1, z1: p.z + h };
+        for (const f of FURNITURE) {
+          if (f.cell !== id) continue;
+          const hit = Math.min(zone.x1, f.rect.x1) - Math.max(zone.x0, f.rect.x0) > 0.01 && Math.min(zone.z1, f.rect.z1) - Math.max(zone.z0, f.rect.z0) > 0.01;
+          expect(hit, `${f.id} blocks ${p.id}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("leaves the suit racks and airlock panels where you can stand and reach them", () => {
+    for (const r of SUIT_RACKS) {
+      const spot = { x: r.x + (r.cell === "yard-stage" ? 0.5 : 0), z: r.z + (r.cell === "yard-stage" ? 0 : 0.6), where: 0 as const };
+      const w = walk(spot, 0, 0, OPEN);
+      expect(Math.hypot(w.x - r.x, w.z - r.z), r.cell).toBeLessThan(1.2);
+    }
+    for (const p of LOCK_PANELS) {
+      const w = walk({ x: p.inside.x - 0.6, z: p.inside.z, where: 0 }, 0, 0, OPEN);
+      expect(Math.hypot(w.x - p.inside.x, w.z - p.inside.z), p.airlock).toBeLessThan(1.2);
+    }
   });
 });
 

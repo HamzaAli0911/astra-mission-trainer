@@ -1,3 +1,4 @@
+import { FURNITURE } from "./furniture";
 import type { Seg } from "./home";
 import type { ModuleType } from "./types";
 
@@ -234,52 +235,7 @@ export interface Furniture {
   h: number;
   face: Side;
 }
-const F = (id: string, cell: string, kind: string, x0: number, z0: number, x1: number, z1: number, h: number, face: Side): Furniture => ({ id, cell, kind, rect: R(x0, z0, x1, z1), h, face });
-/** A row of operator chairs behind a desk. */
-const chairs = (prefix: string, cell: string, xs: number[], z: number, face: Side) => xs.map((x, i) => F(`${prefix}-${i + 1}`, cell, "chair", x - 0.28, z - 0.28, x + 0.28, z + 0.28, 1.0, face));
-export const FURNITURE: Furniture[] = [
-  // HQ operations hall: two rows of consoles facing the display wall (two banks each, an aisle down the middle).
-  ...[-1, 1].flatMap((s) => [
-    F(`hq-console-a${s < 0 ? "w" : "e"}`, "hq-hall", "console", s < 0 ? -7 : 1.2, 43.0, s < 0 ? -1.2 : 7, 43.9, 0.76, "s"),
-    F(`hq-console-b${s < 0 ? "w" : "e"}`, "hq-hall", "console", s < 0 ? -7 : 1.2, 46.0, s < 0 ? -1.2 : 7, 46.9, 0.76, "s"),
-  ]),
-  ...chairs("hq-chair-a", "hq-hall", [-6.0, -4.1, -2.2, 2.2, 4.1, 6.0], 44.45, "n"),
-  ...chairs("hq-chair-b", "hq-hall", [-6.0, -4.1, -2.2, 2.2, 4.1, 6.0], 47.45, "n"),
-  // Under the mezzanine: the situation table, the crisis station and the equipment closet.
-  F("hq-table", "hq-hall", "situation-table", -1.4, 52.6, 1.4, 54.0, 0.95, "n"),
-  F("hq-crisis", "hq-hall", "crisis-station", 8.0, 56.05, 11.0, 56.4, 1.9, "n"),
-  F("hq-closet", "hq-hall", "closet", -13.9, 55.8, -11.4, 56.4, 2.1, "n"),
-  // The mezzanine: the flight director's desk and CAPCOM's, overlooking the hall; a rail at the windows behind.
-  F("hq-fd-desk", "hq-mezzanine", "console", -4.5, 51.0, 4.5, 51.8, 0.76, "s"),
-  F("hq-capcom-desk", "hq-mezzanine", "console", 6.5, 51.0, 11.0, 51.8, 0.76, "s"),
-  ...chairs("hq-fd-chair", "hq-mezzanine", [-2.6, 0, 2.6, 7.6, 9.9], 52.15, "n"),
-  F("hq-window-rail", "hq-mezzanine", "window-rail", -12.0, 55.95, 12.0, 56.4, 1.05, "n"),
-  // Lobby: benches under the windows, the colony map, a planter.
-  F("hq-bench-w", "hq-lobby", "bench", -5.0, 34.4, -2.4, 34.85, 0.46, "s"),
-  F("hq-bench-e", "hq-lobby", "bench", 2.4, 34.4, 5.0, 34.85, 0.46, "s"),
-  F("hq-map", "hq-lobby", "map-kiosk", -4.6, 38.7, -2.6, 39.2, 1.7, "n"),
-  F("hq-planter", "hq-lobby", "planter", 3.6, 38.9, 5.6, 39.6, 0.7, "n"),
-  // Briefing room: a table for eight facing the briefing screen.
-  F("hq-brief-table", "hq-briefing", "table", -12.4, 36.5, -8.2, 37.9, 0.75, "n"),
-  ...[-11.8, -10.3, -8.8].flatMap((x, i) => [F(`hq-brief-chair-n${i + 1}`, "hq-briefing", "chair", x - 0.25, 35.75, x + 0.25, 36.25, 0.95, "s"), F(`hq-brief-chair-s${i + 1}`, "hq-briefing", "chair", x - 0.25, 38.15, x + 0.25, 38.65, 0.95, "n")]),
-  // Comms equipment room: server racks, the Earth link's comms console, a cooling unit.
-  ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => F(`hq-rack-${i + 1}`, "hq-equipment", "server-rack", 8.0 + i * 0.6, 34.45, 8.6 + i * 0.6, 35.45, 2.0, "s")),
-  F("hq-comms", "hq-equipment", "console", 13.15, 36.4, 13.95, 38.8, 0.76, "w"),
-  F("hq-comms-chair", "hq-equipment", "chair", 12.3, 37.3, 12.86, 37.86, 1.0, "e"),
-  F("hq-cooling", "hq-equipment", "cooling-unit", 9.0, 39.35, 11.0, 40.0, 1.8, "n"),
-  // EVA complex: suit racks either side of the door, lockers, benches, the suit service bench.
-  F("eva-rack-w", "eva-suit", "suit-rack", 52.6, 49.0, 55.4, 49.7, 2.05, "s"),
-  F("eva-rack-e", "eva-suit", "suit-rack", 63.1, 49.0, 65.9, 49.7, 2.05, "s"),
-  F("eva-rack-spare", "eva-suit", "suit-rack", 66.4, 49.0, 69.2, 49.7, 2.05, "s"),
-  F("eva-lockers", "eva-suit", "lockers", 50.0, 50.0, 50.6, 54.5, 2.0, "e"),
-  F("eva-bench-1", "eva-suit", "bench", 53.0, 51.95, 55.6, 52.35, 0.46, "n"),
-  F("eva-bench-2", "eva-suit", "bench", 62.4, 51.95, 65.0, 52.35, 0.46, "n"),
-  F("eva-service", "eva-suit", "service-bench", 69.25, 50.9, 70.0, 53.6, 0.9, "w"),
-  // The dust lock: brushes and a vacuum on the west wall; the airlock chamber's bench.
-  F("eva-brushes", "eva-dust", "brush-station", 50.0, 57.0, 50.55, 61.2, 1.3, "e"),
-  F("eva-vacuum", "eva-dust", "vacuum", 50.0, 61.8, 50.7, 62.9, 1.05, "e"),
-  F("eva-lock-bench", "eva-lock", "bench", 63.4, 55.65, 68.6, 56.1, 0.46, "s"),
-];
+export { FURNITURE };
 export const furnitureById = (id: string) => FURNITURE.find((f) => f.id === id);
 
 /** The HQ's feature stair: a straight open flight in the hall, rising south (+z) to the mezzanine's edge. */
@@ -404,6 +360,8 @@ export function campusSolids(): Rect[] {
   }
   for (const p of COMPOUND_PARTS) out.push(p.rect);
   for (const b of BERMS) out.push(bermRect(b));
+  // Furniture in the garage (walked in a suit, driven in by rovers).
+  for (const f of FURNITURE) if (cellById(f.cell)?.kind === "hangar") out.push(f.rect);
   return out;
 }
 

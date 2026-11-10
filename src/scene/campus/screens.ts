@@ -455,4 +455,9 @@ export const CONSOLE_STATIONS: Record<string, Station[]> = {
   "hq-fd-desk": ["overview", "power", "o2", "radiation", "rover", "crew"],
   "hq-capcom-desk": ["capcom", "comms", "eva"],
   "hq-comms": ["comms", "capcom"],
+  "ls-console-w": ["o2", "power", "crew", "radiation"],
+  "ls-console-e": ["water", "food", "power", "build"],
+  "sh-console": ["radiation", "crew"],
+  "sci-console": ["science", "scout"],
+  "en-power-desk": ["power", "build", "rover", "comms"],
 };

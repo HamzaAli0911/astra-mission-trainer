@@ -34,7 +34,7 @@ import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
 import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
-import { dressCampus, type CampusDressing } from "./campus/dress";
+import { dressCampus, keepInStep, type CampusDressing } from "./campus/dress";
 import { campusScreenData } from "./campus/screens";
 import { building, buildingAt, cellAt, NEIGHBOURS, PORTALS, rectDistance, stageOf } from "../sim/base";
 import { useWalk, walker } from "../state/walk";
@@ -355,7 +355,8 @@ export function World() {
         habVisible = true;
       // The campus's furniture, fittings and screens (built in the background after the home's inside).
       let dressing: CampusDressing | null = null,
-        campusScreensAt = -1;
+        campusScreensAt = -1,
+        bindingsAt = -1;
 
       if (!(await slice())) return;
       const pads = PADS.map((p) => {
@@ -1378,6 +1379,10 @@ export function World() {
               l.mat.emissive.set(ok ? "#3ee39a" : "#ff4d5e");
             }
             dressing.leds.emissiveIntensity = 0.9 + 0.6 * Math.max(0, Math.sin(clock * 5.3) * Math.sin(clock * 1.7));
+            if (clock - bindingsAt > 0.5) {
+              bindingsAt = clock;
+              keepInStep(dressing, g, homeState ?? interiorState(g));
+            }
             const anyInside = [...campus.parts.values()].some((p) => p.inside.visible);
             if (anyInside && clock - campusScreensAt > 0.33) {
               campusScreensAt = clock;
