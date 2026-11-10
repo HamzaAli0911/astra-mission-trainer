@@ -7,6 +7,7 @@ import { homePiece, suit } from "../interior/furniture";
 import { ifabric, imetal, ipaint, iplastic, irubber } from "../interior/lighting";
 import { beginLabels, cableTray, CREW_COLOR, extinguisher, finishLabels, footShadow, hazard, ilabel, screen, screens, vent, type Screen } from "../interior/parts";
 import { bakeProps } from "./bake";
+import { openingHeight } from "./structure";
 import { CELL_INDEX, cellCeiling, cellFloor } from "./lighting";
 import { CONSOLE_STATIONS, drawLobbyMap, drawLock, drawStation, drawSuitCheck, drawTable, drawWall } from "./screens";
 
@@ -36,7 +37,7 @@ const P = {
   panel: () => ipaint("#c9ced5", 0.55),
   grey: () => ipaint("#8d949e", 0.55),
   dark: () => ipaint("#363c46", 0.55),
-  navy: () => ipaint("#27324a", 0.5),
+  navy: () => ipaint("#33405c", 0.5),
   steel: () => imetal("#b9c0ca", 0.32),
   gun: () => imetal("#5d6573", 0.45),
   black: () => iplastic("#1b1f26", 0.45),
@@ -298,7 +299,10 @@ function hangingSign(parent: THREE.Group, cell: string, x: number, z: number, fa
 /** A sign on a wall above a door, facing into the room. */
 function doorSign(parent: THREE.Group, cell: string, side: Side, at: number, text: string, ink = "#1d222b", plate = "#eceff2") {
   const c = cellById(cell)!;
-  const g = onWall(parent, cell, side, at, cellFloor(c) + 2.42, 0.01);
+  // Above the doorway (a tall double door's too), under the ceiling.
+  const door = PORTALS.find((p) => (p.a === cell || p.b === cell) && Math.abs((p.along === "x" ? p.x : p.z) - at) < 0.05);
+  const y = Math.min(cellFloor(c) + (door ? openingHeight(door) : 2.15) + 0.3, cellCeiling(c) - 0.14);
+  const g = onWall(parent, cell, side, at, y, 0.01);
   ilabel(g, text, Math.min(1.6, 0.18 + text.length * 0.065), 0, 0, 0, ink, plate);
 }
 /** A handrail along a wall on stand-offs, at 0.9 m. */
@@ -383,7 +387,7 @@ function dressHQ(g: THREE.Group, ctx: Ctx) {
   box(wall, 16.5, 4.5, 0.12, P.dark(), 0, 0, -0.03);
   screen(wall, 16, 4, 0, 0, 0.04, drawWall, 2048);
   box(wall, 16.6, 0.08, 0.2, P.gun(), 0, -2.3, 0.02);
-  ilabel(wall, "MISSION OPERATIONS", 3.2, 0, 2.62, 0.04, "#cfd8e6", null);
+  ilabel(wall, "MISSION OPERATIONS", 3.2, 0, 2.62, 0.04, "#2b3a55", null);
   // Tall structural ribs up the hall's long walls, cable trays along their tops, vents between.
   for (const side of ["w", "e"] as Side[])
     for (const z of [41.6, 44.4, 50.0, 53.0]) {
@@ -431,7 +435,7 @@ function dressEVA(g: THREE.Group, ctx: Ctx) {
   box(check, 1.28, 0.76, 0.04, P.black(), 0, 0, 0);
   doorSign(g, "eva-suit", "s", 56, "DUST LOCK ↓", "#1d222b", "#e8b425");
   doorSign(g, "eva-suit", "n", 60, "EAST SPINE ↑", "#1d222b", "#eceff2");
-  const suitUp = onWall(g, "eva-suit", "n", 64.5, 2.55, 0.01);
+  const suitUp = onWall(g, "eva-suit", "n", 64.5, 3.32, 0.01);
   ilabel(suitUp, "SUIT UP HERE", 1.1, 0, 0, 0, "#1d222b", "#e8b425");
   extinguisher(onWall(g, "eva-suit", "w", 54.9, 1.05, 0), 0, 0, 0);
   // The dust lock: air-shower manifolds on both long walls, a grated floor, stripes at the airlock door.

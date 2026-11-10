@@ -287,6 +287,31 @@ export const HQ_STAIR = { x0: -10, x1: -8.6, z0: 44.0, z1: 50.4 };
 /** Stairs between campus floors (for route finding): from the cell at the foot to the cell at the top. */
 export const STAIR_LINKS = [{ id: "hq-stair", from: "hq-hall", to: "hq-mezzanine" }];
 
+/** Buildings joined by a doorway (Hab-1 by its link), for drawing only the insides you could see into. */
+export const NEIGHBOURS: Map<BuildingId, Set<BuildingId>> = (() => {
+  const of = (id: string): BuildingId | null => (id === "hab" ? "hab" : (CELLS.find((c) => c.id === id)?.building ?? null));
+  const out = new Map<BuildingId, Set<BuildingId>>();
+  for (const p of PORTALS) {
+    const a = of(p.a),
+      b = of(p.b);
+    if (!a || !b || a === b) continue;
+    for (const [x, y] of [
+      [a, b],
+      [b, a],
+    ] as const) {
+      if (!out.has(x)) out.set(x, new Set());
+      out.get(x)!.add(y);
+    }
+  }
+  return out;
+})();
+/** The building a walker is in (Hab-1 counts), or null outside. */
+export function buildingAt(x: number, z: number, floor: number): BuildingId | null {
+  const c = cellAt(x, z, floor === 2 ? 2 : 0);
+  if (c) return c.building;
+  return Math.hypot(x, z) < 5.3 ? "hab" : null;
+}
+
 /** Which buildings exist at a stage (the rest are foundations and scaffolding, with their doors locked). */
 export const built = (b: Building, stage: Stage) => b.stage <= stage;
 /** Is a cell open to walk into at this stage? */

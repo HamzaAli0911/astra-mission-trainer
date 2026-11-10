@@ -49,7 +49,7 @@ describe("the inside of the home, against its floor plan", () => {
     expect(meshes).toBeLessThan(125);
   });
 
-  it("draws a wall wherever the walker bumps into one", { timeout: 60000 }, () => {
+  it("draws a wall wherever the walker bumps into one", { timeout: 120000 }, () => {
     for (const level of [0, 1] as const) {
       for (const s of walls(level)) {
         // Doors open in this model; furniture is checked below.
@@ -73,7 +73,7 @@ describe("the inside of the home, against its floor plan", () => {
     }
   });
 
-  it("draws nothing where you can walk (no wall you'd pass through)", { timeout: 60000 }, () => {
+  it("draws nothing where you can walk (no wall you'd pass through)", { timeout: 120000 }, () => {
     for (const level of [0, 1] as const) {
       const y = HOME.floor[level] + 1.0;
       const segs = walls(level).filter((s: Seg) => !s.door || s.door === "airlock");

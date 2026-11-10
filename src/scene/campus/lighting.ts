@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CELLS, FLOOR, MEZZANINE, type Cell } from "../../sim/base";
+import { CAMPUS_WINDOWS, CELLS, FLOOR, MEZZANINE, PORTALS, type Cell } from "../../sim/base";
 import { FINE } from "../interior/lighting";
 import { addDetail, type Detail } from "../surface";
 
@@ -7,8 +7,10 @@ import { addDetail, type Detail } from "../surface";
  * Light inside the campus, the way Hab-1 is lit (see interior/lighting.ts) but for a plan of rectangular rooms:
  * every vertex of the campus carries the index of the room (cell) it belongs to, so a fragment adds up only its own
  * room's ceiling lamps (no light through a wall, however thin) and darkens towards its own room's walls, floor and
- * ceiling. The Sun only reaches in where shadows let it; the other outdoor lights stop at the shell. The lamps and
- * the rooms' boxes live in one small float texture, so the shader's size doesn't grow with the campus.
+ * ceiling. Sunlight only comes in through a room's own windows: a ray towards the Sun must pass through one of them
+ * (an exact test, so no light slips through a thin wall's corner), and then shadows decide what outside blocks it.
+ * The other outdoor lights stop at the shell. The lamps, the rooms' boxes and their windows live in one small float
+ * texture, so the shader's size doesn't grow with the campus.
  */
 
 export const CELL_INDEX = new Map(CELLS.map((c, i) => [c.id, i]));
@@ -57,17 +59,44 @@ export const campusLight = {
 };
 
 /** The lamps (row 0), the rooms' boxes (row 1) and their heights and lamps (row 2), as one float texture. */
+/**
+ * The openings sunlight can come through, room by room: its windows (the mezzanine shares the hall's), and the
+ * garage's vehicle door. Each is a rectangle in a wall's plane: which plane, where, how wide, how high.
+ */
+export const SUN_OPENINGS: { cell: number; plane: "x" | "z"; fixed: number; at: number; half: number; y0: number; y1: number }[] = (() => {
+  const out: (typeof SUN_OPENINGS)[number][] = [];
+  CELLS.forEach((c, i) => {
+    for (const w of CAMPUS_WINDOWS) {
+      const own = w.cell === c.id || (c.id === "hq-mezzanine" && w.cell === "hq-hall" && w.y0 > MEZZANINE);
+      if (!own) continue;
+      const owner = CELLS.find((x) => x.id === w.cell)!.rect;
+      const fixed = w.side === "n" ? owner.z0 : w.side === "s" ? owner.z1 : w.side === "w" ? owner.x0 : owner.x1;
+      out.push({ cell: i, plane: w.side === "n" || w.side === "s" ? "z" : "x", fixed, at: w.at, half: w.width / 2, y0: w.y0, y1: w.y1 });
+    }
+    if (c.kind === "hangar")
+      for (const p of PORTALS)
+        if (p.kind === "vehicle" && (p.a === c.id || p.b === c.id)) out.push({ cell: i, plane: p.along === "x" ? "z" : "x", fixed: p.along === "x" ? c.rect.z1 : c.rect.x1, at: p.along === "x" ? p.x : p.z, half: p.width / 2, y0: 0, y1: 6 });
+  });
+  return out;
+})();
+
 export function campusData() {
   if (campusLight.uCampusData.value) return campusLight.uCampusData.value;
-  const width = Math.max(CAMPUS_LAMPS.length, CELLS.length);
-  const data = new Float32Array(width * 3 * 4);
+  const width = Math.max(CAMPUS_LAMPS.length, CELLS.length, SUN_OPENINGS.length, 1);
+  const data = new Float32Array(width * 6 * 4);
   CAMPUS_LAMPS.forEach((l, i) => data.set([l.x, l.y, l.z, l.power], i * 4));
+  SUN_OPENINGS.forEach((o, i) => {
+    data.set([o.plane === "z" ? 0 : 1, o.fixed, o.at, o.half], (width * 3 + i) * 4);
+    data.set([o.y0, o.y1, 0, 0], (width * 4 + i) * 4);
+  });
   CELLS.forEach((c, i) => {
     const lamps = CAMPUS_LAMPS.map((l, k) => [l, k] as const).filter(([l]) => l.cell === i);
+    const wins = SUN_OPENINGS.map((o, k) => [o, k] as const).filter(([o]) => o.cell === i);
     data.set([c.rect.x0, c.rect.z0, c.rect.x1, c.rect.z1], (width + i) * 4);
     data.set([cellFloor(c), cellCeiling(c), lamps.length ? lamps[0][1] : 0, lamps.length], (width * 2 + i) * 4);
+    data.set([wins.length ? wins[0][1] : 0, wins.length, 0, 0], (width * 5 + i) * 4);
   });
-  const t = new THREE.DataTexture(data, width, 3, THREE.RGBAFormat, THREE.FloatType);
+  const t = new THREE.DataTexture(data, width, 6, THREE.RGBAFormat, THREE.FloatType);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.generateMipmaps = false;
   t.needsUpdate = true;
@@ -109,6 +138,24 @@ vec4 campusInfo() { return texelFetch( uCampusData, ivec2( vCell, 2 ), 0 ); }
 float campusOcclude( float d, float facing ) {
   return 1.0 - 0.42 * ( 1.0 - smoothstep( 0.0, 0.55, max( d, 0.0 ) ) ) * ( 1.0 - abs( facing ) );
 }
+// 1 if a ray from p towards the Sun (L) leaves through one of this room's windows, else 0.
+float campusSunWindow( vec3 p, vec3 L ) {
+  vec4 wi = texelFetch( uCampusData, ivec2( vCell, 5 ), 0 );
+  int from = int( wi.x ), count = int( wi.y );
+  for ( int i = from; i < from + count; i ++ ) {
+    vec4 a = texelFetch( uCampusData, ivec2( i, 3 ), 0 );
+    vec4 b = texelFetch( uCampusData, ivec2( i, 4 ), 0 );
+    float pc = a.x < 0.5 ? p.z : p.x;
+    float lc = a.x < 0.5 ? L.z : L.x;
+    if ( abs( lc ) < 1e-4 ) continue;
+    float t = ( a.y - pc ) / lc;
+    if ( t <= 0.0 ) continue;
+    vec3 q = p + L * t;
+    float u = a.x < 0.5 ? q.x : q.z;
+    if ( abs( u - a.z ) < a.w && q.y > b.x && q.y < b.y ) return 1.0;
+  }
+  return 0.0;
+}
 float campusAO( vec3 p, vec3 n ) {
   vec4 r = campusRect(), info = campusInfo();
   float ao = campusOcclude( p.x - r.x, n.x ) * campusOcclude( r.z - p.x, n.x ) * campusOcclude( p.z - r.y, n.z ) * campusOcclude( r.w - p.z, n.z );
@@ -127,9 +174,11 @@ float campusAo = 1.0;
     vec4 lamp = texelFetch( uCampusData, ivec2( i, 0 ), 0 );
     vec3 toLamp = lamp.xyz - vCampusPos;
     float d2 = dot( toLamp, toLamp );
-    if ( d2 > 90.0 || toLamp.y <= 0.0 ) continue;
+    // A lamp reaches further the brighter it is (the hall's high bays light the floor 8 m below).
+    float reach = 90.0 * max( 1.0, lamp.w );
+    if ( d2 > reach || toLamp.y <= 0.0 ) continue;
     vec3 L = toLamp * inversesqrt( d2 );
-    float k = lamp.w * pow( saturate( L.y ), 0.65 ) / ( d2 + 0.35 ) * ( 1.0 - smoothstep( 30.0, 90.0, d2 ) );
+    float k = lamp.w * pow( saturate( L.y ), 0.65 ) / ( d2 + 0.35 ) * ( 1.0 - smoothstep( reach * 0.33, reach, d2 ) );
     directLight.color = uCampusLampColor * k * mix( 1.0, campusAo, 0.55 );
     directLight.direction = normalize( ( viewMatrix * vec4( L, 0.0 ) ).xyz );
     directLight.visible = true;
@@ -148,7 +197,7 @@ function patchLights(chunk: string) {
       "getDirectionalLightInfo( directionalLight, directLight );",
       `getDirectionalLightInfo( directionalLight, directLight );
 		#if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS )
-		directLight.color *= uCampusSun;
+		directLight.color *= uCampusSun * campusSunWindow( vCampusPos, normalize( ( vec4( directLight.direction, 0.0 ) * viewMatrix ).xyz ) );
 		#else
 		directLight.color = vec3( 0.0 );
 		#endif`,

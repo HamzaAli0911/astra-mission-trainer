@@ -73,7 +73,16 @@ v6 code does today, the decisions taken, and what is done. The final report is w
   mezzanine, rover and suited-walker collision against buildings (rectangles, doorway notches, porches), garage
   bays, interlocked airlocks with walk-through outer doors, minimap campus, save v2 migration, proxy 3D campus with
   per-room lighting. Tests: 142 (campus plan, routes, stairs, airlock interlock, outdoor collision, migration).
-- [ ] B. Benchmark slice: Hab-1 link, south concourse, EVA complex, command HQ at final quality.
+- [x] B. Benchmark slice (link, HQ, EVA complex, spines): furniture as data and collision (`FURNITURE`), built with
+  the home's kit and re-lit for the campus (`campus/bake.ts`, merged by finish and material); windows cut through
+  walls inside and out with reveals, frames and glass (`CAMPUS_WINDOWS`), sunlight only through a room's own windows
+  (exact ray test in the shader, so no leaks at thin corners); regolith berms (also outdoor collision), airlock
+  porches, the HQ's dish, mast and air handlers, wall ribs and cornices, window glow panes; live screens from the
+  mission (16 m display wall, 14 consoles, situation table, briefing, comms, lobby map, suit check, airlock gauge);
+  airlock beacon and door lights from the real interlock state; Alex's suit leaves its rack during an EVA; the
+  commander works at the flight director's desk (shown only there); sector culling indoors (your building and its
+  doorway neighbours). Phase F to-dos found here: one texture per console's screens (44 screens = 44 draws), terrain
+  in chunks (the 600-segment mesh is drawn whole), measured comparison against v6.
 - [ ] D. Remaining buildings and corridors.
 - [ ] E. Interactions tied to the sim (12+), crew walking, tour and wayfinding, sound.
 - [ ] F. Performance, QA screenshots, docs, report.

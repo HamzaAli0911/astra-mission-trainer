@@ -19,6 +19,8 @@ export function bakeProps(root: THREE.Object3D) {
     r.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(r.matrixWorld).invert();
     const groups = new Map<string, THREE.BufferGeometry[]>();
+    const twins = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const flags = new Map<THREE.Material, { cast: boolean; receive: boolean }>();
     const drop: THREE.Mesh[] = [];
     r.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -42,13 +44,46 @@ export function bakeProps(root: THREE.Object3D) {
         else groups.set(key, [g]);
         drop.push(m);
       } else if (mat.userData?.insideLit) {
-        // Its own geometry (shared ones stay untouched), with the room it's in.
-        const g = m.geometry.userData.shared ? m.geometry.clone() : m.geometry;
+        // Labels, stripes and glass: its own copy of the geometry, with the room it's in, under a campus-lit twin of
+        // its material; static ones are merged with others of the same material.
+        const g = m.geometry.clone();
+        if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+        for (const name of Object.keys(g.attributes)) if (name !== "position" && name !== "normal" && name !== "uv") g.deleteAttribute(name);
         g.setAttribute("cell", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(cell), 1));
-        m.geometry = g;
-        m.material = campusTwin(mat);
+        const twin = campusTwin(mat);
+        if (m.userData.keep || (m as THREE.InstancedMesh).isInstancedMesh) {
+          m.geometry = g;
+          m.material = twin;
+          return;
+        }
+        g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+        const list = twins.get(twin);
+        if (list) list.push(g);
+        else twins.set(twin, [g]);
+        drop.push(m);
+      } else if (!m.userData.keep && !(m as THREE.InstancedMesh).isInstancedMesh && !mat.emissiveMap) {
+        // Anything else static that shares its material with others (shadows under furniture, status lights): one mesh.
+        const g = m.geometry.clone();
+        if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+        for (const name of Object.keys(g.attributes)) if (name !== "position" && name !== "normal" && name !== "uv") g.deleteAttribute(name);
+        if (!g.attributes.uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+        const list = twins.get(mat);
+        if (list) list.push(g);
+        else twins.set(mat, [g]);
+        flags.set(mat, { cast: m.castShadow, receive: m.receiveShadow });
+        drop.push(m);
       }
     });
+    for (const [twin, list] of twins) {
+      const merged = mergeGeometries(list, false);
+      for (const g of list) g.dispose();
+      if (!merged) continue;
+      const out = new THREE.Mesh(merged, twin);
+      out.castShadow = flags.get(twin)?.cast ?? false;
+      out.receiveShadow = flags.get(twin)?.receive ?? true;
+      r.add(out);
+    }
     for (const m of drop) m.parent?.remove(m);
     for (const [key, list] of groups) {
       const merged = mergeGeometries(list, false);

@@ -366,9 +366,9 @@ export function drawWall(c: CanvasRenderingContext2D, w: number, h: number, sd: 
   const m = mission(g.missionId);
   const goal = m.goals.map((x) => ({ x, p: goalProgress(g, x, m) })).find((x) => !x.p.done);
   if (goal) {
-    text(c, "NEXT GOAL", x1, pad + h * 0.8, h * 0.045, C.dim, "left", 600);
-    text(c, goal.x.text, x1, pad + h * 0.88, h * 0.055, C.text, "left", 600);
-    bar(c, x1, pad + h * 0.9, rw, h * 0.025, goal.p.fraction, C.o2);
+    text(c, "NEXT GOAL", x1, pad + h * 0.78, h * 0.045, C.dim, "left", 600);
+    wrap(c, goal.x.text, x1, pad + h * 0.85, rw, h * 0.05, C.text, 1);
+    bar(c, x1, pad + h * 0.88, rw, h * 0.025, goal.p.fraction, C.o2);
   }
 }
 

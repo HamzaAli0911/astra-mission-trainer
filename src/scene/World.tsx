@@ -36,7 +36,7 @@ import { buildCampus } from "./campus/structure";
 import { campusLight } from "./campus/lighting";
 import { dressCampus, type CampusDressing } from "./campus/dress";
 import { campusScreenData } from "./campus/screens";
-import { building, cellAt, PORTALS, rectDistance, stageOf } from "../sim/base";
+import { building, buildingAt, cellAt, NEIGHBOURS, PORTALS, rectDistance, stageOf } from "../sim/base";
 import { useWalk, walker } from "../state/walk";
 import { interiorState } from "../sim/interior";
 
@@ -351,7 +351,8 @@ export function World() {
       const campus = buildCampus(planet, stageOf(useGame.getState().game.missionId));
       for (const p of campus.parts.values()) p.inside.traverse((o) => o.layers.set(INSIDE_LAYER));
       scene.add(campus.group);
-      let garageDoor = 0;
+      let garageDoor = 0,
+        habVisible = true;
       // The campus's furniture, fittings and screens (built in the background after the home's inside).
       let dressing: CampusDressing | null = null,
         campusScreensAt = -1;
@@ -1337,7 +1338,18 @@ export function World() {
         {
           const ex = view === "walk" ? walker.x : camera.position.x,
             ez = view === "walk" ? walker.z : camera.position.z;
-          for (const [id, part] of campus.parts) part.inside.visible = rectDistance(building(id).rect, ex, ez).d < (view === "walk" ? 42 : 14);
+          // Walking indoors: only the building you're in and those joined to it by a doorway (walls hide the rest).
+          const indoors = view === "walk" && !walker.outside;
+          const inB = indoors ? buildingAt(walker.x, walker.z, walker.where === 2 ? 2 : 0) : null;
+          for (const [id, part] of campus.parts) {
+            const d = rectDistance(building(id).rect, ex, ez).d;
+            part.inside.visible = indoors ? id === inB || (!!inB && !!NEIGHBOURS.get(inB)?.has(id)) || d < 3 : d < (view === "walk" ? 20 : 14);
+            const glow = part.outside.getObjectByName(`${id}-window-glow`);
+            if (glow) glow.visible = !part.inside.visible;
+          }
+          habVisible = !indoors || inB === "hab" || inB === "link" || Math.hypot(walker.x, walker.z) < 9;
+          // The windows' stand-in panes glow warm at night, as Hab-1's do.
+          campus.windowGlow.emissiveIntensity = 0.1 + 1.1 * (1 - day);
           campusLight.uCampusLampColor.value.copy(insideLight.uLampColor.value);
           campusLight.uCampusEnvTint.value.copy(insideLight.uEnvTint.value);
           campusLight.uCampusFill.value = insideLight.uFill.value * 1.2;
@@ -1384,7 +1396,7 @@ export function World() {
           }
         }
         // The inside is drawn while you walk in it or look in from close by; the windows' night glow stands in for it from further off.
-        const near = !!interior && (view === "walk" || camera.position.distanceTo(homeOrigin) < 24);
+        const near = !!interior && ((view === "walk" && habVisible) || camera.position.distanceTo(homeOrigin) < 24);
         if (interior) interior.group.visible = near;
         if (interior && near && homeState) {
           interior.apply(homeState, dt, clock, reduced);
@@ -1582,7 +1594,8 @@ export function World() {
             grp.traverse((o) => {
               o.layers.set(INSIDE_LAYER);
               const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-              if (m?.isMeshStandardMaterial && !m.transparent && insideEnv) m.envMap = insideEnv.texture;
+              // (Screens keep their picture clear: no room reflections over them.)
+              if (m?.isMeshStandardMaterial && !m.transparent && !m.emissiveMap && insideEnv) m.envMap = insideEnv.texture;
             });
             campus.parts.get(id)?.inside.add(grp);
           }

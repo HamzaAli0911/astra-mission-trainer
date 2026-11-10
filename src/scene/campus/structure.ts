@@ -57,7 +57,7 @@ const TONES: Partial<Record<BuildingId, Partial<Tone>>> = {
   link: { wall: "#cfd5db", floor: "#4f5660", door: "#b9c3ce" },
   w1: { wall: "#cfd5db", floor: "#4f5660" },
   e1: { wall: "#cfd5db", floor: "#4f5660" },
-  hq: { wall: "#d6d9dc", floor: "#3f454e", trim: "#56627a", door: "#a9b4c3" },
+  hq: { wall: "#d6d9dc", floor: "#4a525e", trim: "#56627a", door: "#a9b4c3" },
   lifesupport: { wall: "#cbd5dd", floor: "#56606a", trim: "#4f86a8" },
   clinic: { wall: "#e6eaec", floor: "#9aa4ad", trim: "#5aa3a0" },
   shelter: { wall: "#a7b8c8", floor: "#4b5563", trim: "#d69a2b" },
@@ -124,6 +124,8 @@ export interface CampusModel {
   doors: DoorView[];
   /** The lamps' lit faces (dimmed with the lights). */
   lit: THREE.MeshStandardMaterial;
+  /** The panes standing in for rooms behind windows while their insides aren't drawn (lit at night). */
+  windowGlow: THREE.MeshStandardMaterial;
 }
 
 export function buildCampus(planet: Planet, stage: Stage): CampusModel {
@@ -138,6 +140,8 @@ export function buildCampus(planet: Planet, stage: Stage): CampusModel {
     ceilingMat = FINISH.paint("ceiling"),
     trimMat = FINISH.metal(0.42),
     doorMat = FINISH.paint(undefined, 0.48);
+  const trim = paint(planet === "mars" ? "#c9c1b5" : "#c8cacc", 0.7, 0.1);
+  const glowMat = new THREE.MeshStandardMaterial({ color: "#11161f", emissive: "#ffd9a8", emissiveIntensity: 0.1, roughness: 0.2 });
   const shell = paint(planet === "mars" ? "#d8d2c8" : "#d9dad8", 0.82, 0.05),
     plinth = paint("#6d7178", 0.9, 0.1),
     roof = soil(planet === "mars" ? "#8f5a42" : "#807f7d"),
@@ -236,9 +240,9 @@ export function buildCampus(planet: Planet, stage: Stage): CampusModel {
       lampsAt.box(lit, l.x - w[0] / 2, l.y - 0.02, l.z - w[1] / 2, l.x + w[0] / 2, l.y + 0.03, l.z + w[1] / 2, "#ffffff", l.cell, "+y");
     }
     for (const o of [...m.meshes(), ...lampsAt.meshes(false)]) inside.add(o);
-    exterior(outside, b, shell, plinth, roof);
+    exterior(outside, b, shell, plinth, roof, trim, glowMat);
   }
-  return { group, parts, doors, lit };
+  return { group, parts, doors, lit, windowGlow: glowMat };
 
   /** The glass rail along the mezzanine's open edge, with a gap at the top of the stair. */
   function rail(m: CampusMesher, r: { x0: number; x1: number; z0: number }, k: number) {
@@ -421,14 +425,30 @@ function vehicleDoor(parent: THREE.Group, p: Portal, tone: Tone, k: number): Doo
 }
 
 /** A building's outside: plinth, walls (with its doorways to the surface), and a roof under a layer of regolith. */
-function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: THREE.Material, roof: THREE.Material) {
+function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: THREE.Material, roof: THREE.Material, trim: THREE.Material, glowMat: THREE.Material) {
   const m = new CampusMesher();
   const r = b.rect,
     t = WALL.outer,
     gap = 0.08;
   const hangar = b.kind === "hangar";
   const base = hangar ? 0 : FLOOR - 0.05;
-  if (!hangar) m.box(plinth, r.x0 - t, 0, r.z0 - t, r.x1 + t, base, r.z1 + t, "#ffffff");
+  // How far the shell reaches past the rooms on each side: the wall's thickness, but not quite as far where another
+  // building stands against that side (so the two never share a face).
+  const touches = (s: "n" | "s" | "w" | "e") =>
+    BUILDINGS.some((o) => {
+      if (o === b || o.kind === "compound" || o.id === "hab") return false;
+      const q = o.rect;
+      if (s === "n" || s === "s") {
+        const line = s === "n" ? r.z0 : r.z1;
+        const near = s === "n" ? Math.abs(q.z1 - line) < 0.85 : Math.abs(q.z0 - line) < 0.85;
+        return near && q.x0 < r.x1 && q.x1 > r.x0;
+      }
+      const line = s === "w" ? r.x0 : r.x1;
+      const near = s === "w" ? Math.abs(q.x1 - line) < 0.85 : Math.abs(q.x0 - line) < 0.85;
+      return near && q.z0 < r.z1 && q.z1 > r.z0;
+    });
+  const ext = { n: touches("n") ? t - 0.1 : t, s: touches("s") ? t - 0.1 : t, w: touches("w") ? t - 0.1 : t, e: touches("e") ? t - 0.1 : t };
+  if (!hangar) m.box(plinth, r.x0 - ext.w, 0, r.z0 - ext.n, r.x1 + ext.e, base, r.z1 + ext.s, "#ffffff");
   // Openings in the outer walls: doors to the surface, and the corridors' joins (which run between buildings).
   const holes = PORTALS.filter((p) => {
     const ids = [p.a, p.b];
@@ -441,8 +461,8 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
     // (Stopping just short of the wall's full thickness, so it never shares a face with the next building's room.)
     const fixed = s === "n" ? r.z0 - gap : s === "s" ? r.z1 + gap : s === "w" ? r.x0 - gap : r.x1 + gap;
     const outer = s === "n" ? r.z0 - t + 0.02 : s === "s" ? r.z1 + t - 0.02 : s === "w" ? r.x0 - t + 0.02 : r.x1 + t - 0.02;
-    const from = s === "n" || s === "s" ? r.x0 - t : r.z0 - t,
-      to = s === "n" || s === "s" ? r.x1 + t : r.z1 + t;
+    const from = s === "n" || s === "s" ? r.x0 - ext.w : r.z0 - ext.n,
+      to = s === "n" || s === "s" ? r.x1 + ext.e : r.z1 + ext.s;
     const edge = s === "n" ? r.z0 : s === "s" ? r.z1 : s === "w" ? r.x0 : r.x1;
     const cut: [number, number, number, number][] = holes
       .filter((p) => (s === "n" || s === "s" ? p.along === "x" && Math.abs(p.z - edge) < 0.45 : p.along === "z" && Math.abs(p.x - edge) < 0.45))
@@ -465,10 +485,41 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
       if (s === "n" || s === "s") m.box(shell, a, y0, lo, bb, y1, hi, "#ffffff");
       else m.box(shell, lo, y0, a, hi, y1, bb, "#ffffff");
     }
+    // Where it faces the open: structural ribs up the wall (clear of its openings), a cornice, and a belt course
+    // at the upper floor on a tall building.
+    if (touches(s)) return;
+    const o = s === "s" || s === "e" ? 1 : -1;
+    const face = edge + o * t;
+    const proud = (u0: number, u1: number, y0: number, y1: number, d: number) => {
+      const p0 = face,
+        p1 = face + o * d;
+      if (s === "n" || s === "s") m.box(trim, u0, y0, Math.min(p0, p1), u1, y1, Math.max(p0, p1), "#ffffff");
+      else m.box(trim, Math.min(p0, p1), y0, u0, Math.max(p0, p1), y1, u1, "#ffffff");
+    };
+    for (let u = from + 1.2; u < to - 1.0; u += 4.2) {
+      if (cut.some(([a, , bb]) => u + 0.16 > a - 0.35 && u - 0.16 < bb + 0.35)) continue;
+      proud(u - 0.16, u + 0.16, base, b.height - 0.05, 0.14);
+    }
+    proud(from, to, b.height - 0.38, b.height, 0.12);
+    if (b.height > 6) proud(from, to, MEZZANINE - 0.25, MEZZANINE, 0.08);
   };
   for (const s of ["n", "s", "w", "e"] as const) side(s);
+  // Behind each window, a pane that stands in for the room while its inside isn't drawn: dim by day, lit at night.
+  const glow = new THREE.Group();
+  glow.name = `${b.id}-window-glow`;
+  const gm = new CampusMesher();
+  for (const w of CAMPUS_WINDOWS) {
+    const c = cellById(w.cell)!;
+    if (c.building !== b.id) continue;
+    const e = cellEdges(c).find((x) => x.side === w.side)!;
+    const a = w.at - w.width / 2,
+      bb = w.at + w.width / 2;
+    gm.quad(glowMat, onEdge(e, a, -0.02, w.y0), onEdge(e, bb, -0.02, w.y0), onEdge(e, bb, -0.02, w.y1), onEdge(e, a, -0.02, w.y1), outward(e.side) > 0 ? (e.side === "s" ? [0, 0, 1] : [1, 0, 0]) : e.side === "n" ? [0, 0, -1] : [-1, 0, 0], "#ffffff");
+  }
+  for (const o of gm.meshes(false)) glow.add(o);
+  g.add(glow);
   // The roof, and over it a metre of packed regolith against radiation and micrometeoroids (kept back from the edge).
-  m.box(shell, r.x0 - t, b.height - 0.3, r.z0 - t, r.x1 + t, b.height, r.z1 + t, "#ffffff", 0, "-y");
+  m.box(shell, r.x0 - ext.w, b.height - 0.3, r.z0 - ext.n, r.x1 + ext.e, b.height, r.z1 + ext.s, "#ffffff", 0, "-y");
   if (b.id !== "link" && b.id !== "w1" && b.id !== "e1") m.box(roof, r.x0 + 0.2, b.height, r.z0 + 0.2, r.x1 - 0.2, b.height + 0.9, r.z1 - 0.2, "#ffffff", 0, "-y");
   else m.box(roof, r.x0 - 0.1, b.height, r.z0 - 0.1, r.x1 + 0.1, b.height + 0.6, r.z1 + 0.1, "#ffffff", 0, "-y");
   // Regolith banked against the walls.
