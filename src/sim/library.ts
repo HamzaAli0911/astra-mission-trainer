@@ -119,6 +119,49 @@ export const LIBRARY: Fact[] = [
     source: "NASA · Counteracting bone and muscle loss",
     url: "https://www.nasa.gov/missions/station/iss-research/counteracting-bone-and-muscle-loss-in-microgravity/",
   },
+  // From the resources NASA Space Apps gave the challenge: RadLab, DONKI, OSDR, Mars Trek and the Canadian Space Agency.
+  {
+    topic: "Radiation",
+    title: "The storms of May 2024",
+    text: "In May 2024, NASA's CRaTER instrument orbiting the Moon measured the radiation dose rate rise more than 500 times during a run of solar storms. Curiosity measured a smaller jump on Mars a week later, and the Space Station, inside Earth's magnetic field, hardly noticed.",
+    source: "NASA OSDR · RadLab radiation database",
+    url: "https://visualization.osdr.nasa.gov/radlab/gui/",
+  },
+  {
+    topic: "Radiation",
+    title: "Every storm on record",
+    text: "NASA's DONKI database logs every solar flare, coronal mass ejection and particle storm, so forecasters can warn astronauts. Each solar storm in this game is modelled on one of its real events.",
+    source: "NASA CCMC · DONKI",
+    url: "https://ccmc.gsfc.nasa.gov/tools/DONKI/",
+  },
+  {
+    topic: "Food",
+    title: "Lettuce from the Space Station",
+    text: "Lettuce grown in the Veggie garden on the Space Station in 2014 was flown back to Earth and tested for nutrients and microbes. Leafy greens grown like this have been safe for astronauts to eat.",
+    source: "NASA OSDR · OSD-268 (VEG-01B)",
+    url: "https://osdr.nasa.gov/bio/repo/data/studies/OSD-268",
+  },
+  {
+    topic: "Health",
+    title: "Mice in orbit lose muscle and bone",
+    text: "Mice that spent 33 days on the Space Station in 2019–20 lost a lot of muscle and bone. Astronauts exercise every day to fight the same loss.",
+    source: "NASA OSDR · OSD-342",
+    url: "https://osdr.nasa.gov/bio/repo/data/studies/OSD-342",
+  },
+  {
+    topic: "Food",
+    title: "Food for the Moon and the North",
+    text: "The Canadian Space Agency and NASA ran the Deep Space Food Challenge. The winning system could grow over 700 kg of fresh food a year, for astronauts and for remote places on Earth like Canada's North.",
+    source: "Canadian Space Agency · Deep Space Food Challenge",
+    url: "https://www.asc-csa.gc.ca/eng/sciences/food-production/deep-space-food-challenge.asp",
+  },
+  {
+    topic: "Mars",
+    title: "A real place for a Mars base",
+    text: "Deuteronilus Mensae, a region of flat-topped mesas, was proposed as a landing zone for the first humans on Mars at a NASA workshop in 2015. Radar on the Mars Reconnaissance Orbiter found ice buried under its rocky slopes.",
+    source: "Brown University · Deuteronilus Mensae proposal",
+    url: "https://archive2.news.brown.edu/2007-2015/articles/2015/10/mars.html",
+  },
 ];
 
 /** A fact by its title. */

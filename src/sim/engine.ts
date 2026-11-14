@@ -1,3 +1,4 @@
+import { FLARE_STORMS, realStorm, realStormLine, stormStrength } from "./spaceweather";
 import { CARDS, cantAfford, type Effect } from "./cards";
 import {
   activeHazard,
@@ -110,6 +111,7 @@ export function createState(id: string, seed = 2026): GameState {
       endAt: h.startAt + h.duration,
       strength: h.strength,
       phase: "pending" as const,
+      ...(h.real ? { real: h.real } : {}),
     })),
     script: m.script.map((e) => ({ ...e })),
     fired: [],
@@ -183,14 +185,18 @@ function addRandomEvents(s: GameState, m: Mission) {
   for (let i = 0; i < r.storms; i++) {
     const start = Math.round(slot() * 2) / 2,
       warn = 3 + Math.round(rand() * 3);
+    const end = start + 4 + Math.round(rand() * 2);
+    // Each one modelled on a real particle storm (DONKI); its flare sets how strong it is.
+    const real = FLARE_STORMS[Math.min(FLARE_STORMS.length - 1, Math.floor(rand() * FLARE_STORMS.length))];
     s.hazards.push({
       id: ++hid,
       kind: "storm",
       warnAt: start - warn,
       startAt: start,
-      endAt: start + 4 + Math.round(rand() * 2),
-      strength: 12 + Math.round(rand() * 4),
+      endAt: end,
+      strength: stormStrength(real),
       phase: "pending",
+      real: real.id,
     });
   }
   if (s.planet === "mars")
@@ -346,6 +352,9 @@ export function step(s: GameState, dt: number) {
           ? `Solar flare spotted! A radiation storm arrives at ${clockOf(h.startAt)} (in ${hours} h). Get the rover home and the crew under cover.`
           : `A dust storm is coming at ${clockOf(h.startAt)} (in ${hours} h). It will block most sunlight for about ${Math.round(h.endAt - h.startAt)} h. Charge up!`,
       );
+      // The real event behind it, from CAPCOM.
+      const real = h.kind === "storm" ? realStorm(h.real) : null;
+      if (real) feed(s, "capcom", realStormLine(real));
     }
     if (h.phase === "warned" && s.t >= h.startAt - 1e-9) {
       h.phase = "active";

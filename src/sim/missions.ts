@@ -39,6 +39,8 @@ export interface HazardPlan {
   warn: number;
   duration: number;
   strength: number;
+  /** Storm: the real solar particle event (a DONKI SEP id) it is modelled on. */
+  real?: string;
 }
 
 export interface Fact {
@@ -333,10 +335,11 @@ export const MISSIONS: Mission[] = [
     rover: { x: -102.5, z: 158, heading: -1.05, battery: 78 },
     build: ["solar", "battery", "oxygen", "recycler", "greenhouse", "shelter", "lab", "icedrill"],
     shield: true,
+    // Three storms in a row, like the real week of 9–13 May 2024 (NASA DONKI's particle events for those days).
     hazards: [
-      { kind: "storm", startAt: 18, warn: 6, duration: 6, strength: 12 },
-      { kind: "storm", startAt: 50, warn: 4, duration: 5, strength: 12 },
-      { kind: "storm", startAt: 80, warn: 3, duration: 4, strength: 10 },
+      { kind: "storm", startAt: 18, warn: 6, duration: 6, strength: 12, real: "2024-05-09T13:59:00-SEP-001" },
+      { kind: "storm", startAt: 50, warn: 4, duration: 5, strength: 12, real: "2024-05-11T02:10:00-SEP-001" },
+      { kind: "storm", startAt: 80, warn: 3, duration: 4, strength: 10, real: "2024-05-13T12:44:00-SEP-001" },
     ],
     script: [
       { id: "out", at: 9.1, say: "Maya and Noor are out in the rover at the Crater Wall Layers, far from home. Collect the sample, then think about getting back." },
@@ -358,10 +361,11 @@ export const MISSIONS: Mission[] = [
     briefing: [
       "Cadet, our satellites are watching an active region on the Sun.",
       "If it erupts, a storm of fast particles reaches the Moon. There is no air or magnetic field here to stop them.",
+      "This mission's storms follow a real week: 9 to 13 May 2024, when the Sun fired three particle storms in five days.",
       "Two of your crew are out in the rover. Be ready to bring them home!",
     ],
     learned: [
-      "Solar storms fire dangerous particles that can reach the Moon within hours.",
+      "Solar storms fire dangerous particles that can reach the Moon within hours. In May 2024 a NASA instrument orbiting the Moon measured radiation rising more than 500 times.",
       "Thick shielding made of rock, water or regolith stops most of the radiation.",
       "Warnings give you time to act, so plan ahead.",
     ],
@@ -429,6 +433,7 @@ export const MISSIONS: Mission[] = [
     ],
     briefing: [
       "Welcome to Mars, Commander! The air here is thin and mostly carbon dioxide.",
+      "Your outpost stands among mesas like those of Deuteronilus Mensae, a real candidate site for the first human explorers, where radar has found ice buried under the rock.",
       "Mars is farther from the Sun, so your solar arrays make less than half the power they made on the Moon.",
       "Weather satellites see a dust storm building. Get your power ready.",
     ],

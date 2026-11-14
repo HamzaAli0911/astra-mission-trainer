@@ -5,6 +5,7 @@ import { fact, type Fact } from "./library";
 import { DAMAGED, MODULES, POWER_PRIORITY, RATES, REPAIR_COST, REPAIR_TIME, STORAGE, spec } from "./modules";
 import { PLANETS } from "./planets";
 import { SUIT_HOURS } from "./engine";
+import { dateOf, LATEST_STORM, MAY_2024_RISE } from "./spaceweather";
 import { SCOUT_HOME, site, SITE_REACH, SITES } from "./world";
 import type { Action, GameState, Module, ModuleType } from "./types";
 
@@ -175,10 +176,11 @@ export const STATIONS: Station[] = [
         ["Dust storm", g.planet === "mars" ? (dust ? "ON: less sunlight" : "none") : "– (no air on the Moon)", !!dust],
         ["Broken machines", broken.length ? broken.map((m) => nameOf(g, m)).join(", ") : "none", broken.length > 0],
         ["Running short", (["power", "o2", "water", "food"] as const).filter((k) => f.short[k]).join(", ") || "nothing", Object.values(f.short).some(Boolean)],
+        ["Latest real particle storm", LATEST_STORM ? `${dateOf(LATEST_STORM.time)} (${LATEST_STORM.flare?.cls} flare, NASA DONKI)` : "–"],
       ];
     },
     why: (g) => (storm(g) ? "A solar storm fires protons that walls and suits only partly stop. Everyone should be behind the shelter's water walls before it peaks." : "Every warning in the base comes up here, so the crew can deal with the most dangerous first."),
-    fact: () => fact("No air, no shield"),
+    fact: () => fact("Every storm on record"),
     controls: (g) => [...(storm(g) || g.sheltering ? [shelterControl(g)] : []), ...repairs(g)],
   },
   {
@@ -361,10 +363,11 @@ export const STATIONS: Station[] = [
         ["Crops", "lettuce, dwarf wheat, tomatoes, beans"],
         ["Growing", !house.length ? "empty: no greenhouse module" : light === 0 ? "paused: lights off" : light === 1 ? "slowly, under low light" : "fast, under high light", !house.length || light === 0],
         ["Water a day", `${fmt(perDay(house.reduce((a, m) => a + RATES.greenhouseWater[m.light], 0)), 1)} L`],
+        ["Grown in space for real", "lettuce (2014), chile peppers (2021) on the Space Station"],
       ];
     },
     why: () => "The roots hang in a thin film of flowing water with nutrients in it, not soil: lighter to bring from Earth, and the water is cleaned and used again.",
-    fact: () => fact("Gardens in space"),
+    fact: () => fact("Lettuce from the Space Station"),
   },
 
   /* ---- K. Storm shelter ---- */
@@ -381,6 +384,7 @@ export const STATIONS: Station[] = [
         ["In here", `${fmt(outside * 0.1, 2)} mSv an hour (a tenth)`],
         ["Solar storm", s ? (s.phase === "warned" ? "WARNED" : "ON NOW") : "none", !!s && !g.sheltering],
         ["Highest crew dose", `${fmt(top, 1)} of ${DOSE_LIMIT} mSv`, top > DOSE_LIMIT * 0.75],
+        ["Real storms, May 2024", `${MAY_2024_RISE.moon}× normal at the Moon, ${MAY_2024_RISE.mars}× on Mars`],
       ];
     },
     why: (g) =>
@@ -403,7 +407,7 @@ export const STATIONS: Station[] = [
       ["Science gathered", `${fmt(g.res.science)} points`],
     ],
     why: () => "Rock from each site tells a different part of the story: how old the ground is, whether water was there. The crew rover brings samples here to be cut, sorted and studied.",
-    fact: (g) => fact(g.planet === "moon" ? "Why the south pole?" : "Toxic dust"),
+    fact: (g) => fact(g.planet === "moon" ? "Why the south pole?" : "A real place for a Mars base"),
   },
   {
     id: "sci-freezer",
@@ -424,9 +428,12 @@ export const STATIONS: Station[] = [
     id: "cl-health",
     title: "Crew health check",
     furniture: "cl-cart",
-    live: (g) => g.crew.map((c): Row => [c.name, `health ${fmt(c.health)}% · ${fmt(c.dose, 1)} mSv · ${c.place === "habitat" ? "in the base" : c.place === "shelter" ? "sheltering" : c.place === "rover" ? "on the rover" : "outside"}`, c.health < 50 || c.dose > DOSE_LIMIT * 0.75]),
-    why: () => "Health drops when air, water, food or warmth run short, and comes back when they don't. Radiation dose only adds up, which is why astronauts have a limit for a whole career.",
-    fact: () => fact("No air, no shield"),
+    live: (g) => [
+      ...g.crew.map((c): Row => [c.name, `health ${fmt(c.health)}% · ${fmt(c.dose, 1)} mSv · ${c.place === "habitat" ? "in the base" : c.place === "shelter" ? "sheltering" : c.place === "rover" ? "on the rover" : "outside"}`, c.health < 50 || c.dose > DOSE_LIMIT * 0.75]),
+      ["NASA research", "mice lost muscle and bone in 33 days in orbit (OSDR)"],
+    ],
+    why: () => "Health drops when air, water, food or warmth run short, and comes back when they don't. Radiation dose only adds up, which is why astronauts have a limit for a whole career. Without gravity, muscles and bones weaken too, so the crew exercises every day.",
+    fact: () => fact("Mice in orbit lose muscle and bone"),
   },
 
   /* ---- G. Engineering ---- */
@@ -491,8 +498,8 @@ export const STATIONS: Station[] = [
         ["Materials", `${fmt(g.res.materials)} units`],
       ];
     },
-    why: () => "The shelves fill and empty with the real stores. Before a long storm, check there's enough to wait it out.",
-    fact: () => fact("Gardens in space"),
+    why: () => "The shelves fill and empty with the real stores. Before a long storm, check there's enough to wait it out. Far from Earth, every meal you grow is one you didn't have to ship.",
+    fact: () => fact("Food for the Moon and the North"),
   },
 
   /* ---- H. EVA complex ---- */

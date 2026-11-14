@@ -5114,3 +5114,199 @@ table.keys .kbd {
     animation-delay: 4s;
   }
 }
+
+/* Science library: the tabs and the Real NASA data panel. */
+.library-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.realdata {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.realdata article {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(150, 175, 255, 0.06);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.realdata .rd-wide {
+  grid-column: 1 / -1;
+}
+.realdata h3 {
+  font-size: 1.05rem;
+  margin: 2px 0 2px;
+}
+.realdata p {
+  font-size: 0.88rem;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin: 0;
+}
+.realdata a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.rd-chart {
+  position: relative;
+  margin: 6px 0 4px;
+}
+.rd-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  outline: none;
+  border-radius: 8px;
+}
+.rd-chart svg:focus-visible {
+  box-shadow: 0 0 0 2px var(--cyan);
+}
+.rd-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.rd-legend span,
+.rd-tip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rd-legend i,
+.rd-tip i {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+.rd-grid line {
+  stroke: rgba(225, 233, 255, 0.12);
+  stroke-width: 1;
+}
+.rd-grid text,
+.rd-tick,
+.rd-unit {
+  fill: var(--text-3);
+  font-size: 10px;
+  font-family: var(--font);
+}
+.rd-label {
+  fill: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  paint-order: stroke;
+  stroke: #111a3a;
+  stroke-width: 3px;
+}
+.rd-cross line {
+  stroke: rgba(225, 233, 255, 0.5);
+  stroke-width: 1;
+}
+.rd-tip {
+  position: absolute;
+  top: 26px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--glass-solid);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  font-size: 0.78rem;
+  color: var(--text);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+.rd-tip b {
+  font-size: 0.78rem;
+}
+.rd-table-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.rd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+.rd-table caption {
+  text-align: left;
+  color: var(--text-3);
+  font-size: 0.76rem;
+  margin-bottom: 4px;
+}
+.rd-table th,
+.rd-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rd-table th:first-child,
+.rd-table td:first-child {
+  text-align: left;
+}
+.rd-live {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0;
+}
+.rd-live .btn {
+  justify-self: start;
+}
+.rd-live small {
+  color: var(--text-3);
+  font-size: 0.74rem;
+}
+.rd-live .spin {
+  animation: rd-spin 1s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes rd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.rd-studies {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.rd-studies li {
+  font-size: 0.86rem;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.rd-studies b {
+  color: var(--text);
+  margin-right: 4px;
+}
+.rd-foot {
+  grid-column: 1 / -1;
+  font-size: 0.76rem !important;
+  color: var(--text-3) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-live .spin {
+    animation: none;
+  }
+}

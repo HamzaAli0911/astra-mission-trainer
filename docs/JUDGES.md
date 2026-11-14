@@ -14,6 +14,7 @@
 | Food production | Greenhouses whose grow lights compete with life support for stored power at night. |
 | **Trade-offs** | Every module card has a "catch"; decision cards arrive mid-mission in every mission, each option has a cost, and some come back later (a failed battery needs repairing before night); sheltering pauses research and building. |
 | Not oversimplified, not too complex | Real relationships and rounded real numbers, introduced one mission at a time, with CAPCOM explaining causes in plain language. |
+| Use the challenge's resources | Storms modelled on real NASA DONKI events (CAPCOM names each), real radiation measurements from NASA RadLab (the May 2024 storms at the Moon, on Mars and on the ISS), NASA OSDR studies behind crew health and the greenhouse, a real candidate Mars site to explore in Mars Trek, and the Canadian Space Agency's food projects. Science library → **Real NASA data**, with a live "Check the real Sun now". |
 | Experience success and failure | Missions can be lost (crew health, radiation limit, time). The debrief shows a chart of what happened and suggests what to try next. |
 
 ## A five-minute demo

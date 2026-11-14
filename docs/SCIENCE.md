@@ -32,6 +32,31 @@ ASTRA keeps the **relationships** real and the **numbers** close to real where p
 | Radar ice mapping | the science rover maps the ice at the ice site, so crew trips bring back more | Perseverance's RIMFAX ground-penetrating radar looks for buried ice and briny water beneath the surface ([NASA](https://www.nasa.gov/centers-and-facilities/jpl/nasas-perseverance-rover-will-peer-beneath-mars-surface/)) |
 | Rovers on rocks | they drive over rocks up to about 0.5 m tall (the crew rover's wheels are almost 1 m across); only big boulders block the way | A rocker-bogie can roll over obstacles about as tall as its wheels' diameter ([NASA](https://mars.nasa.gov/mars2020/spacecraft/rover/wheels/)) |
 
+## Real data the game ships with
+
+From the resources NASA Space Apps gave the challenge (snapshot in `src/data/space.ts`, refreshed with
+`node tools/data/fetch-space-data.mjs`):
+
+- **NASA DONKI** (space weather): every solar energetic particle (SEP) event since 2021 with the flare and CME linked
+  to it. Each solar storm in the game is modelled on one: the Solar Storm mission's three storms follow the real
+  events of 9, 11 and 13 May 2024; random storms (Mars Colony, Free Play) pick one with the seeded generator, and its
+  flare class sets the storm's strength within the game's existing range (12 to 16 mSv an hour outdoors). CAPCOM
+  names the real event. The game's dose rates themselves stay simplified (see below).
+- **NASA OSDR RadLab** (radiation measurements): dose rates during the May 2024 storms measured by CRaTER (orbiting
+  the Moon: up to about 560 times its quiet level, on 14 May), Curiosity's RAD (on Mars: about 63 times, on 20 May,
+  from a different storm aimed at Mars) and DosTel2 on the ISS (inside Earth's magnetic field: hardly changed). Also
+  Curiosity's quiet background: about 9.2 µGy an hour in December 2019 (quiet Sun) and 4.9 in spring 2024 (busy
+  Sun). These are absorbed doses in micrograys; the game's figures are dose equivalents in millisieverts, which
+  weight particle radiation more heavily.
+- **NASA OSDR** (space biology): the studies cited for crew health and the greenhouse (OSD-268 lettuce from Veggie,
+  OSD-772 chile peppers, OSD-342 and OSD-21 muscle and bone loss in mice, OSD-417 bone loss and gut microbes,
+  OSD-992 space radiation in human cells).
+- **NASA Mars Trek and the 2015 human landing sites workshop**: the Mars map is inspired by Deuteronilus Mensae,
+  a proposed exploration zone with ice buried under its mesas (confirmed by MRO's SHARAD radar). The map is not a
+  copy of the real terrain.
+- **Canadian Space Agency**: the Deep Space Food Challenge (with NASA), Tomatosphere and food production in remote
+  areas, for the greenhouse and the teachers' page.
+
 ## Deliberate simplifications
 
 - **Time is compressed.** One training day is 24 hours and plays in about a minute and a half at 1×. A real lunar day–night cycle lasts about 29.5 Earth days; a Mars sol lasts 24 h 39 min.

@@ -9,6 +9,7 @@ import { useGame } from "../state/game";
 import { play } from "../lib/sound";
 import { speak } from "../lib/speech";
 import { Kbd, Modal } from "./common";
+import { RealData } from "./realdata";
 import { IconCapcom, Logo, RESOURCE_ICON, IconDose } from "./icons";
 import { LeaveConfirm, PauseMenu } from "./overlays";
 
@@ -289,9 +290,22 @@ function Guide({ close }: { close: () => void }) {
 }
 
 function Library({ close }: { close: () => void }) {
+  const [tab, setTab] = useState<"facts" | "data">("facts");
   return (
     <Modal title="Science library" onClose={close} wide icon={<BookOpen size={20} />}>
-      <p className="muted">The real science behind every mission. Links open NASA pages in a new tab.</p>
+      <div className="library-tabs" role="tablist" aria-label="Science library">
+        <button role="tab" aria-selected={tab === "facts"} className={`btn small ${tab === "facts" ? "primary" : "secondary"}`} onClick={() => setTab("facts")}>
+          Science facts
+        </button>
+        <button role="tab" aria-selected={tab === "data"} className={`btn small ${tab === "data" ? "primary" : "secondary"}`} onClick={() => setTab("data")}>
+          Real NASA data
+        </button>
+      </div>
+      {tab === "data" ? (
+        <RealData />
+      ) : (
+        <>
+      <p className="muted">The real science behind every mission. Links open NASA and Canadian Space Agency pages in a new tab.</p>
       <div className="library">
         {LIBRARY.map((c) => (
           <article key={c.title}>
@@ -311,6 +325,8 @@ function Library({ close }: { close: () => void }) {
           </p>
         </article>
       </div>
+        </>
+      )}
     </Modal>
   );
 }
@@ -331,6 +347,18 @@ const QUESTIONS: Record<string, string> = {
   "red-planet": "Why do solar arrays struggle on Mars? Why might NASA want nuclear power there?",
   "mars-colony": "What does 'self-sufficient' mean? Which system was hardest to balance, and why?",
 };
+
+/** The challenge's data sources and partner resources, and what ASTRA does with each. */
+const RESOURCES: [string, string, string][] = [
+  ["NASA DONKI (space weather)", "Every solar storm in the game is modelled on a real particle storm from DONKI; CAPCOM names it, and students can check the real Sun's last 30 days live.", "https://ccmc.gsfc.nasa.gov/tools/DONKI/"],
+  ["NASA Open APIs", "The portal for DONKI and other NASA data. ASTRA asks DONKI's keyless web service, so no API key is built into the game.", "https://api.nasa.gov/"],
+  ["NASA OSDR RadLab", "Real dose rates from the May 2024 solar storms at the Moon (CRaTER), on Mars (Curiosity's RAD) and on the ISS, and the solar cycle in Curiosity's background.", "https://visualization.osdr.nasa.gov/radlab/gui/data-api/"],
+  ["NASA Open Science Data Repository", "The studies behind crew health and the greenhouse: muscle and bone loss in orbit, lettuce and chile peppers grown on the ISS, space radiation in cells.", "https://osdr.nasa.gov/bio/repo/"],
+  ["NASA Mars Trek", "Explore Deuteronilus Mensae, the real candidate landing zone that inspired the Mars map.", "https://trek.nasa.gov/mars/"],
+  ["CSA: food production on the Moon and in remote areas", "The Deep Space Food Challenge and the link between space farming and Canada's North; ties in with the Green Thumb mission.", "https://www.asc-csa.gc.ca/eng/youth-educators/toolkits/food-production/"],
+  ["CSA: Tomatosphere", "A free classroom experiment: grow tomato seeds that have been in space-like conditions beside ordinary ones. Pairs well with the greenhouse.", "https://www.asc-csa.gc.ca/eng/youth-educators/tomatosphere.asp"],
+  ["CSA: resources for STEM and youth organizations", "Free, bilingual activities for clubs, libraries and camps.", "https://www.asc-csa.gc.ca/eng/youth-educators/resources-stem-and-youth-organizations.asp"],
+];
 
 function Teachers({ close }: { close: () => void }) {
   return (
@@ -371,6 +399,18 @@ function Teachers({ close }: { close: () => void }) {
             </li>
           ))}
         </ul>
+        <h3>Real data and partner resources</h3>
+        <p>ASTRA is built on the data sources NASA Space Apps gave this challenge. The Science library's "Real NASA data" tab shows them to students.</p>
+        <ul className="standards">
+          {RESOURCES.map(([name, use, url]) => (
+            <li key={name}>
+              <a href={url} target="_blank" rel="noreferrer">
+                <b>{name}</b> <ExternalLink size={12} />
+              </a>{" "}
+              {use}
+            </li>
+          ))}
+        </ul>
         <h3>Classroom tips</h3>
         <ul>
           <li>Play in pairs: one student is commander, the other is CAPCOM who reads the Power panel aloud. Swap each mission.</li>
@@ -391,6 +431,7 @@ function Credits({ close }: { close: () => void }) {
           <b>ASTRA: Junior Astronaut Mission Trainer</b> was made for the NASA Space Apps Challenge 2026 challenge "Build a Junior Astronaut Mission Trainer". It is an independent educational project and is not a NASA product or endorsed by NASA.
         </p>
         <p>All 3D models, terrain, icons and sounds are original and generated in code. No NASA logos or images are used.</p>
+        <p>Real data: space weather from NASA's DONKI (CCMC), radiation measurements from NASA OSDR's RadLab, studies from NASA's Open Science Data Repository, and facts from the Canadian Space Agency. A snapshot ships with the game; only the Science library's "Check the real Sun now" button contacts NASA, when pressed.</p>
         <p>Built with React, TypeScript, Three.js, Zustand, Vite, Lucide icons and the Lexend typeface (designed to make reading easier).</p>
         <button className="btn secondary" onClick={() => useUI.getState().setModal("library")}>
           <BookOpen size={17} /> Science sources

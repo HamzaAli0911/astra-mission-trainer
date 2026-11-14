@@ -54,6 +54,7 @@ Everything is drawn in real time in the browser, with no image or model files: e
 - **Settings → Graphics**: *Auto* adapts to the device (it lowers detail if the game runs slowly), *High* adds glow and soft shadows, *Ultra* adds ambient occlusion, sharper shadows, a finer ground mesh and more pebbles and never steps down on its own (for fast computers), *Low* is for older computers. On a fast desktop, *Auto* also tries Ultra's ambient occlusion and edge smoothing after a few smooth seconds, and steps back if frames start to slip.
 - **Settings** also has *High contrast* (solid panels, brighter text, stronger outlines), *Larger text*, *Reduce motion* and *Sound* (interface sounds, the Geiger counter, and a quiet background: life-support hum everywhere, wind only on Mars, the rover's motors).
 - Training time is sped up (a day plays in about 90 seconds); every briefing and the clock's tooltip say so, with the real day lengths.
+- **Real NASA and CSA data**: every solar storm is modelled on a real particle storm from NASA's DONKI database (CAPCOM names it); the Science library's **Real NASA data** tab charts the May 2024 storms as measured at the Moon, on Mars and on the ISS (NASA OSDR RadLab), cites the NASA OSDR studies behind crew health and the greenhouse, points to a real candidate Mars site in Mars Trek, and covers the Canadian Space Agency's food projects. A snapshot ships with the game (`src/data/space.ts`, from `tools/data/fetch-space-data.mjs`).
 
 ## Run it
 
@@ -67,7 +68,7 @@ npm run build      # type check + production build in dist/
 npm run preview    # serve dist/ on http://127.0.0.1:5175
 ```
 
-The built `dist/` folder is a static site: host it anywhere (GitHub Pages, Netlify, a school server). It needs no backend, account or network access; fonts are bundled. Opening `dist/index.html` straight from disk does not work (browsers block module scripts on `file://`), so serve it.
+The built `dist/` folder is a static site: host it anywhere (GitHub Pages, Netlify, a school server). It needs no backend, account or network access; fonts are bundled. The one exception is optional: the Science library's "Check the real Sun now" button asks NASA's DONKI web service (keyless) for the last 30 days, only when pressed. Opening `dist/index.html` straight from disk does not work (browsers block module scripts on `file://`), so serve it.
 
 Add `?debug` to the URL to expose the game stores on `window.__astra` for automated testing.
 

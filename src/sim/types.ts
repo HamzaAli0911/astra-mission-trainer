@@ -96,6 +96,8 @@ export interface Hazard {
   /** Storm: extra dose rate outdoors (mSv/h). Dust: fraction of sunlight that gets through. */
   strength: number;
   phase: "pending" | "warned" | "active" | "over";
+  /** Storm: the real solar particle event (a DONKI SEP id) it is modelled on. */
+  real?: string;
 }
 
 /** "alert" is a warning that pauses the game (a storm is coming); "danger" is an emergency. */
