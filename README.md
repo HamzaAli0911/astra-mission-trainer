@@ -104,7 +104,7 @@ Add `?debug` to the URL to expose the game stores on `window.__astra` for automa
 - **Settings → Unlock every mission** opens the whole campaign immediately.
 - **For teachers** (title screen) lists learning goals, NGSS connections and discussion questions for each mission.
 - **Science library** links every fact to its NASA source.
-- See [docs/JUDGES.md](docs/JUDGES.md) for a 5-minute demo, a 3-minute walk through the colony, a 60-second "step inside" demo and how ASTRA answers the challenge, [docs/V7_REPORT.md](docs/V7_REPORT.md) for what v7 built and how it measures, [docs/SCIENCE.md](docs/SCIENCE.md) for the numbers and what is simplified, and [docs/HABITAT.md](docs/HABITAT.md) for the design of the home.
+- See [docs/JUDGES.md](docs/JUDGES.md) for a 5-minute demo, a 3-minute walk through the colony, a 60-second "step inside" demo and how ASTRA answers the challenge, [docs/V7_REPORT.md](docs/V7_REPORT.md) for what v7 built and how it measures, [docs/SCIENCE.md](docs/SCIENCE.md) for the numbers and what is simplified, [docs/HABITAT.md](docs/HABITAT.md) for the design of the home, and [docs/SOURCES.md](docs/SOURCES.md) for every source the game uses.
 
 ## Project layout
 
