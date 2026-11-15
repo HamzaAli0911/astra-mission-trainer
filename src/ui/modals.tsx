@@ -431,6 +431,7 @@ function Credits({ close }: { close: () => void }) {
           <b>ASTRA: Junior Astronaut Mission Trainer</b> was made for the NASA Space Apps Challenge 2026 challenge "Build a Junior Astronaut Mission Trainer". It is an independent educational project and is not a NASA product or endorsed by NASA.
         </p>
         <p>All 3D models, terrain, icons and sounds are original and generated in code. No NASA logos or images are used.</p>
+        <p>Made with AI assistance: Anthropic's Claude (Claude Code), an AI coding assistant, wrote most of the code, tests and in-game text from the team's ideas and instructions. The team chose what to build, tested every version and decided what to keep. No AI image, video or audio generators were used for the game.</p>
         <p>Real data: space weather from NASA's DONKI (CCMC), radiation measurements from NASA OSDR's RadLab, studies from NASA's Open Science Data Repository, and facts from the Canadian Space Agency. A snapshot ships with the game; only the Science library's "Check the real Sun now" button contacts NASA, when pressed.</p>
         <p>Built with React, TypeScript, Three.js, Zustand, Vite, Lucide icons and the Lexend typeface (designed to make reading easier).</p>
         <button className="btn secondary" onClick={() => useUI.getState().setModal("library")}>
