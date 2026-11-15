@@ -170,6 +170,11 @@ float campusAo = 1.0;
   campusAo = campusAO( vCampusPos, normalize( vCampusN ) );
   vec4 info = campusInfo();
   int from = int( info.z ), count = int( info.w );
+  float aoMix = mix( 1.0, campusAo, 0.55 );
+  // Lamps more than 3 m away light only the diffuse part, so their sum is added up in world space and lit once
+  // after the loop (the same result as lighting each one: everything after the sum is linear in it).
+  vec3 campusNw = ( vec4( geometryNormal, 0.0 ) * viewMatrix ).xyz;
+  float campusFar = 0.0;
   for ( int i = from; i < from + count; i ++ ) {
     vec4 lamp = texelFetch( uCampusData, ivec2( i, 0 ), 0 );
     vec3 toLamp = lamp.xyz - vCampusPos;
@@ -179,12 +184,14 @@ float campusAo = 1.0;
     if ( d2 > reach || toLamp.y <= 0.0 ) continue;
     vec3 L = toLamp * inversesqrt( d2 );
     float k = lamp.w * pow( saturate( L.y ), 0.65 ) / ( d2 + 0.35 ) * ( 1.0 - smoothstep( reach * 0.33, reach, d2 ) );
-    directLight.color = uCampusLampColor * k * mix( 1.0, campusAo, 0.55 );
-    directLight.direction = normalize( ( viewMatrix * vec4( L, 0.0 ) ).xyz );
-    directLight.visible = true;
-    if ( d2 < 9.0 ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
-    else reflectedLight.directDiffuse += saturate( dot( geometryNormal, directLight.direction ) ) * directLight.color * BRDF_Lambert( material.diffuseColor );
+    if ( d2 < 9.0 ) {
+      directLight.color = uCampusLampColor * k * aoMix;
+      directLight.direction = normalize( ( viewMatrix * vec4( L, 0.0 ) ).xyz );
+      directLight.visible = true;
+      RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+    } else campusFar += k * saturate( dot( campusNw, L ) );
   }
+  reflectedLight.directDiffuse += campusFar * aoMix * uCampusLampColor * BRDF_Lambert( material.diffuseColor );
 }
 #endif
 `;

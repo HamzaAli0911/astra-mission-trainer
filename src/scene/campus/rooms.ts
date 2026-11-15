@@ -592,8 +592,10 @@ const leafMaterial = () => (leaves ??= campusInside(new THREE.MeshStandardMateri
 /** A small plant model, standing on its tray at the origin: pieces merged into one geometry, coloured per vertex. */
 function plant(kind: "lettuce" | "wheat" | "tomato" | "beans") {
   const parts: THREE.BufferGeometry[] = [];
+  // (Parts keep their shared vertices: a third as many to transform for the same triangles.)
   const add = (gm: THREE.BufferGeometry, color: string, m: THREE.Matrix4) => {
-    const g = gm.toNonIndexed().applyMatrix4(m);
+    const g = gm.clone().applyMatrix4(m);
+    if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
     const c = new THREE.Color(color);
     const n = g.attributes.position.count;
     const col = new Float32Array(n * 3);

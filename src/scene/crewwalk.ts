@@ -48,6 +48,8 @@ interface Person {
   wait: number;
   /** How far to the right of the way they're keeping (to pass someone coming the other way). */
   side: number;
+  /** Their way has been worked out (false while waiting in the queue). */
+  planned: boolean;
 }
 const turnFor = (bearingDeg: number) => Math.PI - THREE.MathUtils.degToRad(bearingDeg);
 const level = (w: Where): Floor => (w === "stair" ? 0 : w === "hq-stair" ? 0 : w);
@@ -61,7 +63,7 @@ export function crewWalkers(ids: string[], gravity: number) {
     campus.root.userData.cell = 0;
     bakeProps(campus.root);
     hab.root.visible = campus.root.visible = false;
-    return { id, hab, campus, spot: null, at: null, to: null, path: null, leg: 0, x: 0, z: 0, where: 0, turn: 0, t: 0, state: "out", phase: 0, speed: 0, cell: -1, from: null, wait: 0, side: 0 };
+    return { id, hab, campus, spot: null, at: null, to: null, path: null, leg: 0, x: 0, z: 0, where: 0, turn: 0, t: 0, state: "out", phase: 0, speed: 0, cell: -1, from: null, wait: 0, side: 0, planned: true };
   });
   const stride = stepLength(gravity) * 0.8;
 
@@ -69,24 +71,64 @@ export function crewWalkers(ids: string[], gravity: number) {
   const settleAt = (p: Person, place: Place) => {
     Object.assign(p, { at: place, to: null, path: null, x: place.x, z: place.z, where: place.floor, turn: turnFor(place.yaw), t: 1, state: "settled", speed: 0 });
   };
-  // Ways between places, worked out once (the same commute every day).
+  // Ways between places, worked out once (the same commute every day). A new way costs a few milliseconds, so they
+  // are worked out one per frame (whoever is waiting stands still a moment) and, ahead of time, while the page is idle.
   const ways = new Map<string, NavPoint[] | null>();
+  const queue: Person[] = [];
+  let queueStage: Stage = 0;
+  const keyOf = (p: Person, stage: Stage) => (p.from ? `${stage}|${p.id}|${p.from}>${p.spot}` : null);
   const plan = (p: Person, stage: Stage) => {
-    const to = p.to!;
-    const from = { x: p.x, z: p.z, floor: level(p.where) };
-    const key = p.from ? `${stage}|${p.id}|${p.from}>${p.spot}` : null;
+    p.planned = false;
+    p.path = null;
+    p.leg = 1;
+    queueStage = stage;
+    const key = keyOf(p, stage);
+    const known = key ? ways.get(key) : undefined;
+    if (known !== undefined) {
+      p.path = known;
+      p.planned = true;
+    } else if (!queue.includes(p)) queue.push(p);
+  };
+  /** Work out at most one new way this frame. */
+  const planNext = () => {
+    const p = queue.shift();
+    if (!p || p.state !== "walking" || !p.to) return;
+    const key = keyOf(p, queueStage);
     let way = key ? ways.get(key) : undefined;
     if (way === undefined) {
-      way = navPath(from, { ...to.approach, floor: to.floor }, stage);
+      way = navPath({ x: p.x, z: p.z, floor: level(p.where) }, { ...p.to.approach, floor: p.to.floor }, queueStage);
       if (way && way.length < 2) way = null;
       if (key) ways.set(key, way);
     }
     p.path = way;
     p.leg = 1;
+    p.planned = true;
   };
 
   return {
     people,
+    /**
+     * Work out the routine's usual ways ahead of time, while the page is idle, so a shift change never stops a frame:
+     * pairs of the person's places (and what goes between them).
+     */
+    prewarm(stage: Stage, pairs: { id: string; from: CrewSpot; to: CrewSpot }[]) {
+      const todo = pairs.filter((q) => !ways.has(`${stage}|${q.id}|${q.from}>${q.to}`));
+      const idle = (cb: (d: { timeRemaining: () => number }) => void) =>
+        typeof window !== "undefined" && "requestIdleCallback" in window ? (window as unknown as { requestIdleCallback: (f: typeof cb, o: { timeout: number }) => number }).requestIdleCallback(cb, { timeout: 2000 }) : setTimeout(() => cb({ timeRemaining: () => 12 }), 50);
+      const step = (d: { timeRemaining: () => number }) => {
+        while (todo.length && d.timeRemaining() > 6) {
+          const q = todo.shift()!;
+          const key = `${stage}|${q.id}|${q.from}>${q.to}`;
+          if (ways.has(key)) continue;
+          const a = placeOf(q.id, q.from),
+            b = placeOf(q.id, q.to);
+          const way = navPath({ ...a.approach, floor: a.floor }, { ...b.approach, floor: b.floor }, stage);
+          ways.set(key, way && way.length >= 2 ? way : null);
+        }
+        if (todo.length) idle(step);
+      };
+      if (todo.length) idle(step);
+    },
     /** Where everyone on their feet is (for doors that slide open as they come). */
     bodies() {
       return people.filter((p) => p.state !== "out").map((p) => ({ x: p.x, z: p.z, level: level(p.where) as number }));
@@ -96,6 +138,7 @@ export function crewWalkers(ids: string[], gravity: number) {
      * (its building is drawn); `show` whether Hab-1's inside is drawn.
      */
     update(dt: number, spots: { id: string; spot: CrewSpot | null }[], stage: Stage, seen: (x: number, z: number, where: Where) => boolean, habShown: boolean, anyInView: boolean, clock: number, reduced: boolean) {
+      planNext();
       for (const p of people) {
         const want = spots.find((s) => s.id === p.id)?.spot ?? null;
         if (want !== p.spot) {
@@ -131,7 +174,10 @@ export function crewWalkers(ids: string[], gravity: number) {
             plan(p, stage);
           }
         }
-        if (p.state === "walking") {
+        if (p.state === "walking" && !p.planned) {
+          // (Waiting a frame or two for the way to be worked out.)
+          p.speed = 0;
+        } else if (p.state === "walking") {
           const path = p.path;
           if (!path) {
             // No way found (a locked wing, say): they're there the next moment, out of sight.
@@ -281,3 +327,38 @@ export function crewWalkers(ids: string[], gravity: number) {
   };
 }
 export type CrewWalkers = ReturnType<typeof crewWalkers>;
+
+/**
+ * The ways a crew member usually walks, for working them out ahead of time: bunk to galley to work and back, the
+ * exercise machines, the desk, the shelter, and the few places a reaction sends someone.
+ */
+export function routinePairs(ids: string[], stage: Stage): { id: string; from: CrewSpot; to: CrewSpot }[] {
+  const WORK: Record<string, CrewSpot[]> = { maya: ["hq-ops"], alex: stage >= 1 ? ["ls-work", "eclss"] : ["eclss"], sam: stage >= 1 ? ["gh-work", "garden"] : ["garden"], noor: stage >= 1 ? ["sci-work", "lab"] : ["lab"] };
+  const REACT: Record<string, CrewSpot[]> = { maya: ["hq-alerts"], alex: [stage >= 2 ? "eng-power" : "hq-power"], sam: [], noor: stage >= 2 ? ["eng-repair"] : [] };
+  const out: { id: string; from: CrewSpot; to: CrewSpot }[] = [];
+  ids.forEach((id, i) => {
+    const galley = `galley-${i + 1}` as CrewSpot,
+      shelter = (stage >= 1 ? `sh-${i + 1}` : `shelter-${i + 1}`) as CrewSpot;
+    const add = (from: CrewSpot, to: CrewSpot) => out.push({ id, from, to });
+    add("bed", galley);
+    add(galley, "desk");
+    add("desk", "bed");
+    for (const w of WORK[id] ?? []) {
+      add(galley, w);
+      add(w, galley);
+      for (const x of ["treadmill", "cycle"] as CrewSpot[]) {
+        add(w, x);
+        add(x, w);
+      }
+      add(w, shelter);
+      add(shelter, w);
+      for (const r of REACT[id] ?? []) {
+        add(w, r);
+        add(r, w);
+      }
+    }
+    add(galley, shelter);
+    add(shelter, galley);
+  });
+  return out;
+}

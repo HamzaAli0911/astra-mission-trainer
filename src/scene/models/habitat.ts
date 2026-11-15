@@ -315,11 +315,13 @@ export function buildHabitat(view: ModuleView, planet: Planet) {
   }
 
   // The link corridor to the campus joins the shell to the south (built with the campus); a collar seals the join.
+  // (Its top bar and the name sit outside the shell: inside it, at the height of the upper floor, they'd show in the
+  // garden.)
   const collarZ = Math.sqrt(HOME.shell ** 2 - LINK.half ** 2) - 0.05;
-  box(g, LINK.half * 2 + 0.3, 0.16, 0.5, frame, 0, LINK.top - 0.4, collarZ + 0.2);
+  box(g, LINK.half * 2 + 0.3, 0.16, 0.4, frame, 0, LINK.top - 0.4, HOME.shell + 0.02);
   for (const sx of [-1, 1]) box(g, 0.16, LINK.top - 0.4, 0.5, frame, sx * (LINK.half + 0.07), (LINK.top - 0.4) / 2, collarZ + 0.2);
   view.status = statusLamp(g, LINK.half + 0.45, 3.4, collarZ - 0.2);
-  label(g, "HAB-1", 1.1, 0, LINK.top + 0.25, collarZ + 0.05);
+  label(g, "HAB-1", 1.1, 0, LINK.top + 0.25, HOME.shell + 0.24);
 
   // Cupola on the crown: an eight-sided ring of windows with a top pane.
   const cy = 7.86;

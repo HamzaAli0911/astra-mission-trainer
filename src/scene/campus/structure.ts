@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { HOME } from "../../sim/home";
 import {
   BERMS,
   bermDepth,
@@ -28,8 +29,9 @@ import {
   type Win,
 } from "../../sim/base";
 import type { Planet } from "../../sim/types";
-import { box, cyl, glass, light, metal, paint, soil, strut } from "../kit";
-import { label } from "../models/common";
+import { box, cyl, geo, glass, light, metal, paint, shared, soil, strut } from "../kit";
+import { label, sandMaterial } from "../models/common";
+import { addDetail, DETAIL } from "../surface";
 import type { DoorView } from "../walk";
 import { CAMPUS_LAMPS, CELL_INDEX, cellCeiling, cellFloor, FINISH } from "./lighting";
 import { CampusMesher } from "./mesher";
@@ -142,7 +144,7 @@ export function buildCampus(planet: Planet, stage: Stage): CampusModel {
     doorMat = FINISH.paint(undefined, 0.48);
   const trim = paint(planet === "mars" ? "#c9c1b5" : "#c8cacc", 0.7, 0.1);
   const glowMat = new THREE.MeshStandardMaterial({ color: "#11161f", emissive: "#ffd9a8", emissiveIntensity: 0.1, roughness: 0.2 });
-  const shell = paint(planet === "mars" ? "#d8d2c8" : "#d9dad8", 0.82, 0.05),
+  const shell = cladding(planet === "mars" ? "#d8d2c8" : "#d9dad8", planet),
     plinth = paint("#6d7178", 0.9, 0.1),
     roof = soil(planet === "mars" ? "#8f5a42" : "#807f7d"),
     steel = metal("#8d949e", 0.5),
@@ -240,7 +242,7 @@ export function buildCampus(planet: Planet, stage: Stage): CampusModel {
       lampsAt.box(lit, l.x - w[0] / 2, l.y - 0.02, l.z - w[1] / 2, l.x + w[0] / 2, l.y + 0.03, l.z + w[1] / 2, "#ffffff", l.cell, "+y");
     }
     for (const o of [...m.meshes(), ...lampsAt.meshes(false)]) inside.add(o);
-    exterior(outside, b, shell, plinth, roof, trim, glowMat);
+    exterior(outside, b, shell, plinth, roof, trim, glowMat, planet);
   }
   return { group, parts, doors, lit, windowGlow: glowMat };
 
@@ -425,9 +427,13 @@ function vehicleDoor(parent: THREE.Group, p: Portal, tone: Tone, k: number): Doo
 }
 
 /** A building's outside: plinth, walls (with its doorways to the surface), and a roof under a layer of regolith. */
-function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: THREE.Material, roof: THREE.Material, trim: THREE.Material, glowMat: THREE.Material) {
+function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: THREE.Material, roof: THREE.Material, trim: THREE.Material, glowMat: THREE.Material, planet: Planet) {
   const m = new CampusMesher();
-  const r = b.rect,
+  const accent = ACCENT[b.id] ?? ACCENT.link!;
+  // (The link's outside starts at Hab-1's shell: nothing of it may reach inside the home's padded wall, where its roof
+  // and regolith would poke up through the upper floor. Hab-1's collar seals the join.)
+  const joinsHab = b.id === "link";
+  const r = joinsHab ? { ...b.rect, z0: HOME.lining + 0.06 } : b.rect,
     t = WALL.outer,
     gap = 0.08;
   const hangar = b.kind === "hangar";
@@ -447,7 +453,7 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
       const near = s === "w" ? Math.abs(q.x1 - line) < 0.85 : Math.abs(q.x0 - line) < 0.85;
       return near && q.z0 < r.z1 && q.z1 > r.z0;
     });
-  const ext = { n: touches("n") ? t - 0.1 : t, s: touches("s") ? t - 0.1 : t, w: touches("w") ? t - 0.1 : t, e: touches("e") ? t - 0.1 : t };
+  const ext = { n: joinsHab ? 0 : touches("n") ? t - 0.1 : t, s: touches("s") ? t - 0.1 : t, w: touches("w") ? t - 0.1 : t, e: touches("e") ? t - 0.1 : t };
   if (!hangar) m.box(plinth, r.x0 - ext.w, 0, r.z0 - ext.n, r.x1 + ext.e, base, r.z1 + ext.s, "#ffffff");
   // Openings in the outer walls: doors to the surface, and the corridors' joins (which run between buildings).
   const holes = PORTALS.filter((p) => {
@@ -482,8 +488,8 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
     const lo = Math.min(fixed, outer),
       hi = Math.max(fixed, outer);
     for (const [a, y0, bb, y1] of cutOut([from, base, to, b.height], cut)) {
-      if (s === "n" || s === "s") m.box(shell, a, y0, lo, bb, y1, hi, "#ffffff");
-      else m.box(shell, lo, y0, a, hi, y1, bb, "#ffffff");
+      if (s === "n" || s === "s") m.box(shell, a, y0, lo, bb, y1, hi, accent);
+      else m.box(shell, lo, y0, a, hi, y1, bb, accent);
     }
     // Where it faces the open: structural ribs up the wall (clear of its openings), a cornice, and a belt course
     // at the upper floor on a tall building.
@@ -496,14 +502,24 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
       if (s === "n" || s === "s") m.box(trim, u0, y0, Math.min(p0, p1), u1, y1, Math.max(p0, p1), "#ffffff");
       else m.box(trim, Math.min(p0, p1), y0, u0, Math.max(p0, p1), y1, u1, "#ffffff");
     };
-    for (let u = from + 1.2; u < to - 1.0; u += 4.2) {
+    // (On the cladding's grid, so each rib covers a joint between its panels.)
+    const corridor = b.id === "link" || b.id === "w1" || b.id === "e1";
+    for (let u = Math.ceil((from + 1.0) / 4.2) * 4.2, i = 0; u < to - 1.0; u += 4.2, i++) {
       if (cut.some(([a, , bb]) => u + 0.16 > a - 0.35 && u - 0.16 < bb + 0.35)) continue;
       proud(u - 0.16, u + 0.16, base, b.height - 0.05, 0.14);
+      // Along the corridors, a lamp on every other rib (so the way between buildings is lit through the night).
+      if (corridor && i % 2 === 0) {
+        const p0 = face + o * 0.14,
+          p1 = face + o * 0.3,
+          y = b.height - 0.75;
+        if (s === "n" || s === "s") m.box(WALL_LAMP(), u - 0.12, y, Math.min(p0, p1), u + 0.12, y + 0.1, Math.max(p0, p1), "#ffffff");
+        else m.box(WALL_LAMP(), Math.min(p0, p1), y, u - 0.12, Math.max(p0, p1), y + 0.1, u + 0.12, "#ffffff");
+      }
     }
     proud(from, to, b.height - 0.38, b.height, 0.12);
     if (b.height > 6) proud(from, to, MEZZANINE - 0.25, MEZZANINE, 0.08);
   };
-  for (const s of ["n", "s", "w", "e"] as const) side(s);
+  for (const s of ["n", "s", "w", "e"] as const) if (!(joinsHab && s === "n")) side(s);
   // Behind each window, a pane that stands in for the room while its inside isn't drawn: dim by day, lit at night.
   const glow = new THREE.Group();
   glow.name = `${b.id}-window-glow`;
@@ -520,10 +536,10 @@ function exterior(g: THREE.Group, b: Building, shell: THREE.Material, plinth: TH
   g.add(glow);
   // The roof, and over it a metre of packed regolith against radiation and micrometeoroids (kept back from the edge).
   m.box(shell, r.x0 - ext.w, b.height - 0.3, r.z0 - ext.n, r.x1 + ext.e, b.height, r.z1 + ext.s, "#ffffff", 0, "-y");
-  if (b.id !== "link" && b.id !== "w1" && b.id !== "e1") m.box(roof, r.x0 + 0.2, b.height, r.z0 + 0.2, r.x1 - 0.2, b.height + 0.9, r.z1 - 0.2, "#ffffff", 0, "-y");
-  else m.box(roof, r.x0 - 0.1, b.height, r.z0 - 0.1, r.x1 + 0.1, b.height + 0.6, r.z1 + 0.1, "#ffffff", 0, "-y");
+  roofCover(g, m, b, r, ext, roof, planet);
   // Regolith banked against the walls.
   for (const bm of BERMS) if (bm.building === b.id) berm(m, bm, roof);
+  roofPlant(m, b, trim, plinth);
   for (const o of m.meshes()) g.add(o);
   // Porches outside the airlocks, and each building's own outside details.
   for (const q of PORCHES) if (cellById(PORTALS.find((p) => p.id === q.door)!.a)?.building === b.id) porch(g, q);
@@ -732,4 +748,174 @@ function compound(g: THREE.Group, b: Building, steel: THREE.Material, shell: THR
     m.box(p.kind === "radiator" ? shell : p.kind === "battery" ? shell : steel, q.x0, 0.06, q.z0, q.x1, p.height, q.z1, "#ffffff");
   }
   for (const o of m.meshes()) g.add(o);
+}
+
+/** Each building's colour, worn as a stripe round its walls like Hab-1's orange band (the same colour as its rooms'
+ * trim inside). The corridors carry Hab-1's own orange from the home to every wing. */
+const ACCENT: Partial<Record<BuildingId, string>> = {
+  link: "#ff8a3d",
+  w1: "#ff8a3d",
+  e1: "#ff8a3d",
+  hq: "#ff8a3d",
+  ...Object.fromEntries(Object.entries(TONES).flatMap(([id, t]) => (t.trim && !["link", "w1", "e1", "hq"].includes(id) ? [[id, t.trim]] : []))),
+};
+const WALL_LAMP = () => shared("campus-wall-lamp", () => light("#ffe6bf", 1.5));
+
+/**
+ * The outer skin of every building: cladding panels 2.1 by 1.2 m with fine joints between them (each panel a shade
+ * apart), the building's colour as a stripe at the height of Hab-1's band, and the ground's dust settled up the foot
+ * of the walls. All drawn in the shader over the shared paint detail, so it costs no geometry. The joints are box
+ * filtered (no shimmer), and fade out once a panel is only a few pixels across.
+ */
+const CLADDING = /* glsl */ `
+{
+  vec3 cp = vDetailPos;
+  vec3 cn = normalize( vDetailNormal );
+  if ( abs( cn.y ) < 0.5 ) {
+    vec2 g = vec2( ( abs( cn.x ) > 0.5 ? cp.z : cp.x ) / 2.1, ( cp.y - 0.45 ) / 1.2 );
+    vec2 fw = max( fwidth( g ), vec2( 1e-5 ) );
+    vec2 hw = vec2( 0.011 / 2.1, 0.011 / 1.2 );
+    vec2 sd = fract( g + 0.5 ) - 0.5;
+    vec2 cov = ( clamp( sd + 0.5 * fw, -hw, hw ) - clamp( sd - 0.5 * fw, -hw, hw ) ) / fw;
+    float near = 1.0 - smoothstep( 0.18, 0.4, max( fw.x, fw.y ) );
+    float joint = max( cov.x, cov.y ) * near;
+    float h = fract( sin( dot( floor( g ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+    diffuseColor.rgb *= ( 1.0 - 0.3 * joint ) * ( 1.0 + ( h - 0.5 ) * 0.06 * near );
+    float sy = max( fwidth( cp.y ), 1e-4 );
+    float band = clamp( min( cp.y - 0.7, 0.8 - cp.y ) / sy + 0.5, 0.0, 1.0 );
+    float hasAccent = step( 0.02, max( vAccent.r, max( vAccent.g, vAccent.b ) ) ) * ( 1.0 - step( 2.95, vAccent.r + vAccent.g + vAccent.b ) );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vAccent, band * hasAccent );
+    float dust = 1.0 - smoothstep( 0.3, 1.6, cp.y );
+    diffuseColor.rgb = mix( diffuseColor.rgb, claddingDust, 0.45 * dust * dust );
+  }
+}
+`;
+function cladding(color: string, planet: Planet) {
+  return shared(`campus-cladding:${color}:${planet}`, () => {
+    const mat = addDetail(new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0.05 }), DETAIL.paint);
+    const dust = new THREE.Color(planet === "mars" ? "#a8704b" : "#8f8c86");
+    const detail = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      detail.call(mat, sh, r);
+      sh.uniforms.claddingDust = { value: dust };
+      // (The walls' vertex colour is the building's accent: read here for the stripe, not multiplied into the paint.)
+      sh.vertexShader = sh.vertexShader
+        .replace("#include <common>", "#include <common>\n#if !defined( USE_COLOR ) && !defined( USE_COLOR_ALPHA )\nattribute vec3 color;\n#endif\nvarying vec3 vAccent;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvAccent = color;");
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", "#include <common>\nuniform vec3 claddingDust;\nvarying vec3 vAccent;")
+        .replace("#include <roughnessmap_fragment>", CLADDING + "\n#include <roughnessmap_fragment>");
+    };
+    mat.customProgramCacheKey = () => "campus-cladding";
+    return mat;
+  });
+}
+
+/**
+ * The regolith over a roof, piled as it would be by a bulldozer blade: a flat top, the sides at the angle of repose,
+ * held at the roof's edge by a course of sandbags. Where a corridor runs into another building (or into Hab-1) the
+ * pile runs straight on to the wall instead.
+ */
+function roofCover(g: THREE.Group, m: CampusMesher, b: Building, r: { x0: number; z0: number; x1: number; z1: number }, ext: { n: number; s: number; w: number; e: number }, mat: THREE.Material, planet: Planet) {
+  const corridor = b.id === "link" || b.id === "w1" || b.id === "e1";
+  const h = corridor ? 0.6 : 0.9,
+    run = h * 1.43, // 35 degrees
+    y0 = b.height;
+  // Which sides have an edge (a corridor's ends run on into the next building).
+  const open = { n: !(b.id === "link"), s: !(b.id === "link"), w: !(b.id === "w1" || b.id === "e1"), e: !(b.id === "w1" || b.id === "e1") };
+  // The roof slab reaches the wall's outer face; the bags sit along its edge and the pile starts just inside them.
+  const bag = 0.44;
+  const x0 = r.x0 - ext.w + (open.w ? bag : 0),
+    x1 = r.x1 + ext.e - (open.e ? bag : 0),
+    z0 = r.z0 - ext.n + (open.n ? bag : 0),
+    z1 = r.z1 + ext.s - (open.s ? bag : 0);
+  const tx0 = x0 + (open.w ? run : 0),
+    tx1 = x1 - (open.e ? run : 0),
+    tz0 = z0 + (open.n ? run : 0),
+    tz1 = z1 - (open.s ? run : 0),
+    y1 = y0 + h;
+  const n = (x: number, y: number, z: number): [number, number, number] => {
+    const l = Math.hypot(x, y, z);
+    return [x / l, y / l, z / l];
+  };
+  m.quad(mat, [tx0, y1, tz0], [tx1, y1, tz0], [tx1, y1, tz1], [tx0, y1, tz1], [0, 1, 0], "#ffffff");
+  m.quad(mat, [x0, y0, z0], [x1, y0, z0], [tx1, y1, tz0], [tx0, y1, tz0], open.n ? n(0, run, -h) : [0, 0, -1], "#ffffff");
+  m.quad(mat, [x0, y0, z1], [x1, y0, z1], [tx1, y1, tz1], [tx0, y1, tz1], open.s ? n(0, run, h) : [0, 0, 1], "#ffffff");
+  m.quad(mat, [x0, y0, z0], [x0, y0, z1], [tx0, y1, tz1], [tx0, y1, tz0], open.w ? n(-h, run, 0) : [-1, 0, 0], "#ffffff");
+  m.quad(mat, [x1, y0, z0], [x1, y0, z1], [tx1, y1, tz1], [tx1, y1, tz0], open.e ? n(h, run, 0) : [1, 0, 0], "#ffffff");
+  // The sandbags: one course round the edge (laid end to end, each turned a little, as by hand).
+  const at: THREE.Matrix4[] = [];
+  const q = new THREE.Quaternion(),
+    up = new THREE.Vector3(0, 1, 0),
+    sc = new THREE.Vector3(1.04, 0.85, 1);
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5;
+  const course = (ax: number, az: number, bx: number, bz: number) => {
+    const len = Math.hypot(bx - ax, bz - az),
+      k = Math.max(1, Math.round(len / 0.57));
+    const yaw = Math.atan2(-(bz - az), bx - ax);
+    for (let i = 0; i < k; i++) {
+      const t = (i + 0.5) / k;
+      q.setFromAxisAngle(up, yaw + rand() * 0.12);
+      at.push(new THREE.Matrix4().compose(new THREE.Vector3(ax + (bx - ax) * t + rand() * 0.04, y0 + 0.12, az + (bz - az) * t + rand() * 0.04), q, sc));
+    }
+  };
+  const ex0 = r.x0 - ext.w + bag / 2,
+    ex1 = r.x1 + ext.e - bag / 2,
+    ez0 = r.z0 - ext.n + bag / 2,
+    ez1 = r.z1 + ext.s - bag / 2;
+  if (open.n) course(ex0, ez0, ex1, ez0);
+  if (open.s) course(ex0, ez1, ex1, ez1);
+  if (open.w) course(ex0, ez0 + (open.n ? 0.5 : 0), ex0, ez1 - (open.s ? 0.5 : 0));
+  if (open.e) course(ex1, ez0 + (open.n ? 0.5 : 0), ex1, ez1 - (open.s ? 0.5 : 0));
+  if (!at.length) return;
+  const bags = new THREE.InstancedMesh(roofBag(), sandMaterial(planet), at.length);
+  at.forEach((mx, i) => bags.setMatrixAt(i, mx));
+  bags.computeBoundingSphere();
+  bags.castShadow = true;
+  bags.receiveShadow = true;
+  bags.name = `${b.id}-roof-bags`;
+  g.add(bags);
+}
+/** A sandbag light enough for hundreds on the roofs (Hab-1's own are rounder). */
+function roofBag() {
+  return geo("roof-bag", () => {
+    const g = new THREE.SphereGeometry(1, 9, 5);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i),
+        y = p.getY(i),
+        z = p.getZ(i);
+      const sq = (v: number) => Math.sign(v) * Math.abs(v) ** 0.55;
+      p.setXYZ(i, sq(x) * 0.31, y * 0.15 * (1 - 0.15 * x * x), sq(z) * 0.21);
+    }
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+/**
+ * Plant on the roofs of the bigger workrooms: two air handlers (each with a pair of fan grilles) and a vent stack, on
+ * the pile's flat top. Boxes in the building's own materials, so they merge into its mesh and add no draw calls.
+ */
+function roofPlant(m: CampusMesher, b: Building, body: THREE.Material, dark: THREE.Material) {
+  if (!["lifesupport", "clinic", "greenhouse", "logistics", "science", "engineering"].includes(b.id)) return;
+  const r = b.rect,
+    top = b.height + 0.9;
+  const cx = (r.x0 + r.x1) / 2,
+    cz = (r.z0 + r.z1) / 2,
+    w = r.x1 - r.x0,
+    d = r.z1 - r.z0;
+  for (const [x, z] of [
+    [cx - w * 0.2, cz - d * 0.12],
+    [cx + w * 0.22, cz + d * 0.1],
+  ]) {
+    m.box(dark, x - 1.15, top, z - 0.75, x + 1.15, top + 0.12, z + 0.75, "#ffffff");
+    m.box(body, x - 1.05, top + 0.12, z - 0.68, x + 1.05, top + 1.0, z + 0.68, "#ffffff");
+    for (const fx of [-0.5, 0.5]) m.box(dark, x + fx - 0.36, top + 1.0, z - 0.36, x + fx + 0.36, top + 1.05, z + 0.36, "#ffffff");
+  }
+  const vx = cx + w * 0.05,
+    vz = cz - d * 0.18;
+  m.box(body, vx - 0.18, top, vz - 0.18, vx + 0.18, top + 1.6, vz + 0.18, "#ffffff");
+  m.box(dark, vx - 0.3, top + 1.6, vz - 0.3, vx + 0.3, top + 1.7, vz + 0.3, "#ffffff");
 }

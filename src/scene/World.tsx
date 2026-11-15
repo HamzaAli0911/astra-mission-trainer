@@ -32,7 +32,7 @@ import { buildInterior, INSIDE_LAYER, placeInterior, scaleFigure, screenData, ty
 import { HOME as HOME_PLAN, type Where } from "../sim/home";
 import { insideEnvironment, insideLight } from "./interior/lighting";
 import { walkController } from "./walk";
-import { crewWalkers, type CrewWalkers } from "./crewwalk";
+import { crewWalkers, routinePairs, type CrewWalkers } from "./crewwalk";
 import { debugViz } from "./debugviz";
 import { CREW_COLOR } from "./interior/parts";
 import { buildCampus } from "./campus/structure";
@@ -180,6 +180,8 @@ export function World() {
         ratioCap = Infinity,
         // Auto stepped up to Ultra's effects on a fast machine (it keeps High's resolution and ground).
         autoUp = false;
+      /** How to undo each step auto quality has taken down, latest last. */
+      const downs: (() => void)[] = [];
       // Sharp screens get extra resolution only up to a pixel budget, so a Retina laptop doesn't render 4 million pixels with glow.
       const pickRatio = () => {
         const area = Math.max(1, el.clientWidth * el.clientHeight);
@@ -377,6 +379,10 @@ export function World() {
         vizOff = () => {};
       let dressing: CampusDressing | null = null,
         campusScreensAt = -1,
+        glowOf = new Map<string, THREE.Object3D | null>(),
+        screenInfo: { sc: CampusDressing["screens"][number]; b: string | null; pos: THREE.Vector3 }[] | null = null,
+        screenDue: CampusDressing["screens"] = [],
+        screenFrame: ReturnType<typeof campusScreenData> | null = null,
         bindingsAt = -1;
 
       if (!(await slice())) return;
@@ -888,9 +894,13 @@ export function World() {
       let raf = 0,
         last = performance.now(),
         clock = 0,
-        slow = 0,
         ambienceAt = 0,
         smooth = 1 / 60,
+        avg = 1 / 60,
+        over = 0,
+        under = 0,
+        ups = 0,
+        upAt = -99,
         steady = 0,
         triedUp = false,
         warm = 0,
@@ -918,15 +928,22 @@ export function World() {
         last = now;
         clock += dt;
         warm += dt;
-        // Adaptive quality on "auto": drop resolution, then the glow, then shadows on slow machines.
+        // Adaptive quality on "auto", for slowness that lasts, never for a hitch. Frame time is averaged over about
+        // two seconds (a long frame counts as only a little slow), and only when that average stays under about
+        // 24 fps for three seconds does quality step down one notch: first the resolution on a high-density
+        // screen, then soft shadows; no post-processing at all only below about 15 fps. Each step is undone once
+        // frames are comfortably on time again (unless that keeps flip-flopping), so a slow patch (a building
+        // loading, a shader compiling) never costs the rest of the mission its looks.
         if (graphics === "auto" && warm > 4 && !document.hidden) {
-          slow = dt > 0.045 ? slow + dt : Math.max(0, slow - dt * 0.5);
+          const shown = !(useUI.getState().briefing || useUI.getState().modal);
+          avg += (Math.min(dt, 0.07) - avg) * Math.min(1, dt * 1.5);
+          over = avg > 0.042 ? over + dt : Math.max(0, over - dt * 2);
+          under = shown && avg < 0.022 ? under + dt : 0;
           // Smooth and steady on a desktop (every frame on time, nothing dropped for 8 s): try Ultra's
           // ambient occlusion and edge smoothing, once. If that makes frames late, step straight back.
-          const shown = !(useUI.getState().briefing || useUI.getState().modal);
           smooth += (dt - smooth) * 0.05;
           steady = shown && dt < 0.0185 ? steady + dt : 0;
-          if (canUp && !triedUp && level === 2 && ratioCap === Infinity && steady > 8) {
+          if (canUp && !triedUp && level === 2 && !downs.length && steady > 8) {
             triedUp = true;
             autoUp = true;
             level = 3;
@@ -937,19 +954,38 @@ export function World() {
             level = 2;
             applyLevel();
           }
-          if (slow > 2.5 && level > 0) {
-            slow = 0;
+          if (over > 3) {
+            over = 0;
+            under = 0;
+            const before = downs.length;
             if (level === 3 && autoUp) {
               autoUp = false;
               level = 2;
               applyLevel();
-            } else if (level === 2 && ratio > 1.01) {
+            } else if (level > 0 && ratio > 1.01 && ratioCap === Infinity) {
               ratioCap = 1;
               size();
-            } else {
+              downs.push(() => {
+                ratioCap = Infinity;
+                size();
+              });
+            } else if (level === 2 || (level === 1 && avg > 0.065)) {
+              const was = level;
               level = (level - 1) as Level;
               applyLevel();
+              downs.push(() => {
+                level = was;
+                applyLevel();
+              });
             }
+            // Stepping down again soon after stepping back up: this machine is on the edge, so stay down.
+            if (downs.length > before && clock - upAt < 20) ups = 3;
+          }
+          if (under > 8 && downs.length && ups < 3) {
+            under = 0;
+            ups++;
+            upAt = clock;
+            downs.pop()!();
           }
         }
         const st = useGame.getState();
@@ -1371,7 +1407,9 @@ export function World() {
           for (const [id, part] of campus.parts) {
             const d = rectDistance(building(id).rect, ex, ez).d;
             part.inside.visible = indoors ? id === inB || (!!inB && !!NEIGHBOURS.get(inB)?.has(id)) || d < 3 : d < (view === "walk" ? 20 : 14);
-            const glow = part.outside.getObjectByName(`${id}-window-glow`);
+            // (Looked up once: finding it by name every frame walks the whole building.)
+            let glow = glowOf.get(id);
+            if (glow === undefined) glowOf.set(id, (glow = part.outside.getObjectByName(`${id}-window-glow`) ?? null));
             if (glow) glow.visible = !part.inside.visible;
           }
           habVisible = !indoors || inB === "hab" || inB === "link" || Math.hypot(walker.x, walker.z) < 9;
@@ -1417,20 +1455,30 @@ export function World() {
               bindingsAt = clock;
               keepInStep(dressing, g, homeState ?? interiorState(g));
             }
-            const anyInside = [...campus.parts.values()].some((p) => p.inside.visible);
-            if (anyInside && clock - campusScreensAt > 0.33) {
+            // Screens redraw a few times a second: only those you could see (in a building that's drawn, within 30 m),
+            // a few per frame rather than all at once, so no single frame pays for them all.
+            if (!screenInfo) {
+              screenInfo = dressing.screens.map((sc) => {
+                let b: string | null = null;
+                for (let a: THREE.Object3D | null = sc.mesh; a; a = a.parent) if (a.name.endsWith("-dressing")) b = a.name.slice(0, -"-dressing".length);
+                return { sc, b, pos: sc.mesh.getWorldPosition(new THREE.Vector3()) };
+              });
+            }
+            if (clock - campusScreensAt > 0.33) {
               campusScreensAt = clock;
               const st0 = interiorState(g);
-              const data = campusScreenData(g, { ...screenData(g), essentialOnly: st0.screens === "essential" }, locks);
-              for (const sc of dressing.screens) {
-                if (!sc.canvas || !sc.texture) continue;
-                const c = sc.canvas.getContext("2d")!;
-                if (data.essentialOnly && !sc.essential) {
-                  c.fillStyle = "#020305";
-                  c.fillRect(0, 0, sc.canvas.width, sc.canvas.height);
-                } else sc.draw(c, sc.canvas.width, sc.canvas.height, data);
-                sc.texture.needsUpdate = true;
-              }
+              screenFrame = campusScreenData(g, { ...screenData(g), essentialOnly: st0.screens === "essential" }, locks);
+              screenDue = screenInfo.filter((x) => x.b && campus.parts.get(x.b as never)?.inside.visible && x.pos.distanceTo(camera.position) < 30).map((x) => x.sc);
+            }
+            for (let n = 0; n < 4 && screenDue.length && screenFrame; n++) {
+              const sc = screenDue.shift()!;
+              if (!sc.canvas || !sc.texture) continue;
+              const c = sc.canvas.getContext("2d")!;
+              if (screenFrame.essentialOnly && !sc.essential) {
+                c.fillStyle = "#020305";
+                c.fillRect(0, 0, sc.canvas.width, sc.canvas.height);
+              } else sc.draw(c, sc.canvas.width, sc.canvas.height, screenFrame);
+              sc.texture.needsUpdate = true;
             }
           }
         }
@@ -1714,6 +1762,16 @@ export function World() {
             }
           crew = people;
           if (debug) debug.crew = people;
+          // Their shaders ready before anyone first walks into view, and the usual ways worked out while idle.
+          for (const person of people.people) person.hab.root.visible = person.campus.root.visible = true;
+          renderer.setRenderTarget(level > 0 ? target : null);
+          const crewReady = renderer.compileAsync(scene, camera);
+          renderer.setRenderTarget(null);
+          for (const person of people.people) person.hab.root.visible = person.campus.root.visible = false;
+          await crewReady.catch(() => undefined);
+          if (!alive) return;
+          const stage0 = stageOf(useGame.getState().game.missionId);
+          people.prewarm(stage0, routinePairs(useGame.getState().game.crew.map((c) => c.id), stage0));
         });
 
       teardown = () => {

@@ -201,7 +201,6 @@ export function walkController(
     wayLeg = 1,
     wayAt = -1e9,
     wayKey = "",
-    wayFrom = { x: 0, z: 0 },
     beacon: { x: number; y: number; z: number } | null = null,
     shownGuide = "";
   const steer = (now: number) => {
@@ -239,14 +238,43 @@ export function walkController(
     if (target.level !== -1 && !walker.outside) {
       const key = `${stop.card}|${target.x},${target.z}`;
       const onStair = walker.where === "stair" || walker.where === "hq-stair";
-      if (!onStair && (key !== wayKey || now - wayAt > 1.2 || Math.hypot(walker.x - wayFrom.x, walker.z - wayFrom.z) > 2)) {
+      // Worked out again only when the stop changes or you leave the way (a few milliseconds each time: not every frame).
+      const offWay = () => {
+        if (!way || way.length < 2) return now - wayAt > 2.5;
+        let best = Infinity;
+        for (let i = Math.max(1, wayLeg - 1); i < way.length; i++) {
+          const a = way[i - 1],
+            b = way[i];
+          const vx = b.x - a.x,
+            vz = b.z - a.z;
+          const t = Math.max(0, Math.min(1, ((walker.x - a.x) * vx + (walker.z - a.z) * vz) / (vx * vx + vz * vz || 1)));
+          best = Math.min(best, Math.hypot(walker.x - (a.x + vx * t), walker.z - (a.z + vz * t)));
+        }
+        return best > 2.5 && now - wayAt > 1;
+      };
+      if (!onStair && (key !== wayKey || offWay())) {
         way = navPath({ x: walker.x, z: walker.z, floor: walker.where as Floor }, { x: target.x, z: target.z, floor: target.level as Floor }, stage());
         wayKey = key;
         wayAt = now;
-        wayFrom = { x: walker.x, z: walker.z };
         wayLeg = 1;
       }
       if (way && way.length > 1) {
+        // Follow along: the leg you're nearest to (never back), then on past a corner once you're at it.
+        let bestLeg = wayLeg,
+          bestD = Infinity;
+        for (let i = Math.max(1, wayLeg); i < way.length; i++) {
+          const a = way[i - 1],
+            b = way[i];
+          const vx = b.x - a.x,
+            vz = b.z - a.z;
+          const t = Math.max(0, Math.min(1, ((walker.x - a.x) * vx + (walker.z - a.z) * vz) / (vx * vx + vz * vz || 1)));
+          const d = Math.hypot(walker.x - (a.x + vx * t), walker.z - (a.z + vz * t));
+          if (d < bestD - 0.05) {
+            bestD = d;
+            bestLeg = i;
+          }
+        }
+        wayLeg = bestLeg;
         while (wayLeg < way.length - 1 && Math.hypot(way[wayLeg].x - walker.x, way[wayLeg].z - walker.z) < 0.9) wayLeg++;
         next = way[Math.min(wayLeg, way.length - 1)];
         dist = Math.hypot(next.x - walker.x, next.z - walker.z) + pathLength(way.slice(wayLeg));

@@ -162,6 +162,9 @@ float homeAo = 1.0;
   bool open = HOME_ZONE_OPEN[ zone ];
   int level = HOME_ZONE_LEVEL[ zone ];
   int from = level == 1 ? ${UPSTAIRS} : 0, to = level == 1 ? ${LAMPS.length} : ${UPSTAIRS};
+  float aoMix = mix( 1.0, homeAo, 0.55 );
+  // Lamps further than 2.5 m light only the diffuse part: their sum is lit once after the loop (the same result).
+  float homeFar = 0.0;
   for ( int i = from; i < to; i ++ ) {
     int lz = int( uLampZone[ i ] );
     bool lit = lz == zone || ( zone < 2 && lz != zone && HOME_ZONE_OPEN[ lz ] && HOME_ZONE_LEVEL[ lz ] == zone ) || ( lz < 2 && open && lz == level );
@@ -173,13 +176,15 @@ float homeAo = 1.0;
     vec3 L = toLamp * inversesqrt( d2 );
     // Panels shine downwards; the light falls off with distance and fades out across a big room.
     float k = uLamp[ i ].w * pow( saturate( L.y ), 0.65 ) / ( d2 + 0.35 ) * ( 1.0 - smoothstep( 16.0, 40.0, d2 ) );
-    directLight.color = uLampColor * k * mix( 1.0, homeAo, 0.55 );
-    directLight.direction = normalize( ( viewMatrix * vec4( L, 0.0 ) ).xyz );
-    directLight.visible = true;
     // Highlights only from lamps close by (where you'd see them); further ones just light the surface.
-    if ( d2 < 6.25 ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
-    else reflectedLight.directDiffuse += saturate( dot( geometryNormal, directLight.direction ) ) * directLight.color * BRDF_Lambert( material.diffuseColor );
+    if ( d2 < 6.25 ) {
+      directLight.color = uLampColor * k * aoMix;
+      directLight.direction = normalize( ( viewMatrix * vec4( L, 0.0 ) ).xyz );
+      directLight.visible = true;
+      RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+    } else homeFar += k * saturate( dot( wN, L ) );
   }
+  reflectedLight.directDiffuse += homeFar * aoMix * uLampColor * BRDF_Lambert( material.diffuseColor );
 }
 #endif
 `;
